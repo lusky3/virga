@@ -1,0 +1,35 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Android / IDE
+local.properties
+*.iml
+.idea/
+.cxx/
+captures/
+
+# rclone build artifacts (binaries are built by scripts/build-rclone.sh, not committed)
+.rclone-build/
+**/src/main/jniLibs/**/librclone.so
+
+# Signing
+*.keystore
+*.jks
+keystore.properties
+
+# OS
+.DS_Store
+
+# Ruflo / swarm tooling state (not part of the app)
+.claude/
+.mcp.json
+.claude-flow/
+.hive-mind/
+.swarm/
+*.rvf
+*.rvf.lock
+ruvector.db
+proxmox-jobs.sqlite3*
+agentdb.rvf*

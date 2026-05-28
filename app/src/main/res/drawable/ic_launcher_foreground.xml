@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Simple cloud glyph centred in the adaptive-icon safe zone. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M68,46 C68,40 63,35 57,35 C52,35 48,38 46,42 C45,42 44,42 43,42 C37,42 32,47 32,53 C32,59 37,64 43,64 L70,64 C75,64 79,60 79,55 C79,50 75,46 70,46 C69,46 68,46 68,46 Z" />
+</vector>

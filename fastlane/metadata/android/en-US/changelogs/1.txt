@@ -1,0 +1,2 @@
+Initial development build: rclone-powered sync engine, encrypted config,
+background scheduled sync, remote management, and sync task editor.

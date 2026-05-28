@@ -1,0 +1,18 @@
+Virga syncs your phone's local storage — including the microSD card root — to
+cloud providers using the powerful rclone engine, which is bundled in the app.
+
+Features:
+
+* One-way (upload/download) and two-way (bisync) synchronization
+* Scheduled background sync with Wi-Fi-only and charging constraints
+* Per-task bandwidth limits for mobile data
+* Manage remotes in-app or import an existing rclone.conf from desktop
+* Credentials stored encrypted at rest using the Android Keystore
+* Material 3 design with dynamic color and dark mode
+
+Virga collects no analytics and sends your data only to the cloud providers you
+configure. SD-card sync requires the "All files access" permission because
+rclone operates on real filesystem paths.
+
+This app is free and open source (Apache 2.0). rclone is bundled under its MIT
+license.
