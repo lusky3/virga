@@ -11,7 +11,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -37,12 +39,26 @@ import app.lusk.virga.core.database.entity.SyncTaskEntity
 fun SyncTasksScreen(
     onAddTask: () -> Unit,
     onEditTask: (Long) -> Unit,
+    onOpenHistory: () -> Unit,
+    onOpenConflicts: () -> Unit,
     viewModel: SyncTasksViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Sync tasks") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Sync tasks") },
+                actions = {
+                    IconButton(onClick = onOpenConflicts) {
+                        Icon(Icons.Filled.Warning, contentDescription = "Conflicts")
+                    }
+                    IconButton(onClick = onOpenHistory) {
+                        Icon(Icons.Filled.History, contentDescription = "Sync history")
+                    }
+                },
+            )
+        },
         floatingActionButton = {
             FloatingActionButton(onClick = onAddTask) {
                 Icon(Icons.Filled.Add, contentDescription = "Add sync task")

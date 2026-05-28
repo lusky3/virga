@@ -15,9 +15,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,15 +44,30 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.database.entity.RemoteEntity
+import app.lusk.virga.core.rclone.oauth.OAuthProvider
+import app.lusk.virga.feature.remotes.oauth.launchCustomTab
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RemotesScreen(viewModel: RemotesViewModel = hiltViewModel()) {
+fun RemotesScreen(
+    onOpenBrowser: () -> Unit,
+    viewModel: RemotesViewModel = hiltViewModel(),
+) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val launchUrl by viewModel.launchUrl.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var showAdd by remember { mutableStateOf(false) }
+
+    // When the VM produces a Custom Tabs URL, hand it off and clear the signal.
+    LaunchedEffect(launchUrl) {
+        launchUrl?.let { url ->
+            launchCustomTab(context, url)
+            viewModel.onLaunchUrlConsumed()
+            showAdd = false
+        }
+    }
 
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent(),
@@ -74,6 +91,7 @@ fun RemotesScreen(viewModel: RemotesViewModel = hiltViewModel()) {
             TopAppBar(
                 title = { Text("Remotes") },
                 actions = {
+                    TextButton(onClick = onOpenBrowser) { Text("Browse") }
                     TextButton(onClick = { importLauncher.launch("*/*") }) { Text("Import") }
                 },
             )
@@ -104,10 +122,12 @@ fun RemotesScreen(viewModel: RemotesViewModel = hiltViewModel()) {
 
     if (showAdd) {
         AddRemoteDialog(
+            providers = viewModel.oauthProviders,
             onDismiss = { showAdd = false },
-            onConfirm = { name, type, params ->
+            onManualConfirm = { name, type, params ->
                 viewModel.addRemote(name, type, params) { showAdd = false }
             },
+            onOAuth = { provider, name -> viewModel.startOAuth(provider, name) },
         )
     }
 }
@@ -132,21 +152,50 @@ private fun RemoteCard(remote: RemoteEntity, onDelete: () -> Unit) {
 
 @Composable
 private fun AddRemoteDialog(
+    providers: List<OAuthProvider>,
     onDismiss: () -> Unit,
-    onConfirm: (name: String, type: String, params: String) -> Unit,
+    onManualConfirm: (name: String, type: String, params: String) -> Unit,
+    onOAuth: (provider: OAuthProvider, name: String) -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
     var type by remember { mutableStateOf("") }
     var params by remember { mutableStateOf("") }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Add remote") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(name, { name = it }, label = { Text("Name") })
-                OutlinedTextField(type, { type = it }, label = { Text("Type (e.g. drive, s3, webdav)") })
                 OutlinedTextField(
-                    params, { params = it },
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Name") },
+                )
+
+                Text(
+                    "Sign in with",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    providers.forEach { provider ->
+                        AssistChip(
+                            onClick = { onOAuth(provider, name) },
+                            enabled = name.isNotBlank(),
+                            label = { Text(provider.displayName) },
+                        )
+                    }
+                }
+
+                HorizontalDivider()
+                Text("Or configure manually", style = MaterialTheme.typography.labelLarge)
+                OutlinedTextField(
+                    value = type,
+                    onValueChange = { type = it },
+                    label = { Text("Type (e.g. drive, s3, webdav)") },
+                )
+                OutlinedTextField(
+                    value = params,
+                    onValueChange = { params = it },
                     label = { Text("Parameters (key=value per line)") },
                     minLines = 3,
                 )
@@ -154,7 +203,7 @@ private fun AddRemoteDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(name, type, params) },
+                onClick = { onManualConfirm(name, type, params) },
                 enabled = name.isNotBlank() && type.isNotBlank(),
             ) { Text("Create") }
         },

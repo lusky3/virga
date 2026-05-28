@@ -43,7 +43,9 @@ class SyncExecutorTest {
         override suspend fun deleteRemote(name: String) = Result.success(Unit)
         override suspend fun getConfig() = RcloneConfig(emptyMap())
         override suspend fun importConfig(confContent: String) = Result.success(Unit)
-        override suspend fun listDir(remote: String, path: String): List<FileItem> = emptyList()
+        override suspend fun listDir(remote: String, path: String, recurse: Boolean): List<FileItem> = emptyList()
+        override suspend fun deleteFile(remote: String, path: String) = Result.success(Unit)
+        override suspend fun moveFile(source: String, dest: String) = Result.success(Unit)
         override fun copyFile(source: String, dest: String): Flow<TransferProgress> = flowOf()
     }
 

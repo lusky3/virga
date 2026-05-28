@@ -7,6 +7,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- File browser screen with breadcrumb navigation and remote picker
+  (`:feature:explorer`).
+- Sync history screen joining `SyncRunEntity` with task names; reachable from
+  the Sync tab's app bar.
+- Conflict resolution: `ConflictEntity` + DAO, `ConflictRepository` that
+  detects rclone bisync `.conflict1`/`.conflict2` pairs on the destination
+  after a bisync run, and a Compose screen offering keep-1 / keep-2 / keep-both
+  (carried out via rclone `operations/movefile` + `operations/deletefile`).
+- 4-step onboarding pager (welcome, storage permission, battery hint, get
+  started); `MainActivity` gates on the persisted flag and keeps the system
+  splash up until the gate resolves.
+- OAuth 2.0 + PKCE browser flow for Google Drive, OneDrive, and Dropbox:
+  Custom Tabs launch, custom-scheme redirect activity (`virga://oauth/callback`)
+  with state validation, code→token exchange producing the JSON shape rclone
+  stores in `[remote].token`, then `config/create` on the engine. Default
+  client IDs come from `OAuthConfig` (currently placeholders).
 - Multi-module Gradle project (Kotlin, Compose, Material 3, Hilt, Room,
   DataStore, WorkManager) building to per-ABI + universal APKs.
 - rclone cross-compilation pipeline for `arm64-v8a`, `armeabi-v7a`, `x86_64`

@@ -44,6 +44,39 @@ data class SyncTaskEntity(
     val createdAtEpochMs: Long = System.currentTimeMillis(),
 )
 
+/**
+ * A bisync conflict detected on the destination: two variants of the same
+ * logical file, kept by rclone with `--conflict-suffix` (default `conflict1`/
+ * `conflict2`). The user resolves it by picking which variant to keep.
+ */
+@Entity(
+    tableName = "conflicts",
+    foreignKeys = [
+        ForeignKey(
+            entity = SyncTaskEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["taskId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index("taskId"), Index(value = ["remoteName", "basePath"], unique = true)],
+)
+data class ConflictEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val taskId: Long,
+    val remoteName: String,
+    /** Base file path without the conflict suffix (e.g. "Docs/report.txt"). */
+    val basePath: String,
+    /** Path to the variant rclone kept on side 1 (e.g. "Docs/report.txt.conflict1"). */
+    val variant1Path: String,
+    /** Path to the variant rclone kept on side 2 (e.g. "Docs/report.txt.conflict2"). */
+    val variant2Path: String,
+    val variant1Size: Long,
+    val variant2Size: Long,
+    val detectedAtEpochMs: Long = System.currentTimeMillis(),
+    val resolved: Boolean = false,
+)
+
 /** A single execution of a [SyncTaskEntity]. */
 @Entity(
     tableName = "sync_runs",

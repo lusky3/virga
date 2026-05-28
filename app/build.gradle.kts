@@ -100,6 +100,7 @@ dependencies {
     implementation(project(":feature:sync"))
     implementation(project(":feature:remotes"))
     implementation(project(":feature:settings"))
+    implementation(project(":feature:explorer"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.android.material)

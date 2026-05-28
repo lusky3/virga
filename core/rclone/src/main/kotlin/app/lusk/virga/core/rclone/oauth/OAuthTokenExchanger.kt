@@ -1,0 +1,117 @@
+package app.lusk.virga.core.rclone.oauth
+
+import app.lusk.virga.core.common.dispatchers.DispatcherProvider
+import app.lusk.virga.core.common.error.VirgaError
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import okhttp3.FormBody
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.io.IOException
+import java.net.URLEncoder
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/**
+ * OAuth 2.0 + PKCE flow helpers for building authorization URLs and exchanging
+ * authorization codes for tokens, returning a JSON string in the shape rclone
+ * stores in its config (`{"access_token":"…","refresh_token":"…","expiry":"…"}`).
+ */
+@Singleton
+class OAuthTokenExchanger @Inject constructor(
+    private val httpClient: OkHttpClient,
+    private val dispatchers: DispatcherProvider,
+) {
+    private val json: Json = Json { ignoreUnknownKeys = true; isLenient = true }
+
+    data class PendingAuth(
+        val provider: OAuthProvider,
+        val state: String,
+        val verifier: String,
+        val clientId: String,
+        val redirectUri: String,
+    )
+
+    /** Builds the full authorize URL the user is sent to in Custom Tabs. */
+    fun authorizeUrl(p: PendingAuth): String {
+        val base = p.provider.authEndpoint
+        val params = mutableMapOf(
+            "client_id" to p.clientId,
+            "redirect_uri" to p.redirectUri,
+            "response_type" to "code",
+            "scope" to p.provider.scopes.joinToString(" "),
+            "state" to p.state,
+            "code_challenge" to Pkce.challenge(p.verifier),
+            "code_challenge_method" to "S256",
+        )
+        if (p.provider.id == OAuthProviders.Dropbox.id) {
+            // Dropbox needs this flag to issue a refresh token.
+            params["token_access_type"] = "offline"
+        }
+        return base + "?" + params.entries.joinToString("&") { (k, v) ->
+            "$k=${URLEncoder.encode(v, "UTF-8")}"
+        }
+    }
+
+    /** Exchanges [code] for tokens and returns the rclone-shaped token JSON. */
+    suspend fun exchange(p: PendingAuth, code: String): Result<String> = withContext(dispatchers.io) {
+        val body = FormBody.Builder()
+            .add("grant_type", "authorization_code")
+            .add("code", code)
+            .add("redirect_uri", p.redirectUri)
+            .add("client_id", p.clientId)
+            .add("code_verifier", p.verifier)
+            .build()
+        val request = Request.Builder()
+            .url(p.provider.tokenEndpoint)
+            .post(body)
+            .header("Accept", "application/json")
+            .build()
+        try {
+            httpClient.newCall(request).execute().use { response ->
+                val text = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    return@withContext Result.failure(
+                        VirgaError.Auth(
+                            remote = p.provider.id,
+                            message = "Token exchange failed (${response.code}): ${text.take(200)}",
+                        ),
+                    )
+                }
+                val parsed = json.parseToJsonElement(text) as? JsonObject
+                    ?: return@withContext Result.failure(
+                        VirgaError.Auth(p.provider.id, "Token endpoint returned non-JSON"),
+                    )
+                Result.success(rcloneToken(parsed))
+            }
+        } catch (e: IOException) {
+            Result.failure(VirgaError.Network("Token exchange network failure", e))
+        }
+    }
+
+    /**
+     * Builds the JSON rclone expects in `[remote].token`. rclone writes its
+     * `expiry` as an RFC 3339 instant; we compute one from `expires_in`.
+     */
+    private fun rcloneToken(tokenResponse: JsonObject): String {
+        val expiresIn = tokenResponse["expires_in"]?.jsonPrimitive?.intOrNull ?: 0
+        val expiry = OffsetDateTime.now(ZoneOffset.UTC)
+            .plusSeconds(expiresIn.toLong())
+            .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        val rclone = buildJsonObject {
+            tokenResponse["access_token"]?.let { put("access_token", it) }
+            put("token_type", tokenResponse["token_type"] ?: kotlinx.serialization.json.JsonPrimitive("Bearer"))
+            tokenResponse["refresh_token"]?.let { put("refresh_token", it) }
+            put("expiry", expiry)
+        }
+        return json.encodeToString(JsonObject.serializer(), rclone)
+    }
+}

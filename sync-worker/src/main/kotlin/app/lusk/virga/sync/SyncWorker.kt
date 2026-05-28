@@ -10,8 +10,10 @@ import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import app.lusk.virga.core.common.error.VirgaError
+import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.common.model.SyncProgress
 import app.lusk.virga.core.common.model.SyncStatus
+import app.lusk.virga.core.data.ConflictRepository
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
 import dagger.assisted.Assisted
@@ -30,6 +32,7 @@ class SyncWorker @AssistedInject constructor(
     private val executor: SyncExecutor,
     private val taskRepository: SyncTaskRepository,
     private val historyRepository: SyncHistoryRepository,
+    private val conflictRepository: ConflictRepository,
 ) : CoroutineWorker(appContext, params) {
 
     private val notifications = SyncNotifications(appContext)
@@ -66,6 +69,11 @@ class SyncWorker @AssistedInject constructor(
                 bytesTransferred = last?.bytesTransferred ?: 0L,
                 errorCount = last?.errors ?: 0,
             )
+            // After a bisync, scan the destination for rclone conflict files
+            // and queue them for user resolution.
+            if (task.direction == SyncDirection.BISYNC) {
+                runCatching { conflictRepository.detectFor(task) }
+            }
             Result.success()
         } else {
             val message = failure?.message ?: "Sync failed"

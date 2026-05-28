@@ -1,0 +1,101 @@
+package app.lusk.virga.core.data
+
+import app.lusk.virga.core.common.error.VirgaError
+import app.lusk.virga.core.database.dao.ConflictDao
+import app.lusk.virga.core.database.entity.ConflictEntity
+import app.lusk.virga.core.database.entity.SyncTaskEntity
+import app.lusk.virga.core.rclone.RcloneEngine
+import kotlinx.coroutines.flow.Flow
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/** Choices the user makes for resolving a [ConflictEntity]. */
+enum class ConflictChoice { KEEP_VARIANT_1, KEEP_VARIANT_2, KEEP_BOTH }
+
+/**
+ * Detects rclone bisync conflicts on the destination side of a task and
+ * persists them; carries out the user's resolution choice via rclone
+ * move/delete operations.
+ *
+ * Detection heuristic: bisync's default `--conflict-suffix conflict` with
+ * `--conflict-loser num` yields paired files named `<base>.conflict1` and
+ * `<base>.conflict2`. We scan the destination for matches and group by base.
+ */
+@Singleton
+class ConflictRepository @Inject constructor(
+    private val conflictDao: ConflictDao,
+    private val engine: RcloneEngine,
+) {
+    val unresolved: Flow<List<ConflictEntity>> = conflictDao.observeUnresolved()
+
+    /** Walks the destination of [task] for conflict-suffixed files and records them. */
+    suspend fun detectFor(task: SyncTaskEntity): Result<Int> = runCatching {
+        val entries = engine.listDir("${task.remoteName}:", task.remotePath, recurse = true)
+        val grouped = entries
+            .asSequence()
+            .filter { !it.isDir }
+            .mapNotNull { item ->
+                CONFLICT_REGEX.matchEntire(item.name)?.let { match ->
+                    val basePath = item.path.removeSuffix(item.name) + match.groupValues[1]
+                    Triple(basePath, match.groupValues[2].toInt(), item)
+                }
+            }
+            .groupBy { it.first }
+            .mapValues { (_, list) -> list.sortedBy { it.second } }
+            .filter { it.value.size >= 2 }
+
+        val conflicts = grouped.map { (basePath, variants) ->
+            val v1 = variants[0].third
+            val v2 = variants[1].third
+            ConflictEntity(
+                taskId = task.id,
+                remoteName = task.remoteName,
+                basePath = basePath,
+                variant1Path = v1.path,
+                variant2Path = v2.path,
+                variant1Size = v1.size,
+                variant2Size = v2.size,
+            )
+        }
+        if (conflicts.isNotEmpty()) conflictDao.upsertAll(conflicts)
+        conflicts.size
+    }
+
+    /**
+     * Applies [choice] to [conflict] and marks it resolved.
+     *
+     * - KEEP_VARIANT_1 / KEEP_VARIANT_2: move the chosen variant onto the base
+     *   path and delete the other; the base path holds the winner.
+     * - KEEP_BOTH: leaves the `.conflictN` files in place and just marks the
+     *   conflict resolved.
+     */
+    suspend fun resolve(conflict: ConflictEntity, choice: ConflictChoice): Result<Unit> {
+        val remoteFs = "${conflict.remoteName}:"
+        return runCatching {
+            when (choice) {
+                ConflictChoice.KEEP_VARIANT_1 -> {
+                    promote(remoteFs, conflict.variant1Path, conflict.basePath, conflict.variant2Path)
+                }
+                ConflictChoice.KEEP_VARIANT_2 -> {
+                    promote(remoteFs, conflict.variant2Path, conflict.basePath, conflict.variant1Path)
+                }
+                ConflictChoice.KEEP_BOTH -> {
+                    // Nothing to do on rclone — both variant files remain.
+                }
+            }
+            conflictDao.markResolved(conflict.id)
+        }
+    }
+
+    private suspend fun promote(remoteFs: String, winnerPath: String, basePath: String, loserPath: String) {
+        engine.moveFile("$remoteFs$winnerPath", "$remoteFs$basePath").orThrow()
+        engine.deleteFile(remoteFs, loserPath).orThrow()
+    }
+
+    private fun Result<Unit>.orThrow() = onFailure { throw it as? VirgaError ?: VirgaError.Unknown(it.message ?: "rclone op failed", it) }
+
+    private companion object {
+        // e.g. "report.txt.conflict1" -> base "report.txt", number 1
+        val CONFLICT_REGEX = Regex("""^(.+)\.conflict(\d+)$""")
+    }
+}

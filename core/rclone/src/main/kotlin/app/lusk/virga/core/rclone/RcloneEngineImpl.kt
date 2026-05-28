@@ -108,11 +108,12 @@ class RcloneEngineImpl @Inject constructor(
         configManager.import(confContent)
     }
 
-    override suspend fun listDir(remote: String, path: String): List<FileItem> {
+    override suspend fun listDir(remote: String, path: String, recurse: Boolean): List<FileItem> {
         val d = ensureDaemon()
         val result = rc(d, "operations/list", buildJsonObject {
             put("fs", remote)
             put("remote", path)
+            if (recurse) putJsonObject("opt") { put("recurse", true) }
         })
         val list = result["list"]?.jsonArray ?: return emptyList()
         return list.map { it.jsonObject }.map { obj ->
@@ -165,6 +166,24 @@ class RcloneEngineImpl @Inject constructor(
         })
         emit(TransferProgress(name = dest, bytes = 0, size = 0, speedBytesPerSec = 0.0))
     }.flowOn(dispatchers.io)
+
+    override suspend fun deleteFile(remote: String, path: String): Result<Unit> = runCatchingRclone {
+        val d = ensureDaemon()
+        rc(d, "operations/deletefile", buildJsonObject {
+            put("fs", remote)
+            put("remote", path)
+        })
+    }
+
+    override suspend fun moveFile(source: String, dest: String): Result<Unit> = runCatchingRclone {
+        val d = ensureDaemon()
+        val (srcFs, srcRemote) = splitFs(source)
+        val (dstFs, dstRemote) = splitFs(dest)
+        rc(d, "operations/movefile", buildJsonObject {
+            put("srcFs", srcFs); put("srcRemote", srcRemote)
+            put("dstFs", dstFs); put("dstRemote", dstRemote)
+        })
+    }
 
     /** Starts an async RC job, then polls core/stats + job/status until done. */
     private fun runJobWithProgress(start: suspend (RcloneDaemon) -> JsonObject): Flow<SyncProgress> = flow {

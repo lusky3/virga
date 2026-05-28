@@ -40,8 +40,9 @@ DataStore, WorkManager, Coroutines/Flow.
 | `core:storage` | Storage volume enumeration, MANAGE_EXTERNAL_STORAGE |
 | `core:data` | Repositories tying the data sources together |
 | `sync-worker` | WorkManager worker, foreground service, scheduler, boot receiver |
-| `feature:sync` | Sync task list + editor |
-| `feature:remotes` | Remote management (manual config + config import) |
+| `feature:sync` | Sync task list + editor, sync history, conflict resolution |
+| `feature:remotes` | Remote management (OAuth + manual config + config import) |
+| `feature:explorer` | File browser for remote contents |
 | `feature:settings` | App settings |
 
 The full design rationale lives in [`specs/virga-android/spec.md`](specs/virga-android/spec.md).
@@ -89,9 +90,17 @@ SD-card sync therefore requires `MANAGE_EXTERNAL_STORAGE`:
 
 ## OAuth / BYO credentials
 
-Virga is designed to ship default OAuth client IDs for major providers (public
-by design for mobile apps), with a BYO override for power users. Until those are
-registered, configure remotes by:
+Virga ships an in-app OAuth 2.0 + PKCE flow for **Google Drive, OneDrive, and
+Dropbox**: tap a provider chip in the Add-remote dialog → Custom Tabs opens the
+provider's sign-in page → the redirect comes back to a single
+`virga://oauth/callback` activity → the code is exchanged for tokens and a
+remote is created via rclone's RC API. State is validated, PKCE binds the code
+to a verifier kept in-process, and no client secret ships in the APK.
+
+The OAuth **client IDs are placeholders** (empty strings in
+`OAuthConfig`/BuildConfig). Until real IDs are registered with each provider
+the OAuth chips will show "client ID isn't configured yet." Two alternatives
+work today against any backend:
 
 - **Importing an existing `rclone.conf`** (e.g. authorized on desktop) — works
   for any backend including pre-authorized OAuth remotes, or
@@ -107,14 +116,16 @@ Implemented and building:
 - ✅ RcloneEngine: daemon lifecycle, RC API client, sync/bisync/list/config
 - ✅ Storage access (MANAGE_EXTERNAL_STORAGE + volume enumeration)
 - ✅ Background sync: WorkManager + foreground `dataSync` worker + scheduler + boot receiver
-- ✅ UI: sync task list/editor, remotes (add/import/delete), settings
-- ✅ Unit tests for engine, RC client, executor
+- ✅ UI: sync task list/editor, remotes (OAuth + manual + import + delete),
+  file browser, sync history, conflict resolution, settings, 4-step onboarding
+- ✅ OAuth 2.0 + PKCE browser flow (Custom Tabs + custom-scheme redirect) for
+  Google Drive, OneDrive, and Dropbox — see [OAuth / BYO credentials](#oauth--byo-credentials)
+- ✅ Unit tests for engine, RC client, executor (67 tests, 0 failures)
 
 Not yet done (tracked for follow-up):
 
-- ⏳ In-app OAuth browser flow (CustomTabs token capture)
-- ⏳ Sync history & conflict-resolution screens (data layer exists)
-- ⏳ Onboarding flow & file browser
+- ⏳ Register real OAuth client IDs with Google / Microsoft / Dropbox and wire
+  them into the `play` and `foss` flavors (BuildConfig already has the slots)
 - ⏳ Instrumented/UI/screenshot tests; baseline profiles
 - ⏳ Play/F-Droid store listings, signing, release automation
 

@@ -2,8 +2,16 @@ package app.lusk.virga.feature.remotes
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.database.entity.RemoteEntity
+import app.lusk.virga.core.rclone.oauth.OAuthConfig
+import app.lusk.virga.core.rclone.oauth.OAuthProvider
+import app.lusk.virga.core.rclone.oauth.OAuthProviders
+import app.lusk.virga.core.rclone.oauth.OAuthResult
+import app.lusk.virga.core.rclone.oauth.OAuthStore
+import app.lusk.virga.core.rclone.oauth.OAuthTokenExchanger
+import app.lusk.virga.core.rclone.oauth.Pkce
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -11,18 +19,37 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.UUID
 import javax.inject.Inject
 
 data class RemotesUiState(
     val remotes: List<RemoteEntity> = emptyList(),
     val refreshing: Boolean = false,
+    val oauthInProgress: Boolean = false,
     val message: String? = null,
 )
 
 @HiltViewModel
 class RemotesViewModel @Inject constructor(
     private val repository: RemoteRepository,
+    private val oauthConfig: OAuthConfig,
+    private val oauthStore: OAuthStore,
+    private val tokenExchanger: OAuthTokenExchanger,
 ) : ViewModel() {
+
+    /** Single-shot signal to the screen: open this URL in Custom Tabs. */
+    private val _launchUrl = MutableStateFlow<String?>(null)
+    val launchUrl: StateFlow<String?> = _launchUrl
+
+    /** The OAuth providers Virga supports out of the box. */
+    val oauthProviders: List<OAuthProvider> = OAuthProviders.All
+
+    init {
+        // Observe the redirect activity's results for the lifetime of the VM.
+        viewModelScope.launch {
+            oauthStore.results.collect { result -> onOAuthResult(result) }
+        }
+    }
 
     private val transient = MutableStateFlow(TransientState())
 
@@ -78,10 +105,101 @@ class RemotesViewModel @Inject constructor(
         transient.value = transient.value.copy(message = null)
     }
 
-    private data class TransientState(val refreshing: Boolean = false, val message: String? = null)
+    private data class TransientState(
+        val refreshing: Boolean = false,
+        val oauthInProgress: Boolean = false,
+        val message: String? = null,
+    )
 
     private fun combineState(): StateFlow<RemotesUiState> =
         combine(repository.remotes, transient) { remotes, t ->
-            RemotesUiState(remotes = remotes, refreshing = t.refreshing, message = t.message)
+            RemotesUiState(
+                remotes = remotes,
+                refreshing = t.refreshing,
+                oauthInProgress = t.oauthInProgress,
+                message = t.message,
+            )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RemotesUiState())
+
+    // --- OAuth ----------------------------------------------------------
+
+    /** Remote name the user typed before the OAuth round-trip — used after success. */
+    @Volatile private var pendingRemoteName: String? = null
+
+    /** Starts the OAuth flow for [provider]; observe [launchUrl] to launch Custom Tabs. */
+    fun startOAuth(provider: OAuthProvider, remoteName: String) {
+        val clientId = oauthConfig.clientId(provider.id)
+        if (clientId.isBlank()) {
+            transient.value = transient.value.copy(
+                message = "${provider.displayName} OAuth client ID isn't configured yet.",
+            )
+            return
+        }
+        val pending = OAuthTokenExchanger.PendingAuth(
+            provider = provider,
+            state = UUID.randomUUID().toString(),
+            verifier = Pkce.newVerifier(),
+            clientId = clientId,
+            redirectUri = oauthConfig.redirectUri,
+        )
+        oauthStore.startPending(pending)
+        pendingRemoteName = remoteName
+        transient.value = transient.value.copy(oauthInProgress = true, message = null)
+        _launchUrl.value = tokenExchanger.authorizeUrl(pending)
+    }
+
+    /** Called by the screen once it has handed [launchUrl] to Custom Tabs. */
+    fun onLaunchUrlConsumed() {
+        _launchUrl.value = null
+    }
+
+    private suspend fun onOAuthResult(result: OAuthResult) {
+        when (result) {
+            is OAuthResult.Error -> {
+                oauthStore.clear()
+                pendingRemoteName = null
+                transient.value = transient.value.copy(
+                    oauthInProgress = false,
+                    message = "OAuth failed: ${result.message}",
+                )
+            }
+            is OAuthResult.Success -> {
+                val pending = oauthStore.consume(result.state)
+                val remoteName = pendingRemoteName
+                pendingRemoteName = null
+                if (pending == null || remoteName.isNullOrBlank()) {
+                    transient.value = transient.value.copy(
+                        oauthInProgress = false,
+                        message = "OAuth state mismatch; please try again.",
+                    )
+                    return
+                }
+                val tokenResult = tokenExchanger.exchange(pending, result.code)
+                val tokenJson = tokenResult.getOrElse { error ->
+                    transient.value = transient.value.copy(
+                        oauthInProgress = false,
+                        message = (error as? VirgaError)?.message ?: error.message
+                            ?: "Token exchange failed",
+                    )
+                    return
+                }
+                val createResult = repository.addRemote(
+                    name = remoteName,
+                    type = pending.provider.type,
+                    params = mapOf(
+                        "token" to tokenJson,
+                        "client_id" to pending.clientId,
+                    ),
+                )
+                transient.value = transient.value.copy(
+                    oauthInProgress = false,
+                    message = if (createResult.isSuccess) {
+                        "Added ${pending.provider.displayName} remote \"$remoteName\""
+                    } else {
+                        "Could not save remote: ${createResult.exceptionOrNull()?.message}"
+                    },
+                )
+            }
+        }
+    }
 }

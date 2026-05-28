@@ -21,8 +21,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import app.lusk.virga.feature.explorer.FileBrowserScreen
 import app.lusk.virga.feature.remotes.RemotesScreen
 import app.lusk.virga.feature.settings.SettingsScreen
+import app.lusk.virga.feature.sync.ConflictsScreen
+import app.lusk.virga.feature.sync.SyncHistoryScreen
 import app.lusk.virga.feature.sync.SyncTaskEditScreen
 import app.lusk.virga.feature.sync.SyncTasksScreen
 import kotlinx.serialization.Serializable
@@ -32,6 +35,9 @@ import kotlinx.serialization.Serializable
 @Serializable object RemotesRoute
 @Serializable object SettingsRoute
 @Serializable data class TaskEditRoute(val taskId: Long)
+@Serializable object HistoryRoute
+@Serializable object BrowseRoute
+@Serializable object ConflictsRoute
 
 private data class TopLevel(
     val route: Any,
@@ -83,13 +89,26 @@ fun VirgaNavHost() {
                 SyncTasksScreen(
                     onAddTask = { navController.navigate(TaskEditRoute(0)) },
                     onEditTask = { id -> navController.navigate(TaskEditRoute(id)) },
+                    onOpenHistory = { navController.navigate(HistoryRoute) },
+                    onOpenConflicts = { navController.navigate(ConflictsRoute) },
                 )
             }
             composable<TaskEditRoute> { backStackEntry ->
                 val route = backStackEntry.toRoute<TaskEditRoute>()
                 SyncTaskEditScreen(taskId = route.taskId, onBack = { navController.popBackStack() })
             }
-            composable<RemotesRoute> { RemotesScreen() }
+            composable<HistoryRoute> {
+                SyncHistoryScreen(onBack = { navController.popBackStack() })
+            }
+            composable<ConflictsRoute> {
+                ConflictsScreen(onBack = { navController.popBackStack() })
+            }
+            composable<RemotesRoute> {
+                RemotesScreen(onOpenBrowser = { navController.navigate(BrowseRoute) })
+            }
+            composable<BrowseRoute> {
+                FileBrowserScreen(onBack = { navController.popBackStack() })
+            }
             composable<SettingsRoute> { SettingsScreen() }
         }
     }

@@ -24,7 +24,13 @@ interface RcloneEngine {
     suspend fun getConfig(): RcloneConfig
     suspend fun importConfig(confContent: String): Result<Unit>
 
-    suspend fun listDir(remote: String, path: String): List<FileItem>
+    suspend fun listDir(remote: String, path: String, recurse: Boolean = false): List<FileItem>
+
+    /** Deletes a single file at [remote]:[path]. */
+    suspend fun deleteFile(remote: String, path: String): Result<Unit>
+
+    /** Moves/renames a file. Paths use rclone "remote:path" syntax. */
+    suspend fun moveFile(source: String, dest: String): Result<Unit>
 
     /** Emits progress until the sync completes; the terminal emission has full counts. */
     fun sync(source: String, dest: String, options: SyncOptions): Flow<SyncProgress>

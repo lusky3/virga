@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "app.lusk.virga.feature.remotes"
+    namespace = "app.lusk.virga.feature.explorer"
     compileSdk = 36
     defaultConfig { minSdk = 26 }
     buildFeatures { compose = true }
@@ -24,7 +24,7 @@ dependencies {
     implementation(project(":core:data"))
 
     implementation(libs.bundles.coroutines)
-    implementation(libs.androidx.browser)
+    implementation(libs.androidx.activity.compose)
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.hilt.android)

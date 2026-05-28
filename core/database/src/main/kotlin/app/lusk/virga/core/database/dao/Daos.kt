@@ -7,6 +7,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import androidx.room.Upsert
+import app.lusk.virga.core.database.entity.ConflictEntity
 import app.lusk.virga.core.database.entity.RemoteEntity
 import app.lusk.virga.core.database.entity.SyncRunEntity
 import app.lusk.virga.core.database.entity.SyncTaskEntity
@@ -70,4 +71,25 @@ interface SyncRunDao {
 
     @Query("DELETE FROM sync_runs WHERE startedAtEpochMs < :beforeEpochMs")
     suspend fun pruneOlderThan(beforeEpochMs: Long)
+}
+
+@Dao
+interface ConflictDao {
+    @Query("SELECT * FROM conflicts WHERE resolved = 0 ORDER BY detectedAtEpochMs DESC")
+    fun observeUnresolved(): Flow<List<ConflictEntity>>
+
+    @Query("SELECT * FROM conflicts WHERE id = :id")
+    suspend fun getById(id: Long): ConflictEntity?
+
+    @Upsert
+    suspend fun upsert(conflict: ConflictEntity)
+
+    @Upsert
+    suspend fun upsertAll(conflicts: List<ConflictEntity>)
+
+    @Query("UPDATE conflicts SET resolved = 1 WHERE id = :id")
+    suspend fun markResolved(id: Long)
+
+    @Query("DELETE FROM conflicts WHERE taskId = :taskId AND resolved = 1")
+    suspend fun pruneResolved(taskId: Long)
 }
