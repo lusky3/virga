@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -16,6 +17,7 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.common.util.formatFileSize
 import app.lusk.virga.core.database.entity.SyncRunEntity
+import app.lusk.virga.core.ui.EmptyState
 import java.text.DateFormat
 import java.util.Date
 import kotlin.time.Duration.Companion.milliseconds
@@ -64,18 +67,25 @@ fun SyncHistoryScreen(
             )
         },
     ) { padding ->
-        if (!state.loading && state.rows.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text(stringResource(R.string.sync_history_empty))
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            if (state.tasks.isNotEmpty()) {
+                TaskFilterRow(
+                    tasks = state.tasks,
+                    selectedTaskId = state.selectedTaskId,
+                    onSelect = viewModel::setFilter,
+                )
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                items(state.rows, key = { it.run.id }) { row ->
-                    RunCard(row)
+            if (!state.loading && state.rows.isEmpty()) {
+                EmptyState(title = stringResource(R.string.sync_history_empty))
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    items(state.rows, key = { it.run.id }) { row ->
+                        RunCard(row, onClick = { viewModel.setFilter(row.run.taskId) })
+                    }
                 }
             }
         }
@@ -83,9 +93,36 @@ fun SyncHistoryScreen(
 }
 
 @Composable
-internal fun RunCard(row: SyncRunRow) {
+private fun TaskFilterRow(
+    tasks: List<TaskFilter>,
+    selectedTaskId: Long?,
+    onSelect: (Long?) -> Unit,
+) {
+    LazyRow(
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        item {
+            FilterChip(
+                selected = selectedTaskId == null,
+                onClick = { onSelect(null) },
+                label = { Text(stringResource(R.string.sync_history_filter_all)) },
+            )
+        }
+        items(tasks, key = { it.id }) { task ->
+            FilterChip(
+                selected = selectedTaskId == task.id,
+                onClick = { onSelect(task.id) },
+                label = { Text(task.name, maxLines = 1) },
+            )
+        }
+    }
+}
+
+@Composable
+internal fun RunCard(row: SyncRunRow, onClick: () -> Unit = {}) {
     val run = row.run
-    Card(Modifier.fillMaxWidth()) {
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(row.taskName, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))

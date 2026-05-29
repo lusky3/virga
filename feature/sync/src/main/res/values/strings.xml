@@ -26,6 +26,7 @@
     <string name="sync_history_status_idle">idle</string>
     <string name="sync_history_files_transferred">%1$d files</string>
     <string name="sync_history_error_count">%1$d error(s)</string>
+    <string name="sync_history_filter_all">All</string>
 
     <!-- SyncTaskEditScreen -->
     <string name="sync_edit_title_new">New sync task</string>

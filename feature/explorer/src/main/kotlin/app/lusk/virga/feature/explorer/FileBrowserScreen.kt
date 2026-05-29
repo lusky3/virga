@@ -38,6 +38,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.common.util.formatFileSize
+import app.lusk.virga.core.ui.EmptyState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -119,15 +120,14 @@ private fun RemotePicker(
     onNavigateToRemotes: () -> Unit,
 ) {
     if (remotes.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(stringResource(R.string.explorer_no_remotes))
-                TextButton(onClick = onNavigateToRemotes) { Text(stringResource(R.string.explorer_add_remote)) }
-            }
-        }
+        EmptyState(
+            title = stringResource(R.string.explorer_no_remotes),
+            action = {
+                TextButton(onClick = onNavigateToRemotes) {
+                    Text(stringResource(R.string.explorer_add_remote))
+                }
+            },
+        )
         return
     }
     LazyColumn(Modifier.fillMaxSize()) {
@@ -173,9 +173,7 @@ private fun FileList(entries: List<FileItem>, onOpen: (FileItem) -> Unit) {
 
 @Composable
 private fun EmptyFolder() {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(stringResource(R.string.explorer_empty_folder), style = MaterialTheme.typography.bodyLarge)
-    }
+    EmptyState(title = stringResource(R.string.explorer_empty_folder))
 }
 
 @Composable

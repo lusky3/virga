@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.util.formatFileSize
+import app.lusk.virga.core.ui.EmptyState
 import app.lusk.virga.core.data.ConflictChoice
 import app.lusk.virga.core.database.entity.ConflictEntity
 import java.text.DateFormat
@@ -82,9 +83,10 @@ fun ConflictsScreen(
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         if (state.conflicts.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text(stringResource(R.string.conflicts_empty))
-            }
+            EmptyState(
+                title = stringResource(R.string.conflicts_empty),
+                modifier = Modifier.padding(padding),
+            )
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),

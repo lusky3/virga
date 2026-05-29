@@ -48,6 +48,7 @@ import app.lusk.virga.core.database.entity.SyncRunEntity
 import android.content.res.Configuration
 import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.database.entity.SyncTaskEntity
+import app.lusk.virga.core.ui.EmptyState
 import androidx.compose.material3.Surface
 import androidx.compose.ui.tooling.preview.Preview
 
@@ -207,12 +208,7 @@ private fun RunStatusBadge(status: SyncStatus, modifier: Modifier = Modifier) {
 
 @Composable
 private fun EmptyTasks(modifier: Modifier = Modifier) {
-    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(
-            stringResource(R.string.sync_tasks_empty),
-            style = MaterialTheme.typography.bodyLarge,
-        )
-    }
+    EmptyState(title = stringResource(R.string.sync_tasks_empty), modifier = modifier)
 }
 
 // ---------------------------------------------------------------------------

@@ -35,22 +35,13 @@
         android:theme="@style/Theme.Virga"
         android:enableOnBackInvokedCallback="true">
 
-        <!-- SEC-L: profileable is required for androidx.benchmark Macrobenchmark
-             to attach to the release build and read method-level traces.
-             `shell="true"` lets adb/ProfileInstaller drive sampling without root.
-             tools:remove in the release build-type overlay removes this element
-             so it does not ship in production release APKs. The debug manifest
-             overlay (app/src/debug/AndroidManifest.xml) re-adds it for local
-             profiling. For now, the element stays here with a tools:ignore so
-             it is kept in debug builds. A proper per-build-type override
-             requires a separate src/release/AndroidManifest.xml which is a new
-             file; left as-is with a TODO to avoid creating new files per task
-             scoping rules.
-             TODO: move <profileable> to src/debug/AndroidManifest.xml and add
-             a src/release/AndroidManifest.xml that omits it. -->
-        <profileable
-            android:shell="true"
-            tools:ignore="ProfileableInProduction" />
+        <!-- SEC-L: production builds are intentionally NOT profileable. The
+             androidx.baselineprofile plugin creates dedicated, profileable
+             `nonMinifiedRelease` / `benchmarkRelease` variants for the
+             :benchmark module to attach to, so no <profileable> element is
+             needed here — and omitting it keeps adb/shell profiling off the
+             shipping release APK. Debug builds are debuggable and therefore
+             already profileable locally. -->
 
         <activity
             android:name=".MainActivity"

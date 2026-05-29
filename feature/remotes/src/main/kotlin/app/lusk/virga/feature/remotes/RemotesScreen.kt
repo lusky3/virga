@@ -52,6 +52,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.database.entity.RemoteEntity
 import app.lusk.virga.core.rclone.oauth.OAuthProvider
+import app.lusk.virga.core.ui.EmptyState
 import android.content.res.Configuration
 import app.lusk.virga.feature.remotes.oauth.launchCustomTab
 import androidx.compose.material3.Surface
@@ -138,9 +139,7 @@ fun RemotesScreen(
                     }
                 }
                 state.remotes.isEmpty() -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(stringResource(R.string.remotes_empty))
-                    }
+                    EmptyState(title = stringResource(R.string.remotes_empty))
                 }
                 else -> {
                     LazyColumn(
