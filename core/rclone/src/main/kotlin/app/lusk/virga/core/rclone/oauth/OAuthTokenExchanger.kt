@@ -38,6 +38,12 @@ class OAuthTokenExchanger @Inject constructor(
         val verifier: String,
         val clientId: String,
         val redirectUri: String,
+        /**
+         * Remote name the user typed before the round-trip. Carried in the
+         * (singleton-stored) pending auth so it survives ViewModel/process
+         * recreation while the browser is open.
+         */
+        val remoteName: String = "",
     )
 
     /** Builds the full authorize URL the user is sent to in Custom Tabs. */

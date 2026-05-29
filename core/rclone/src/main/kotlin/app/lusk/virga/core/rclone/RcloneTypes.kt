@@ -1,6 +1,7 @@
 package app.lusk.virga.core.rclone
 
 import app.lusk.virga.core.common.model.SyncDirection
+import java.io.File
 
 /** A running rclone RC daemon: child process + the localhost endpoint + creds. */
 data class RcloneDaemon(
@@ -8,6 +9,12 @@ data class RcloneDaemon(
     val port: Int,
     val user: String,
     val pass: String,
+    /**
+     * The htpasswd file backing `--rc-htpasswd`. rclone re-reads this file on
+     * every request, so it must live for the daemon's whole lifetime; it is
+     * deleted when the daemon stops. Null only for daemons created in tests.
+     */
+    val htpasswdFile: File? = null,
 ) {
     val baseUrl: String get() = "http://127.0.0.1:$port"
 }

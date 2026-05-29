@@ -1,8 +1,8 @@
 package app.lusk.virga.core.rclone.oauth
 
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -33,8 +33,14 @@ class OAuthStore @Inject constructor() {
 
     private val _pending = AtomicReference<TimedAuth?>(null)
 
-    private val _results = MutableSharedFlow<OAuthResult>(replay = 0, extraBufferCapacity = 1)
-    val results: SharedFlow<OAuthResult> = _results.asSharedFlow()
+    // StateFlow, not SharedFlow: the redirect activity often emits the result
+    // while the app is backgrounded behind the Custom Tab and the collecting
+    // ViewModel has been torn down. replay=0 SharedFlow would drop the event in
+    // that window. StateFlow replays the latest value to a late/re-subscribing
+    // collector so the result is never lost; the collector calls clearResult()
+    // after handling it to prevent reprocessing.
+    private val _results = MutableStateFlow<OAuthResult?>(null)
+    val results: StateFlow<OAuthResult?> = _results.asStateFlow()
 
     fun startPending(auth: OAuthTokenExchanger.PendingAuth) {
         // CAS: replace whatever was pending (including null) with the new auth.
@@ -65,7 +71,12 @@ class OAuthStore @Inject constructor() {
     }
 
     fun emit(result: OAuthResult) {
-        _results.tryEmit(result)
+        _results.value = result
+    }
+
+    /** Clears the last result once the ViewModel has handled it. */
+    fun clearResult() {
+        _results.value = null
     }
 
     fun clear() {

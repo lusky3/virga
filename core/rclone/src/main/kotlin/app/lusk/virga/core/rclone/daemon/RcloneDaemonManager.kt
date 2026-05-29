@@ -39,14 +39,15 @@ class RcloneDaemonManager @Inject constructor(
         val user = randomToken()
         val pass = randomToken()
 
-        // SEC-H1: Write credentials to a private htpasswd file instead of
-        // passing them as --rc-user/--rc-pass command-line args. Command-line
-        // args are visible via /proc/<pid>/cmdline. We use SHA-1 htpasswd format
-        // ({SHA}base64(sha1(password))) which rclone's embedded htpasswd parser
-        // supports. The file is written to noBackupFilesDir (private, excluded
-        // from backups) and deleted immediately after the process is started so
-        // it exists on disk only for the brief moment between ProcessBuilder.start()
-        // returning and the delete call — rclone reads it at startup.
+        // SEC-H1: Pass RC credentials via a private htpasswd file rather than
+        // --rc-user/--rc-pass command-line args, which are world-readable via
+        // /proc/<pid>/cmdline. The file uses Apache SHA-1 format
+        // ({SHA}base64(sha1(password))) supported by rclone's htpasswd parser,
+        // and lives in noBackupFilesDir (private, backup-excluded). rclone
+        // re-reads (stat + open) this file on EVERY RC request via go-http-auth's
+        // ReloadIfNeeded, so it MUST persist for the daemon's whole lifetime —
+        // it is deleted in stop() and on the startup-failure paths below, never
+        // immediately after launch (doing so panics every authenticated request).
         val htpasswdFile = writeHtpasswdFile(user, pass)
         val process = try {
             ProcessBuilder(
@@ -63,9 +64,9 @@ class RcloneDaemonManager @Inject constructor(
                 environment()["HOME"] = context.filesDir.absolutePath
                 redirectErrorStream(false)
             }.start()
-        } finally {
-            // Delete immediately; rclone has already opened the file descriptor.
+        } catch (t: Throwable) {
             htpasswdFile.delete()
+            throw t
         }
 
         // Read stderr line-by-line both to discover the bound port and to keep
@@ -104,9 +105,10 @@ class RcloneDaemonManager @Inject constructor(
         val port = boundPort.get()
         if (port == null) {
             process.destroyForcibly()
+            htpasswdFile.delete()
             throw VirgaError.Rclone(message = "rclone daemon did not start within ${STARTUP_TIMEOUT_MS}ms")
         }
-        RcloneDaemon(process = process, port = port, user = user, pass = pass)
+        RcloneDaemon(process = process, port = port, user = user, pass = pass, htpasswdFile = htpasswdFile)
     }
 
     suspend fun stop(daemon: RcloneDaemon) = withContext(dispatchers.io) {
@@ -114,6 +116,10 @@ class RcloneDaemonManager @Inject constructor(
         if (!daemon.process.waitForCompat(GRACEFUL_STOP_MS)) {
             daemon.process.destroyForcibly()
         }
+        // SEC-H1: the htpasswd file lived for the daemon's lifetime; remove it
+        // now that the process is gone so no credential hash lingers on disk.
+        daemon.htpasswdFile?.delete()
+        Unit
     }
 
     fun isAlive(daemon: RcloneDaemon): Boolean = daemon.process.isAlive

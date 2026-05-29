@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -46,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -237,6 +239,12 @@ private fun AddRemoteDialog(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text(stringResource(R.string.remotes_add_field_name)) },
+                    // Remote name and rclone backend type are case-sensitive
+                    // identifiers — never auto-capitalize or auto-correct them.
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.None,
+                        autoCorrectEnabled = false,
+                    ),
                 )
 
                 Text(
@@ -260,6 +268,10 @@ private fun AddRemoteDialog(
                     value = type,
                     onValueChange = { type = it },
                     label = { Text(stringResource(R.string.remotes_add_field_type)) },
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.None,
+                        autoCorrectEnabled = false,
+                    ),
                 )
                 OutlinedTextField(
                     value = params,

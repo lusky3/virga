@@ -48,7 +48,12 @@ class RemotesViewModel @Inject constructor(
     init {
         // Observe the redirect activity's results for the lifetime of the VM.
         viewModelScope.launch {
-            oauthStore.results.collect { result -> onOAuthResult(result) }
+            oauthStore.results.collect { result ->
+                if (result != null) {
+                    onOAuthResult(result)
+                    oauthStore.clearResult()
+                }
+            }
         }
     }
 
@@ -137,9 +142,6 @@ class RemotesViewModel @Inject constructor(
 
     // --- OAuth ----------------------------------------------------------
 
-    /** Remote name the user typed before the OAuth round-trip — used after success. */
-    @Volatile private var pendingRemoteName: String? = null
-
     /** Starts the OAuth flow for [provider]; observe [launchUrl] to launch Custom Tabs. */
     fun startOAuth(provider: OAuthProvider, remoteName: String) {
         val clientId = oauthConfig.clientId(provider.id)
@@ -155,9 +157,9 @@ class RemotesViewModel @Inject constructor(
             verifier = Pkce.newVerifier(),
             clientId = clientId,
             redirectUri = oauthConfig.redirectUri(provider.id),
+            remoteName = remoteName,
         )
         oauthStore.startPending(pending)
-        pendingRemoteName = remoteName
         transient.value = transient.value.copy(oauthInProgress = true, message = null)
         _launchUrl.value = tokenExchanger.authorizeUrl(pending)
     }
@@ -171,7 +173,6 @@ class RemotesViewModel @Inject constructor(
         when (result) {
             is OAuthResult.Error -> {
                 oauthStore.clear()
-                pendingRemoteName = null
                 transient.value = transient.value.copy(
                     oauthInProgress = false,
                     message = "Sign-in failed: ${result.message}",
@@ -179,15 +180,14 @@ class RemotesViewModel @Inject constructor(
             }
             is OAuthResult.Success -> {
                 val pending = oauthStore.consume(result.state)
-                val remoteName = pendingRemoteName
-                pendingRemoteName = null
-                if (pending == null || remoteName.isNullOrBlank()) {
+                if (pending == null || pending.remoteName.isBlank()) {
                     transient.value = transient.value.copy(
                         oauthInProgress = false,
                         message = "Sign-in state mismatch; please try again.",
                     )
                     return
                 }
+                val remoteName = pending.remoteName
                 val tokenResult = tokenExchanger.exchange(pending, result.code)
                 val tokenJson = tokenResult.getOrElse { error ->
                     transient.value = transient.value.copy(

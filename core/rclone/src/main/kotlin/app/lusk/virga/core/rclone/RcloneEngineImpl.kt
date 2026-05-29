@@ -90,6 +90,11 @@ class RcloneEngineImpl @Inject constructor(
             put("name", name)
             put("type", type)
             putJsonObject("parameters") { params.forEach { (k, v) -> put(k, v) } }
+            // Create the remote non-interactively using the OAuth token already
+            // supplied in [parameters]. Without nonInteractive, rclone's backend
+            // config runs its own browser OAuth ("Waiting for code...") and the
+            // config/create RC call blocks forever.
+            putJsonObject("opt") { put("nonInteractive", true) }
         })
         configManager.persistAndCleanup()
         // Daemon keeps running on the now-deleted plaintext temp; restart lazily.

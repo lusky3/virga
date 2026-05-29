@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -97,7 +98,10 @@ fun OnboardingScreen(
     }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(Modifier.fillMaxSize().padding(24.dp)) {
+        // safeDrawingPadding keeps the pager content, page indicator, and the
+        // Back/Next/Get-started row clear of the status bar and the gesture/3-button
+        // navigation bar (the screen is drawn edge-to-edge via enableEdgeToEdge).
+        Column(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp)) {
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier.weight(1f).fillMaxWidth(),

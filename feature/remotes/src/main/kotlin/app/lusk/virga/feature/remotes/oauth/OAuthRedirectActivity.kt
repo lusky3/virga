@@ -22,13 +22,30 @@ class OAuthRedirectActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handle(intent)
+        returnToApp()
         finish()
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handle(intent)
+        returnToApp()
         finish()
+    }
+
+    /**
+     * Bring the app's main task back to the foreground. Custom Tabs sits on top
+     * of our task, so without this the user is left looking at the browser
+     * (often the provider's home page) after the redirect. CLEAR_TOP + SINGLE_TOP
+     * reuses the existing MainActivity rather than creating a new one. We resolve
+     * the launch intent via the package manager so this module needn't depend on
+     * the app module's MainActivity.
+     */
+    private fun returnToApp() {
+        val launch = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        if (launch != null) startActivity(launch)
     }
 
     private fun handle(intent: Intent?) {
