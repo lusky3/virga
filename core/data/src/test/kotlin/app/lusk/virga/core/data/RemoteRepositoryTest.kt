@@ -28,7 +28,7 @@ class RemoteRepositoryTest {
 
     // --- refresh ---
 
-    @Test fun `refresh clears cache and upserts live remotes`() = runTest {
+    @Test fun `refresh replaces all remotes atomically`() = runTest {
         coEvery { engine.listRemotes() } returns listOf(
             Remote("gdrive", "drive"),
             Remote("mys3", "s3"),
@@ -37,8 +37,7 @@ class RemoteRepositoryTest {
         val result = repo.refresh()
 
         assertThat(result.isSuccess).isTrue()
-        coVerify { remoteDao.clear() }
-        coVerify { remoteDao.upsertAll(match { it.size == 2 && it.any { r -> r.name == "gdrive" } }) }
+        coVerify { remoteDao.replaceAll(match { it.size == 2 && it.any { r -> r.name == "gdrive" } }) }
     }
 
     @Test fun `refresh propagates engine failure as Result failure`() = runTest {
@@ -60,7 +59,7 @@ class RemoteRepositoryTest {
 
         assertThat(result.isSuccess).isTrue()
         coVerify { engine.createRemote("new", "drive", mapOf("client_id" to "abc")) }
-        coVerify { remoteDao.clear() }
+        coVerify { remoteDao.replaceAll(match { it.size == 1 && it[0].name == "new" }) }
     }
 
     @Test fun `addRemote returns failure and skips refresh when engine fails`() = runTest {
@@ -70,7 +69,7 @@ class RemoteRepositoryTest {
         val result = repo.addRemote("dup", "drive", emptyMap())
 
         assertThat(result.isFailure).isTrue()
-        coVerify(exactly = 0) { remoteDao.clear() }
+        coVerify(exactly = 0) { remoteDao.replaceAll(any()) }
     }
 
     // --- deleteRemote ---

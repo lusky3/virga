@@ -3,6 +3,7 @@ package app.lusk.virga.feature.remotes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.lusk.virga.core.common.error.VirgaError
+import app.lusk.virga.core.common.error.toUserMessage
 import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.database.entity.RemoteEntity
 import app.lusk.virga.core.rclone.oauth.OAuthConfig
@@ -65,7 +66,7 @@ class RemotesViewModel @Inject constructor(
             val result = repository.refresh()
             transient.value = TransientState(
                 refreshing = false,
-                message = result.exceptionOrNull()?.message,
+                message = result.exceptionOrNull()?.toUserMessage(),
             )
         }
     }
@@ -73,7 +74,9 @@ class RemotesViewModel @Inject constructor(
     fun deleteRemote(name: String) {
         viewModelScope.launch {
             val result = repository.deleteRemote(name)
-            transient.value = transient.value.copy(message = result.exceptionOrNull()?.message)
+            transient.value = transient.value.copy(
+                message = result.exceptionOrNull()?.toUserMessage(),
+            )
         }
     }
 
@@ -87,7 +90,9 @@ class RemotesViewModel @Inject constructor(
             .toMap()
         viewModelScope.launch {
             val result = repository.addRemote(name.trim(), type.trim(), params)
-            transient.value = transient.value.copy(message = result.exceptionOrNull()?.message)
+            transient.value = transient.value.copy(
+                message = result.exceptionOrNull()?.toUserMessage(),
+            )
             if (result.isSuccess) onDone()
         }
     }
@@ -96,8 +101,17 @@ class RemotesViewModel @Inject constructor(
     fun importConfig(confText: String, onDone: () -> Unit) {
         viewModelScope.launch {
             val result = repository.importConfig(confText)
-            transient.value = transient.value.copy(message = result.exceptionOrNull()?.message)
-            if (result.isSuccess) onDone()
+            if (result.isSuccess) {
+                val count = confText.lines().count { it.startsWith("[") && it.endsWith("]") }
+                transient.value = transient.value.copy(
+                    message = "Imported $count remote${if (count == 1) "" else "s"}.",
+                )
+                onDone()
+            } else {
+                transient.value = transient.value.copy(
+                    message = result.exceptionOrNull()?.toUserMessage(),
+                )
+            }
         }
     }
 
@@ -140,7 +154,7 @@ class RemotesViewModel @Inject constructor(
             state = UUID.randomUUID().toString(),
             verifier = Pkce.newVerifier(),
             clientId = clientId,
-            redirectUri = oauthConfig.redirectUri,
+            redirectUri = oauthConfig.redirectUri(provider.id),
         )
         oauthStore.startPending(pending)
         pendingRemoteName = remoteName
@@ -160,7 +174,7 @@ class RemotesViewModel @Inject constructor(
                 pendingRemoteName = null
                 transient.value = transient.value.copy(
                     oauthInProgress = false,
-                    message = "OAuth failed: ${result.message}",
+                    message = "Sign-in failed: ${result.message}",
                 )
             }
             is OAuthResult.Success -> {
@@ -170,7 +184,7 @@ class RemotesViewModel @Inject constructor(
                 if (pending == null || remoteName.isNullOrBlank()) {
                     transient.value = transient.value.copy(
                         oauthInProgress = false,
-                        message = "OAuth state mismatch; please try again.",
+                        message = "Sign-in state mismatch; please try again.",
                     )
                     return
                 }
@@ -178,8 +192,7 @@ class RemotesViewModel @Inject constructor(
                 val tokenJson = tokenResult.getOrElse { error ->
                     transient.value = transient.value.copy(
                         oauthInProgress = false,
-                        message = (error as? VirgaError)?.message ?: error.message
-                            ?: "Token exchange failed",
+                        message = error.toUserMessage(),
                     )
                     return
                 }
@@ -196,7 +209,8 @@ class RemotesViewModel @Inject constructor(
                     message = if (createResult.isSuccess) {
                         "Added ${pending.provider.displayName} remote \"$remoteName\""
                     } else {
-                        "Could not save remote: ${createResult.exceptionOrNull()?.message}"
+                        createResult.exceptionOrNull()?.toUserMessage()
+                            ?: "Could not save remote."
                     },
                 )
             }

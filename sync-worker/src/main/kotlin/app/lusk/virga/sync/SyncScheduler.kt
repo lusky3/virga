@@ -23,7 +23,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class SyncScheduler @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val taskRepository: SyncTaskRepository,
 ) {
     private val workManager get() = WorkManager.getInstance(context)
@@ -54,7 +54,7 @@ class SyncScheduler @Inject constructor(
         )
             .setConstraints(task.toConstraints())
             .setInputData(workDataOf(SyncWorker.KEY_TASK_ID to task.id))
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 1, TimeUnit.MINUTES)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 5, TimeUnit.MINUTES)
             .build()
         workManager.enqueueUniquePeriodicWork(
             uniqueName(task.id),

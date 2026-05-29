@@ -71,7 +71,7 @@ class RcloneConfigManager @Inject constructor(
         encryptedFile(encryptedConf).openFileInput().use { it.readBytes().decodeToString() }
     }
 
-    fun hasConfig(): Boolean = encryptedConf.exists()
+    suspend fun hasConfig(): Boolean = withContext(dispatchers.io) { encryptedConf.exists() }
 
     private fun encryptedFile(file: File): EncryptedFile =
         EncryptedFile.Builder(

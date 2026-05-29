@@ -21,11 +21,10 @@ class RemoteRepository @Inject constructor(
 ) {
     val remotes: Flow<List<RemoteEntity>> = remoteDao.observeAll()
 
-    /** Pulls the live remote list from rclone and replaces the cached rows. */
+    /** Pulls the live remote list from rclone and replaces the cached rows atomically. */
     suspend fun refresh(): Result<Unit> = runCatching {
         val live = engine.listRemotes()
-        remoteDao.clear()
-        remoteDao.upsertAll(
+        remoteDao.replaceAll(
             live.map { RemoteEntity(name = it.name, type = it.type, displayName = it.name) },
         )
     }

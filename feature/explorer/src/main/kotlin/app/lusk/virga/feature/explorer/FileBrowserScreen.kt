@@ -31,17 +31,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.model.FileItem
-import java.util.Locale
+import app.lusk.virga.core.common.util.formatFileSize
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FileBrowserScreen(
     onBack: () -> Unit,
+    onNavigateToRemotes: () -> Unit = {},
     viewModel: FileBrowserViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -55,7 +57,12 @@ fun FileBrowserScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text(state.remoteName ?: "Browse")
+                        // Task #25c: Ellipsis on remote name / path headlines
+                        Text(
+                            state.remoteName ?: stringResource(R.string.explorer_title_browse),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                         if (state.remoteName != null) {
                             Text(
                                 "/" + state.breadcrumb.joinToString("/"),
@@ -68,7 +75,10 @@ fun FileBrowserScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { if (!state.atRoot) viewModel.up() else onBack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.explorer_cd_back),
+                        )
                     }
                 },
             )
@@ -76,28 +86,57 @@ fun FileBrowserScreen(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when {
-                state.remoteName == null -> RemotePicker(remotes, viewModel::selectRemote)
+                state.remoteName == null -> RemotePicker(
+                    remotes = remotes,
+                    onSelect = viewModel::selectRemote,
+                    onNavigateToRemotes = onNavigateToRemotes,
+                )
                 state.loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                 state.error != null -> ErrorState(state.error!!, viewModel::retry)
-                state.entries.isEmpty() -> EmptyFolder()
-                else -> FileList(state.entries, viewModel::open)
+                else -> Column(Modifier.fillMaxSize()) {
+                    if (state.truncated) {
+                        Text(
+                            stringResource(R.string.explorer_truncated_notice),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        )
+                    }
+                    if (state.entries.isEmpty()) {
+                        EmptyFolder()
+                    } else {
+                        FileList(state.entries, viewModel::open)
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun RemotePicker(remotes: List<String>, onSelect: (String) -> Unit) {
+private fun RemotePicker(
+    remotes: List<String>,
+    onSelect: (String) -> Unit,
+    onNavigateToRemotes: () -> Unit,
+) {
     if (remotes.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No remotes to browse. Add one first.")
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(stringResource(R.string.explorer_no_remotes))
+                TextButton(onClick = onNavigateToRemotes) { Text(stringResource(R.string.explorer_add_remote)) }
+            }
         }
         return
     }
     LazyColumn(Modifier.fillMaxSize()) {
         items(remotes, key = { it }) { name ->
             ListItem(
-                headlineContent = { Text(name) },
+                // Task #25c: ellipsis on long remote names in the picker list
+                headlineContent = {
+                    Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                },
                 leadingContent = { Icon(Icons.Filled.Folder, contentDescription = null) },
                 modifier = Modifier.clickable { onSelect(name) },
             )
@@ -111,9 +150,12 @@ private fun FileList(entries: List<FileItem>, onOpen: (FileItem) -> Unit) {
     LazyColumn(Modifier.fillMaxSize()) {
         items(entries, key = { it.path }) { item ->
             ListItem(
-                headlineContent = { Text(item.name) },
+                // Task #25c: Ellipsis on file/directory names
+                headlineContent = {
+                    Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                },
                 supportingContent = {
-                    if (!item.isDir) Text(formatSize(item.size))
+                    if (!item.isDir) Text(formatFileSize(item.size))
                 },
                 leadingContent = {
                     Icon(
@@ -132,7 +174,7 @@ private fun FileList(entries: List<FileItem>, onOpen: (FileItem) -> Unit) {
 @Composable
 private fun EmptyFolder() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Empty folder", style = MaterialTheme.typography.bodyLarge)
+        Text(stringResource(R.string.explorer_empty_folder), style = MaterialTheme.typography.bodyLarge)
     }
 }
 
@@ -144,18 +186,7 @@ private fun ErrorState(message: String, onRetry: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(message, style = MaterialTheme.typography.bodyMedium)
-            TextButton(onClick = onRetry) { Text("Retry") }
+            TextButton(onClick = onRetry) { Text(stringResource(R.string.explorer_btn_retry)) }
         }
     }
-}
-
-private fun formatSize(bytes: Long): String {
-    if (bytes < 1024) return "$bytes B"
-    val units = listOf("KB", "MB", "GB", "TB")
-    var value = bytes.toDouble() / 1024
-    var i = 0
-    while (value >= 1024 && i < units.size - 1) {
-        value /= 1024; i++
-    }
-    return String.format(Locale.US, "%.1f %s", value, units[i])
 }

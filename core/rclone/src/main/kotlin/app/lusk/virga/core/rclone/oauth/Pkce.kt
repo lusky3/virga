@@ -1,8 +1,8 @@
 package app.lusk.virga.core.rclone.oauth
 
-import android.util.Base64
 import java.security.MessageDigest
 import java.security.SecureRandom
+import java.util.Base64
 
 /**
  * PKCE (RFC 7636) helpers. Mobile OAuth public clients ship without a client
@@ -23,6 +23,9 @@ object Pkce {
         return base64Url(sha)
     }
 
-    private fun base64Url(bytes: ByteArray): String =
-        Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+    // java.util.Base64 is available on minSdk 26+; using it lets us run this
+    // pure logic in JVM unit tests without Robolectric. URL-safe + no padding
+    // matches what android.util.Base64 produced with URL_SAFE | NO_PADDING.
+    private val encoder = Base64.getUrlEncoder().withoutPadding()
+    private fun base64Url(bytes: ByteArray): String = encoder.encodeToString(bytes)
 }

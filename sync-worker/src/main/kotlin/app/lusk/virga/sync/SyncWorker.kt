@@ -16,9 +16,11 @@ import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.data.ConflictRepository
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
+import app.lusk.virga.core.rclone.RcloneEngine
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 
 /**
  * Executes one sync task as a foreground (dataSync) job so it survives Doze and
@@ -30,6 +32,7 @@ class SyncWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted params: WorkerParameters,
     private val executor: SyncExecutor,
+    private val engine: RcloneEngine,
     private val taskRepository: SyncTaskRepository,
     private val historyRepository: SyncHistoryRepository,
     private val conflictRepository: ConflictRepository,
@@ -52,12 +55,18 @@ class SyncWorker @AssistedInject constructor(
         var last: SyncProgress? = null
         var failure: Throwable? = null
 
-        executor.run(task, metered)
-            .catch { failure = it }
-            .collect { progress ->
-                last = progress
-                setForeground(foregroundInfo(notifications.progress(task.name, progress)))
-            }
+        try {
+            executor.run(task, metered)
+                .catch { failure = it }
+                // Only update the foreground notification when the integer percent changes.
+                .distinctUntilChangedBy { p -> (p.fraction * 100).toInt() }
+                .collect { progress ->
+                    last = progress
+                    setForeground(foregroundInfo(notifications.progress(task.name, progress)))
+                }
+        } finally {
+            runCatching { engine.stopDaemon() }
+        }
 
         return if (failure == null) {
             historyRepository.finishRun(
@@ -76,7 +85,7 @@ class SyncWorker @AssistedInject constructor(
             }
             Result.success()
         } else {
-            val message = failure?.message ?: "Sync failed"
+            val message = failure.message ?: "Sync failed"
             historyRepository.finishRun(
                 runId = runId,
                 taskId = taskId,

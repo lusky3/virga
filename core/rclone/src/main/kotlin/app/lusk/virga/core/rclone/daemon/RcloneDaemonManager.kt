@@ -1,15 +1,19 @@
 package app.lusk.virga.core.rclone.daemon
 
 import android.content.Context
+import android.util.Log
+import app.lusk.virga.core.rclone.BuildConfig
 import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.rclone.RcloneDaemon
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import java.io.BufferedReader
 import java.io.File
+import java.io.InputStreamReader
+import java.security.MessageDigest
 import java.security.SecureRandom
+import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -35,25 +39,69 @@ class RcloneDaemonManager @Inject constructor(
         val user = randomToken()
         val pass = randomToken()
 
-        val process = ProcessBuilder(
-            binary.file.absolutePath,
-            "rcd",
-            "--rc-addr=127.0.0.1:0",
-            "--rc-user=$user",
-            "--rc-pass=$pass",
-            "--config=${configFile.absolutePath}",
-            "--cache-dir=${context.cacheDir.absolutePath}",
-            "--use-json-log",
-            "--log-level=INFO",
-        ).apply {
-            environment()["TMPDIR"] = context.cacheDir.absolutePath
-            environment()["HOME"] = context.filesDir.absolutePath
-            redirectErrorStream(false)
-        }.start()
-
-        val port = withTimeoutOrNull(STARTUP_TIMEOUT_MS) {
-            readBoundPort(process.errorStream.bufferedReader())
+        // SEC-H1: Write credentials to a private htpasswd file instead of
+        // passing them as --rc-user/--rc-pass command-line args. Command-line
+        // args are visible via /proc/<pid>/cmdline. We use SHA-1 htpasswd format
+        // ({SHA}base64(sha1(password))) which rclone's embedded htpasswd parser
+        // supports. The file is written to noBackupFilesDir (private, excluded
+        // from backups) and deleted immediately after the process is started so
+        // it exists on disk only for the brief moment between ProcessBuilder.start()
+        // returning and the delete call — rclone reads it at startup.
+        val htpasswdFile = writeHtpasswdFile(user, pass)
+        val process = try {
+            ProcessBuilder(
+                binary.file.absolutePath,
+                "rcd",
+                "--rc-addr=127.0.0.1:0",
+                "--rc-htpasswd=${htpasswdFile.absolutePath}",
+                "--config=${configFile.absolutePath}",
+                "--cache-dir=${context.cacheDir.absolutePath}",
+                "--use-json-log",
+                "--log-level=INFO",
+            ).apply {
+                environment()["TMPDIR"] = context.cacheDir.absolutePath
+                environment()["HOME"] = context.filesDir.absolutePath
+                redirectErrorStream(false)
+            }.start()
+        } finally {
+            // Delete immediately; rclone has already opened the file descriptor.
+            htpasswdFile.delete()
         }
+
+        // Read stderr line-by-line both to discover the bound port and to keep
+        // the pipe drained for the daemon's lifetime. rclone writes INFO logs
+        // continuously; if nobody reads them, the OS pipe buffer (~64 KiB)
+        // fills and the daemon blocks on its next write. The drainer runs on a
+        // daemon thread so it does not keep the process alive after shutdown.
+        val stderr = BufferedReader(InputStreamReader(process.errorStream))
+        val boundPort = java.util.concurrent.atomic.AtomicReference<Int?>(null)
+        Thread({
+            try {
+                stderr.forEachLine { line ->
+                    if (boundPort.get() == null) {
+                        SERVING_REGEX.find(line)?.groupValues?.get(1)?.toIntOrNull()?.let {
+                            boundPort.set(it)
+                        }
+                    }
+                    // SEC-M1: Gate daemon stderr logging behind DEBUG flag so
+                    // rclone's verbose INFO stream never lands in a release logcat.
+                    if (BuildConfig.DEBUG) {
+                        Log.d(TAG, line)
+                    }
+                }
+            } catch (_: Throwable) {
+                // Stream closed on shutdown; nothing to do.
+            }
+        }, "rclone-stderr-drainer").apply {
+            isDaemon = true
+            start()
+        }
+
+        val deadline = System.currentTimeMillis() + STARTUP_TIMEOUT_MS
+        while (boundPort.get() == null && System.currentTimeMillis() < deadline && process.isAlive) {
+            Thread.sleep(50)
+        }
+        val port = boundPort.get()
         if (port == null) {
             process.destroyForcibly()
             throw VirgaError.Rclone(message = "rclone daemon did not start within ${STARTUP_TIMEOUT_MS}ms")
@@ -70,16 +118,19 @@ class RcloneDaemonManager @Inject constructor(
 
     fun isAlive(daemon: RcloneDaemon): Boolean = daemon.process.isAlive
 
-    /** Scans daemon log lines for the bound port. rclone prints e.g.
-     *  `Serving remote control on http://127.0.0.1:39145/`. */
-    private fun readBoundPort(reader: BufferedReader): Int? {
-        reader.useLines { lines ->
-            for (line in lines) {
-                val match = SERVING_REGEX.find(line)
-                if (match != null) return match.groupValues[1].toIntOrNull()
-            }
-        }
-        return null
+    /**
+     * Writes a temporary htpasswd file containing [user]:{SHA}<base64(sha1(pass))>.
+     * rclone's htpasswd implementation accepts SHA-1 hashes in this Apache format.
+     * File is placed in noBackupFilesDir which is private and excluded from backups.
+     */
+    private fun writeHtpasswdFile(user: String, pass: String): File {
+        val sha1 = MessageDigest.getInstance("SHA-1").digest(pass.toByteArray(Charsets.UTF_8))
+        val hash = Base64.getEncoder().encodeToString(sha1)
+        val line = "$user:{SHA}$hash\n"
+        val dir = context.noBackupFilesDir.also { it.mkdirs() }
+        val file = File(dir, "rc-auth-${System.nanoTime()}.htpasswd")
+        file.writeText(line, Charsets.UTF_8)
+        return file
     }
 
     private fun randomToken(): String {
@@ -100,6 +151,7 @@ class RcloneDaemonManager @Inject constructor(
     private companion object {
         const val STARTUP_TIMEOUT_MS = 15_000L
         const val GRACEFUL_STOP_MS = 3_000L
+        const val TAG = "RcloneDaemon"
         // Matches both plain and json-log forms containing the URL with the port.
         val SERVING_REGEX = Regex("""127\.0\.0\.1:(\d+)""")
     }

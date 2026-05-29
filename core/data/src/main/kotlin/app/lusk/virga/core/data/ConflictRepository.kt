@@ -30,7 +30,14 @@ class ConflictRepository @Inject constructor(
 
     /** Walks the destination of [task] for conflict-suffixed files and records them. */
     suspend fun detectFor(task: SyncTaskEntity): Result<Int> = runCatching {
-        val entries = engine.listDir("${task.remoteName}:", task.remotePath, recurse = true)
+        // Use a filter so rclone returns only conflict-suffixed files instead of
+        // materialising the entire subtree.
+        val entries = engine.listDir(
+            remote = "${task.remoteName}:",
+            path = task.remotePath,
+            recurse = true,
+            filters = listOf("+ *.conflict[0-9]*", "- *"),
+        )
         val grouped = entries
             .asSequence()
             .filter { !it.isDir }
@@ -80,7 +87,7 @@ class ConflictRepository @Inject constructor(
                     promote(remoteFs, conflict.variant2Path, conflict.basePath, conflict.variant1Path)
                 }
                 ConflictChoice.KEEP_BOTH -> {
-                    // Nothing to do on rclone — both variant files remain.
+                    // Nothing to do on rclone -- both variant files remain.
                 }
             }
             conflictDao.markResolved(conflict.id)

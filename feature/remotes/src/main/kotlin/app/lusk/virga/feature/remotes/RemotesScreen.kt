@@ -5,6 +5,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,11 +19,13 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -30,6 +34,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,12 +45,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.database.entity.RemoteEntity
 import app.lusk.virga.core.rclone.oauth.OAuthProvider
+import android.content.res.Configuration
 import app.lusk.virga.feature.remotes.oauth.launchCustomTab
+import androidx.compose.material3.Surface
+import androidx.compose.ui.tooling.preview.Preview
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,6 +69,7 @@ fun RemotesScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var showAdd by remember { mutableStateOf(false) }
+    var remoteToDelete by remember { mutableStateOf<RemoteEntity?>(null) }
 
     // When the VM produces a Custom Tabs URL, hand it off and clear the signal.
     LaunchedEffect(launchUrl) {
@@ -89,35 +100,85 @@ fun RemotesScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Remotes") },
+                title = { Text(stringResource(R.string.remotes_title)) },
                 actions = {
-                    TextButton(onClick = onOpenBrowser) { Text("Browse") }
-                    TextButton(onClick = { importLauncher.launch("*/*") }) { Text("Import") }
+                    TextButton(onClick = onOpenBrowser) { Text(stringResource(R.string.remotes_action_browse)) }
+                    TextButton(onClick = { importLauncher.launch("*/*") }) { Text(stringResource(R.string.remotes_action_import)) }
                 },
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
             FloatingActionButton(onClick = { showAdd = true }) {
-                Icon(Icons.Filled.Add, contentDescription = "Add remote")
+                Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.remotes_cd_add))
             }
         },
     ) { padding ->
-        if (state.remotes.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("No remotes configured.\nAdd one or import an rclone.conf.")
+        // Show a top-bar progress indicator while an OAuth round-trip is in flight.
+        if (state.oauthInProgress) {
+            Column(Modifier.padding(padding)) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                Text(
+                    stringResource(R.string.remotes_oauth_in_progress),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                items(state.remotes, key = { it.name }) { remote ->
-                    RemoteCard(remote = remote, onDelete = { viewModel.deleteRemote(remote.name) })
+        }
+
+        PullToRefreshBox(
+            isRefreshing = state.refreshing,
+            onRefresh = { viewModel.refresh() },
+            modifier = Modifier.fillMaxSize().padding(padding),
+        ) {
+            when {
+                state.refreshing && state.remotes.isEmpty() -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+                state.remotes.isEmpty() -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(stringResource(R.string.remotes_empty))
+                    }
+                }
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        items(state.remotes, key = { it.name }) { remote ->
+                            RemoteCard(
+                                remote = remote,
+                                onDelete = { remoteToDelete = remote },
+                            )
+                        }
+                    }
                 }
             }
         }
+    }
+
+    remoteToDelete?.let { remote ->
+        AlertDialog(
+            onDismissRequest = { remoteToDelete = null },
+            title = { Text(stringResource(R.string.remotes_delete_dialog_title)) },
+            text = {
+                Text(stringResource(R.string.remotes_delete_dialog_body, remote.displayName))
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteRemote(remote.name)
+                    remoteToDelete = null
+                }) { Text(stringResource(R.string.remotes_delete_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { remoteToDelete = null }) {
+                    Text(stringResource(R.string.remotes_delete_cancel))
+                }
+            },
+        )
     }
 
     if (showAdd) {
@@ -140,16 +201,23 @@ private fun RemoteCard(remote: RemoteEntity, onDelete: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                Text(remote.displayName, style = MaterialTheme.typography.titleMedium)
+                // Task #25c: ellipsis on long display names
+                Text(
+                    remote.displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Text(remote.type, style = MaterialTheme.typography.bodySmall)
             }
             IconButton(onClick = onDelete) {
-                Icon(Icons.Filled.Delete, contentDescription = "Delete remote")
+                Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.remotes_cd_delete))
             }
         }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AddRemoteDialog(
     providers: List<OAuthProvider>,
@@ -163,20 +231,21 @@ private fun AddRemoteDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add remote") },
+        title = { Text(stringResource(R.string.remotes_add_dialog_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Name") },
+                    label = { Text(stringResource(R.string.remotes_add_field_name)) },
                 )
 
                 Text(
-                    "Sign in with",
+                    stringResource(R.string.remotes_add_sign_in_with),
                     style = MaterialTheme.typography.labelLarge,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Task #25a: FlowRow wraps chips instead of a clipping non-wrapping Row
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     providers.forEach { provider ->
                         AssistChip(
                             onClick = { onOAuth(provider, name) },
@@ -187,16 +256,16 @@ private fun AddRemoteDialog(
                 }
 
                 HorizontalDivider()
-                Text("Or configure manually", style = MaterialTheme.typography.labelLarge)
+                Text(stringResource(R.string.remotes_add_or_manual), style = MaterialTheme.typography.labelLarge)
                 OutlinedTextField(
                     value = type,
                     onValueChange = { type = it },
-                    label = { Text("Type (e.g. drive, s3, webdav)") },
+                    label = { Text(stringResource(R.string.remotes_add_field_type)) },
                 )
                 OutlinedTextField(
                     value = params,
                     onValueChange = { params = it },
-                    label = { Text("Parameters (key=value per line)") },
+                    label = { Text(stringResource(R.string.remotes_add_field_params)) },
                     minLines = 3,
                 )
             }
@@ -205,8 +274,25 @@ private fun AddRemoteDialog(
             TextButton(
                 onClick = { onManualConfirm(name, type, params) },
                 enabled = name.isNotBlank() && type.isNotBlank(),
-            ) { Text("Create") }
+            ) { Text(stringResource(R.string.remotes_add_create)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.remotes_add_cancel)) } },
     )
+}
+
+// ---------------------------------------------------------------------------
+// Previews (Task #26)
+// ---------------------------------------------------------------------------
+
+@Preview(name = "RemoteCard light", showBackground = true)
+@Preview(name = "RemoteCard dark", showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Preview(name = "RemoteCard fontScale=2", showBackground = true, fontScale = 2f)
+@Composable
+private fun RemoteCardPreview() {
+    Surface {
+        RemoteCard(
+            remote = RemoteEntity(name = "gdrive", type = "drive", displayName = "Google Drive"),
+            onDelete = {},
+        )
+    }
 }

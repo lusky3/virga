@@ -4,13 +4,15 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.lusk.virga.core.datastore.ThemeMode
 import app.lusk.virga.navigation.VirgaNavHost
 import app.lusk.virga.onboarding.OnboardingScreen
 import app.lusk.virga.onboarding.OnboardingViewModel
@@ -30,7 +32,19 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
-            VirgaTheme {
+            val themeVm: AppThemeViewModel = hiltViewModel()
+            val themePrefs by themeVm.themePrefs.collectAsStateWithLifecycle()
+            val systemDark = isSystemInDarkTheme()
+            // Respect the user's persisted theme + dynamic-color choices. Falls
+            // back to system dark mode when ThemeMode is SYSTEM.
+            VirgaTheme(
+                darkTheme = when (themePrefs.themeMode) {
+                    ThemeMode.LIGHT -> false
+                    ThemeMode.DARK -> true
+                    ThemeMode.SYSTEM -> systemDark
+                },
+                dynamicColor = themePrefs.dynamicColor,
+            ) {
                 val viewModel: OnboardingViewModel = hiltViewModel()
                 val complete by viewModel.onboardingComplete.collectAsStateWithLifecycle()
                 ready = complete != null

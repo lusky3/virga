@@ -1,4 +1,5 @@
 pluginManagement {
+    includeBuild("build-logic")
     repositories {
         google {
             content {
@@ -23,6 +24,7 @@ dependencyResolutionManagement {
 rootProject.name = "Virga"
 
 include(":app")
+include(":rclone-build")
 include(":core:common")
 include(":core:database")
 include(":core:datastore")
@@ -34,3 +36,4 @@ include(":feature:sync")
 include(":feature:remotes")
 include(":feature:settings")
 include(":feature:explorer")
+include(":benchmark")

@@ -1,52 +1,87 @@
+import java.util.Properties
+
 plugins {
-    alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.compose)
+    id("virga.android.application")
+    id("virga.android.compose")
+    id("virga.android.hilt")
+    id("virga.jvm.test")
     alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.hilt)
-    alias(libs.plugins.ksp)
+    alias(libs.plugins.baselineprofile)
 }
+
+// OAuth client IDs are public-by-design for mobile apps but identify the
+// developer's specific OAuth client, so we keep them out of git. Reads from
+// local.properties (gitignored) with optional env-var override for CI.
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+fun oauthClientId(provider: String): String =
+    System.getenv("VIRGA_OAUTH_CLIENT_ID_${provider.uppercase()}")
+        ?: localProps.getProperty("oauthClientId.$provider")
+        ?: ""
 
 android {
     namespace = "app.lusk.virga"
-    compileSdk = 36
 
     defaultConfig {
         applicationId = "app.lusk.virga"
-        minSdk = 26
-        targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "app.lusk.virga.HiltTestRunner"
         vectorDrawables { useSupportLibrary = true }
+
+        // OAuth client IDs are public-by-design for PKCE mobile clients but
+        // identify the developer's specific OAuth registration; populate via
+        // local.properties (oauthClientId.gdrive=…) or VIRGA_OAUTH_CLIENT_ID_*
+        // env vars. Empty defaults keep CI builds compiling.
+        val gdriveClientId = oauthClientId("gdrive")
+        buildConfigField("String", "OAUTH_CLIENT_ID_GDRIVE", "\"$gdriveClientId\"")
+        buildConfigField("String", "OAUTH_CLIENT_ID_ONEDRIVE", "\"${oauthClientId("onedrive")}\"")
+        buildConfigField("String", "OAUTH_CLIENT_ID_DROPBOX", "\"${oauthClientId("dropbox")}\"")
+        buildConfigField("String", "OAUTH_CLIENT_ID_PCLOUD", "\"${oauthClientId("pcloud")}\"")
+
+        // Google Android OAuth clients require a redirect URI scheme of the
+        // form com.googleusercontent.apps.<reversed-client-id>. The reversed
+        // part is just the client ID with the .apps.googleusercontent.com
+        // suffix stripped — there's no actual byte-reversal. Pass it to the
+        // manifest as a placeholder so the OAuthRedirectActivity intent-filter
+        // can advertise the right scheme.
+        manifestPlaceholders["googleOAuthScheme"] = gdriveClientId
+            .removeSuffix(".apps.googleusercontent.com")
+            .takeIf { it.isNotBlank() }
+            ?.let { "com.googleusercontent.apps.$it" }
+            ?: "com.googleusercontent.apps.unset"
     }
 
     buildFeatures {
-        compose = true
         buildConfig = true
     }
 
     flavorDimensions += "distribution"
     productFlavors {
+        // FOSS distribution (F-Droid / GitHub sideload). MANAGE_EXTERNAL_STORAGE
+        // is permitted here — the user has full filesystem and SD-card access.
+        // BYO OAuth is exposed so users can substitute their own client IDs.
         create("foss") {
             dimension = "distribution"
-            // F-Droid / GitHub. No proprietary dependencies.
             buildConfigField("boolean", "ALLOW_BYO_OAUTH", "true")
+            buildConfigField("boolean", "SDCARD_ACCESS_AVAILABLE", "true")
+            buildConfigField("String", "DISTRIBUTION", "\"foss\"")
         }
+        // Google Play distribution. Play policy is hostile to
+        // MANAGE_EXTERNAL_STORAGE for general-purpose sync apps; we still
+        // declare the permission but flag the build so the UI explains that
+        // SD-card access is best-effort and may be revoked by Play review.
+        // BYO OAuth stays available so power users on Play can still use their
+        // own client IDs — it is a build-config gate, not network behavior, and
+        // Play does not forbid it.
         create("play") {
             dimension = "distribution"
-            // Google Play distribution.
             buildConfigField("boolean", "ALLOW_BYO_OAUTH", "true")
+            buildConfigField("boolean", "SDCARD_ACCESS_AVAILABLE", "false")
+            buildConfigField("String", "DISTRIBUTION", "\"play\"")
         }
-    }
-
-    // Default OAuth client IDs (public by design for mobile apps). Real values
-    // are injected at release time; placeholders keep debug builds compiling.
-    defaultConfig {
-        buildConfigField("String", "OAUTH_CLIENT_ID_GDRIVE", "\"\"")
-        buildConfigField("String", "OAUTH_CLIENT_ID_ONEDRIVE", "\"\"")
-        buildConfigField("String", "OAUTH_CLIENT_ID_DROPBOX", "\"\"")
-        buildConfigField("String", "OAUTH_CLIENT_ID_PCLOUD", "\"\"")
     }
 
     splits {
@@ -54,7 +89,7 @@ android {
             isEnable = true
             reset()
             include("arm64-v8a", "armeabi-v7a", "x86_64")
-            isUniversalApk = true // GitHub/F-Droid sideload convenience.
+            isUniversalApk = true
         }
     }
 
@@ -73,23 +108,17 @@ android {
         }
     }
 
-    // The rclone binary ships as lib/<abi>/librclone.so and must be extracted to
-    // disk (not loaded from the APK) so we can exec it as a child process.
+    // The rclone binary ships as lib/<abi>/librclone.so and must be extracted
+    // to disk (not loaded from the APK) so we can exec it as a child process.
     packaging {
         jniLibs {
             useLegacyPackaging = true
-            // The rclone binary is a complete Go ELF, already stripped. Tell AGP
-            // not to run NDK strip on it (it is not a normal JNI library).
-            keepDebugSymbols += "**/librclone.so"
+            // Only our Go binary is a complete already-stripped ELF that the
+            // NDK strip tool can't process — scope this to the precise path so
+            // unrelated transitive .so files still get stripped normally (L4).
+            keepDebugSymbols += "**/lib/*/librclone.so"
         }
     }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-        isCoreLibraryDesugaringEnabled = true
-    }
-    kotlinOptions { jvmTarget = "17" }
 }
 
 dependencies {
@@ -110,24 +139,34 @@ dependencies {
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.navigation.compose)
     implementation(libs.serialization.json)
-
-    implementation(platform(libs.compose.bom))
-    implementation(libs.bundles.compose)
     implementation(libs.hilt.navigation.compose)
-    debugImplementation(libs.compose.ui.tooling)
-    androidTestImplementation(platform(libs.compose.bom))
-    androidTestImplementation(libs.compose.ui.test.junit4)
-    debugImplementation(libs.compose.ui.test.manifest)
-
-    implementation(libs.hilt.android)
     implementation(libs.hilt.work)
     implementation(libs.work.runtime.ktx)
-    ksp(libs.hilt.compiler)
     ksp(libs.hilt.work.compiler)
 
-    coreLibraryDesugaring(libs.desugar.jdk.libs)
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation(libs.compose.ui.test.junit4)
+    androidTestImplementation(libs.compose.material3)
+    debugImplementation(libs.compose.ui.test.manifest)
 
     testImplementation(libs.junit4)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.espresso.core)
+    androidTestImplementation(libs.junit4)
+    androidTestImplementation(libs.truth)
+    // Hilt testing — required to bring up @AndroidEntryPoint activities on
+    // device. Activate by replacing the @AndroidEntryPoint host with a
+    // HiltTestApplication via a custom runner; see HiltComposeSmokeTest below
+    // for the minimal pattern. Tests that don't need Hilt can use
+    // createAndroidComposeRule<ComponentActivity>() directly.
+    androidTestImplementation(libs.hilt.android.testing)
+    kspAndroidTest(libs.hilt.compiler)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.okhttp)
+    androidTestImplementation(libs.coroutines.test)
+
+    // The baseline profile is installed at build time by ProfileInstaller; the
+    // dependency below is what wires the generated file into the APK.
+    implementation(libs.profileinstaller)
+    "baselineProfile"(project(":benchmark"))
 }

@@ -95,7 +95,19 @@ fun VirgaNavHost() {
             }
             composable<TaskEditRoute> { backStackEntry ->
                 val route = backStackEntry.toRoute<TaskEditRoute>()
-                SyncTaskEditScreen(taskId = route.taskId, onBack = { navController.popBackStack() })
+                SyncTaskEditScreen(
+                    taskId = route.taskId,
+                    onBack = { navController.popBackStack() },
+                    onNavigateToRemotes = {
+                        navController.navigate(RemotesRoute) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
             }
             composable<HistoryRoute> {
                 SyncHistoryScreen(onBack = { navController.popBackStack() })
@@ -107,7 +119,18 @@ fun VirgaNavHost() {
                 RemotesScreen(onOpenBrowser = { navController.navigate(BrowseRoute) })
             }
             composable<BrowseRoute> {
-                FileBrowserScreen(onBack = { navController.popBackStack() })
+                FileBrowserScreen(
+                    onBack = { navController.popBackStack() },
+                    onNavigateToRemotes = {
+                        navController.navigate(RemotesRoute) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
             }
             composable<SettingsRoute> { SettingsScreen() }
         }

@@ -1,23 +1,21 @@
 plugins {
-    alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.compose)
+    id("virga.android.library")
+    id("virga.android.compose")
+    id("virga.android.hilt")
+    id("virga.jvm.test")
     alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.ksp)
-    alias(libs.plugins.hilt)
+    alias(libs.plugins.roborazzi)
 }
 
 android {
     namespace = "app.lusk.virga.feature.sync"
-    compileSdk = 36
-    defaultConfig { minSdk = 26 }
-    buildFeatures { compose = true }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-        isCoreLibraryDesugaringEnabled = true
+    // Compose unit tests run under Robolectric and need the merged AndroidManifest +
+    // resources on the unit-test classpath. They are written against JUnit 4 (the
+    // form `compose-ui-test-junit4` expects) and run alongside the module's JUnit 5
+    // tests via the Vintage engine.
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
     }
-    kotlinOptions { jvmTarget = "17" }
 }
 
 dependencies {
@@ -28,21 +26,16 @@ dependencies {
     implementation(libs.bundles.coroutines)
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
-    implementation(libs.hilt.android)
     implementation(libs.hilt.navigation.compose)
-    ksp(libs.hilt.compiler)
 
-    implementation(platform(libs.compose.bom))
-    implementation(libs.bundles.compose)
-    debugImplementation(libs.compose.ui.tooling)
-    coreLibraryDesugaring(libs.desugar.jdk.libs)
-
-    testImplementation(libs.bundles.junit5)
-    testRuntimeOnly(libs.junit5.engine)
-    testImplementation(libs.coroutines.test)
-    testImplementation(libs.turbine)
-    testImplementation(libs.truth)
-    testImplementation(libs.mockk)
+    testImplementation(libs.junit4)
+    testImplementation(libs.robolectric)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.compose.material3)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.junit.rule)
+    debugImplementation(libs.compose.ui.test.manifest)
+    testRuntimeOnly(libs.junit5.vintage)
 }
-
-tasks.withType<Test> { useJUnitPlatform() }

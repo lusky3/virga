@@ -1,14 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Android 12+ backup/transfer rules. rclone config (OAuth tokens) is excluded;
-     task definitions and preferences are included. -->
+<!-- Android 12+ backup/transfer rules.
+     Exclusions are intentionally broad: rclone.conf.enc (OAuth tokens) and the
+     DataStore prefs directory (files/datastore/) must never leave the device.
+     The <include domain="file" path="."> entry makes exclusions well-defined by
+     explicitly opting in the whole files dir, then carving out secrets.
+     Any new files added to filesDir are backed up by default; secrets are not. -->
 <data-extraction-rules>
     <cloud-backup>
+        <include domain="file" path="." />
         <exclude domain="file" path="rclone.conf.enc" />
+        <exclude domain="file" path="datastore/" />
         <include domain="database" path="virga.db" />
         <include domain="sharedpref" path="." />
     </cloud-backup>
     <device-transfer>
+        <include domain="file" path="." />
         <exclude domain="file" path="rclone.conf.enc" />
+        <exclude domain="file" path="datastore/" />
         <include domain="database" path="virga.db" />
         <include domain="sharedpref" path="." />
     </device-transfer>

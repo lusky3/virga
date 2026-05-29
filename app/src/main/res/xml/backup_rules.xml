@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Legacy backup rules for Android 11 and below. -->
+<!-- Legacy backup rules for Android 11 and below (full-backup-content).
+     Excludes the encrypted rclone config and the DataStore prefs directory
+     (files/datastore/) which may contain sensitive OAuth state. -->
 <full-backup-content>
     <exclude domain="file" path="rclone.conf.enc" />
+    <exclude domain="file" path="datastore/" />
 </full-backup-content>

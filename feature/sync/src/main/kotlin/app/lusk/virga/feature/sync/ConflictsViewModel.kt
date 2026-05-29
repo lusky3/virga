@@ -2,6 +2,7 @@ package app.lusk.virga.feature.sync
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.lusk.virga.core.common.error.toUserMessage
 import app.lusk.virga.core.data.ConflictChoice
 import app.lusk.virga.core.data.ConflictRepository
 import app.lusk.virga.core.database.entity.ConflictEntity
@@ -35,7 +36,7 @@ class ConflictsViewModel @Inject constructor(
     fun resolve(conflict: ConflictEntity, choice: ConflictChoice) = viewModelScope.launch {
         transient.value = conflict.id to null
         val result = repository.resolve(conflict, choice)
-        transient.value = null to result.exceptionOrNull()?.message
+        transient.value = null to result.exceptionOrNull()?.toUserMessage()
     }
 
     fun clearError() {

@@ -36,10 +36,16 @@ class RcApiClient(
         params: JsonObject = JsonObject(emptyMap()),
     ): JsonObject = withContext(Dispatchers.IO) {
         val body = json.encodeToString(JsonObject.serializer(), params)
-            .toRequestBody(JSON_MEDIA_TYPE)
+            .toRequestBody(null)
         val request = Request.Builder()
             .url("$baseUrl/$command")
             .header("Authorization", Credentials.basic(user, pass))
+            // rclone's rcserver does an exact string compare against
+            // "application/json" — adding a charset suffix makes it skip
+            // body parsing and treat every input parameter as missing. We
+            // attach the header explicitly so OkHttp can't append the
+            // charset for us.
+            .header("Content-Type", "application/json")
             .post(body)
             .build()
 
@@ -70,7 +76,11 @@ class RcApiClient(
         this as? JsonObject ?: JsonObject(emptyMap())
 
     companion object {
-        private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+        // rclone's rcserver does a strict `contentType == "application/json"`
+        // comparison (no media-type parser), so we must NOT add `;charset=utf-8`.
+        // With a charset suffix the daemon silently ignores the JSON body and
+        // returns "Didn't find key X in input" for every parameter.
+        private val JSON_MEDIA_TYPE = "application/json".toMediaType()
         val DefaultJson = Json {
             ignoreUnknownKeys = true
             isLenient = true

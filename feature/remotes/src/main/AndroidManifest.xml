@@ -2,8 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <application>
-        <!-- Receives the OAuth redirect from Custom Tabs. The intent-filter
-             scheme/host must match OAuthConfigModule.REDIRECT_URI. -->
+        <!-- Receives the OAuth redirect from Custom Tabs. Two intent-filters:
+             the custom virga:// scheme for providers that accept arbitrary
+             schemes (Microsoft, Dropbox, pCloud), and the reverse-domain
+             scheme Google's Android OAuth client mandates. The Google scheme
+             is supplied as a manifest placeholder from the app module so it
+             tracks the developer's specific client ID. -->
         <activity
             android:name=".oauth.OAuthRedirectActivity"
             android:exported="true"
@@ -15,6 +19,12 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="virga" android:host="oauth" android:path="/callback" />
+            </intent-filter>
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="${googleOAuthScheme}" android:path="/oauth2redirect" />
             </intent-filter>
         </activity>
     </application>

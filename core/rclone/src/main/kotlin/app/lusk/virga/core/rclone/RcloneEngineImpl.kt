@@ -108,12 +108,18 @@ class RcloneEngineImpl @Inject constructor(
         configManager.import(confContent)
     }
 
-    override suspend fun listDir(remote: String, path: String, recurse: Boolean): List<FileItem> {
+    override suspend fun listDir(
+        remote: String,
+        path: String,
+        recurse: Boolean,
+        filters: List<String>,
+    ): List<FileItem> {
         val d = ensureDaemon()
         val result = rc(d, "operations/list", buildJsonObject {
             put("fs", remote)
             put("remote", path)
             if (recurse) putJsonObject("opt") { put("recurse", true) }
+            putFilters(filters)
         })
         val list = result["list"]?.jsonArray ?: return emptyList()
         return list.map { it.jsonObject }.map { obj ->
@@ -185,7 +191,12 @@ class RcloneEngineImpl @Inject constructor(
         })
     }
 
-    /** Starts an async RC job, then polls core/stats + job/status until done. */
+    /**
+     * Starts an async RC job then polls job/status every tick. core/stats is
+     * fetched on the same tick to build the progress snapshot; the final
+     * completion stats are extracted from the job/status response to avoid a
+     * redundant extra core/stats round-trip.
+     */
     private fun runJobWithProgress(start: suspend (RcloneDaemon) -> JsonObject): Flow<SyncProgress> = flow {
         val d = ensureDaemon()
         val startResult = start(d)
@@ -194,8 +205,6 @@ class RcloneEngineImpl @Inject constructor(
         val group = "job/$jobId"
 
         while (true) {
-            val stats = rc(d, "core/stats", buildJsonObject { put("group", group) })
-            emit(stats.toSyncProgress())
             val status = rc(d, "job/status", buildJsonObject { put("jobid", jobId) })
             val finished = status["finished"]?.jsonPrimitive?.booleanOrNull ?: false
             if (finished) {
@@ -204,9 +213,13 @@ class RcloneEngineImpl @Inject constructor(
                     val err = status["error"]?.jsonPrimitive?.contentOrNull ?: "sync failed"
                     throw VirgaError.Rclone(message = err)
                 }
+                // Fetch final stats once on completion for accurate counters.
                 emit(rc(d, "core/stats", buildJsonObject { put("group", group) }).toSyncProgress())
                 break
             }
+            // Fetch stats only while running (drives the throttled UI update).
+            val stats = rc(d, "core/stats", buildJsonObject { put("group", group) })
+            emit(stats.toSyncProgress())
             delay(POLL_INTERVAL_MS)
         }
     }.flowOn(dispatchers.io)

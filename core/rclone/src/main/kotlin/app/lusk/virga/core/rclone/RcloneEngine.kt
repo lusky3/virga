@@ -24,7 +24,12 @@ interface RcloneEngine {
     suspend fun getConfig(): RcloneConfig
     suspend fun importConfig(confContent: String): Result<Unit>
 
-    suspend fun listDir(remote: String, path: String, recurse: Boolean = false): List<FileItem>
+    suspend fun listDir(
+        remote: String,
+        path: String,
+        recurse: Boolean = false,
+        filters: List<String> = emptyList(),
+    ): List<FileItem>
 
     /** Deletes a single file at [remote]:[path]. */
     suspend fun deleteFile(remote: String, path: String): Result<Unit>

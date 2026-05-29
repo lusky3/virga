@@ -34,7 +34,7 @@ class SyncHistoryViewModel @Inject constructor(
         combine(historyRepository.recentRuns, taskRepository.tasks) { runs, tasks ->
             val names = tasks.associate { it.id to it.name }
             SyncHistoryUiState(
-                rows = runs.map { SyncRunRow(it, names[it.taskId] ?: "Task #${it.taskId}") },
+                rows = runs.map { SyncRunRow(it, names[it.taskId] ?: "(deleted task)") },
                 loading = false,
             )
         }.stateIn(

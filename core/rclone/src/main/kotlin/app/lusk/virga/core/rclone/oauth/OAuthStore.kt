@@ -3,6 +3,7 @@ package app.lusk.virga.core.rclone.oauth
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -16,26 +17,51 @@ sealed class OAuthResult {
  * Hands a pending OAuth auth from the ViewModel that started it to the
  * redirect activity that receives the code, and back. Singleton-scoped because
  * both sides run in the same process but in different Hilt entry points.
+ *
+ * SEC-M3: Uses AtomicReference with compare-and-swap to eliminate the
+ * @Volatile write race between startPending and consume. A pending auth that
+ * is not consumed within PENDING_TTL_MS (5 minutes) is rejected and cleared.
  */
 @Singleton
 class OAuthStore @Inject constructor() {
 
-    @Volatile
-    private var pending: OAuthTokenExchanger.PendingAuth? = null
+    /** Wrapper that pairs the auth with the wall-clock time it was registered. */
+    private data class TimedAuth(
+        val auth: OAuthTokenExchanger.PendingAuth,
+        val startedAtMs: Long,
+    )
+
+    private val _pending = AtomicReference<TimedAuth?>(null)
 
     private val _results = MutableSharedFlow<OAuthResult>(replay = 0, extraBufferCapacity = 1)
     val results: SharedFlow<OAuthResult> = _results.asSharedFlow()
 
     fun startPending(auth: OAuthTokenExchanger.PendingAuth) {
-        pending = auth
+        // CAS: replace whatever was pending (including null) with the new auth.
+        // This is safe under concurrent access: at most one pending auth is live
+        // at a time, and any stale entry is atomically replaced.
+        _pending.set(TimedAuth(auth, System.currentTimeMillis()))
     }
 
-    /** Returns the pending auth iff the state matches; nulls it out so it's single-use. */
+    /**
+     * Returns the pending auth iff [state] matches and the pending auth was
+     * started within [PENDING_TTL_MS]. Atomically clears it on a match so it
+     * is single-use. Returns null (and clears) if the auth has expired.
+     */
     fun consume(state: String): OAuthTokenExchanger.PendingAuth? {
-        val p = pending ?: return null
-        if (p.state != state) return null
-        pending = null
-        return p
+        while (true) {
+            val timed = _pending.get() ?: return null
+            // Reject expired entries regardless of state match.
+            if (System.currentTimeMillis() - timed.startedAtMs > PENDING_TTL_MS) {
+                _pending.compareAndSet(timed, null)
+                return null
+            }
+            if (timed.auth.state != state) return null
+            // CAS clear: only one caller wins the race; the other sees null next loop.
+            if (_pending.compareAndSet(timed, null)) return timed.auth
+            // Another thread won the CAS — re-read and retry (next iteration
+            // will see null and return null, which is correct).
+        }
     }
 
     fun emit(result: OAuthResult) {
@@ -43,6 +69,11 @@ class OAuthStore @Inject constructor() {
     }
 
     fun clear() {
-        pending = null
+        _pending.set(null)
+    }
+
+    private companion object {
+        /** Pending OAuth auths older than this are silently expired. */
+        const val PENDING_TTL_MS = 5 * 60 * 1_000L // 5 minutes
     }
 }

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Production network policy.
+
+    Cleartext HTTP is permitted ONLY to 127.0.0.1, which is where the bundled
+    rclone daemon serves its RC API. All other traffic (OAuth providers, cloud
+    storage backends) must use HTTPS. Without this localhost exemption, OkHttp
+    refuses the daemon URL with UnknownServiceException on API 28+.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

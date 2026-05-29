@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- RemotesScreen -->
+    <string name="remotes_title">Remotes</string>
+    <string name="remotes_action_browse">Browse</string>
+    <string name="remotes_action_import">Import</string>
+    <string name="remotes_cd_add">Add remote</string>
+    <string name="remotes_empty">No remotes configured.\nAdd one or import an rclone.conf.</string>
+    <string name="remotes_oauth_in_progress">Completing sign-in…</string>
+    <string name="remotes_cd_delete">Delete remote</string>
+
+    <!-- DeleteRemoteDialog -->
+    <string name="remotes_delete_dialog_title">Delete remote?</string>
+    <string name="remotes_delete_dialog_body">\"%1$s\" will be removed. Any sync tasks that use this remote will stop working until reconfigured.</string>
+    <string name="remotes_delete_confirm">Delete</string>
+    <string name="remotes_delete_cancel">Cancel</string>
+
+    <!-- AddRemoteDialog -->
+    <string name="remotes_add_dialog_title">Add remote</string>
+    <string name="remotes_add_field_name">Name</string>
+    <string name="remotes_add_sign_in_with">Sign in with</string>
+    <string name="remotes_add_or_manual">Or configure manually</string>
+    <string name="remotes_add_field_type">Type (e.g. drive, s3, webdav)</string>
+    <string name="remotes_add_field_params">Parameters (key=value per line)</string>
+    <string name="remotes_add_create">Create</string>
+    <string name="remotes_add_cancel">Cancel</string>
+</resources>

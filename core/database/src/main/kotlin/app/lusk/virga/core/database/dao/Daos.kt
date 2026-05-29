@@ -1,6 +1,7 @@
 package app.lusk.virga.core.database.dao
 
 import androidx.room.Dao
+import androidx.room.Transaction
 import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -29,6 +30,13 @@ interface RemoteDao {
 
     @Query("DELETE FROM remotes")
     suspend fun clear()
+
+    /** Atomically clears all remote rows and inserts [remotes] in one transaction. */
+    @Transaction
+    suspend fun replaceAll(remotes: List<RemoteEntity>) {
+        clear()
+        upsertAll(remotes)
+    }
 }
 
 @Dao

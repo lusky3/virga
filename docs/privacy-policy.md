@@ -37,6 +37,21 @@ configure.
 Virga shares your files only with the cloud providers you explicitly configure,
 governed by **their** privacy policies. The developer receives nothing.
 
+## OAuth scopes
+
+When you connect a cloud provider, Virga requests only the scopes it needs to
+sync files for the destinations you configure:
+
+| Provider | Scope | Purpose |
+|---|---|---|
+| Google Drive | `https://www.googleapis.com/auth/drive` | Read, write, and delete files you select for sync. Required for two-way sync to work. |
+| OneDrive | `Files.ReadWrite.All`, `offline_access` | Read/write files; refresh token for unattended sync. |
+| Dropbox | `files.content.write`, `files.content.read`, `files.metadata.read` | Read/write files in your Dropbox. |
+
+The OAuth tokens returned by the provider are stored locally and only ever sent
+back to that provider's servers. They are never sent to the developer or to any
+third party.
+
 ## Your control
 
 You can delete remotes, tasks, and history in-app at any time. Uninstalling the

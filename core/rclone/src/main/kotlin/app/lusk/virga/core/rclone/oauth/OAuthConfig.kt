@@ -1,16 +1,29 @@
 package app.lusk.virga.core.rclone.oauth
 
 /**
- * Per-provider OAuth client IDs and the redirect URI registered with each
- * provider. Provided by the app module from BuildConfig (so foss and play
- * flavors can ship different IDs, and the values stay out of library code).
+ * Per-provider OAuth client IDs and redirect URIs. Supplied by the app module
+ * (so foss / play flavors and per-developer client IDs stay out of library
+ * code).
  *
- * Empty values are placeholders — the OAuth flow code paths are exercised but
- * actual auth against the provider requires registered IDs at release time.
+ * Different providers enforce different redirect URI rules:
+ *
+ *  - **Google Drive (Android client)** requires a reverse-domain URI derived
+ *    from the client ID:
+ *    `com.googleusercontent.apps.<reversed-client-id>:/oauth2redirect`.
+ *    Google's "Web application" client type rejects custom schemes
+ *    (`virga://…`) outright because they have no public TLD.
+ *  - **Microsoft / Dropbox / pCloud** accept any custom scheme registered on
+ *    the device, so we use `virga://oauth/callback` for them.
+ *
+ * Use [redirectUri] to fetch the right one for the provider being launched.
  */
 data class OAuthConfig(
-    val redirectUri: String,
+    val defaultRedirectUri: String,
     val clientIds: Map<String, String>,
+    /** Per-provider override; if absent, [defaultRedirectUri] is used. */
+    val redirectUris: Map<String, String> = emptyMap(),
 ) {
     fun clientId(providerId: String): String = clientIds[providerId].orEmpty()
+    fun redirectUri(providerId: String): String =
+        redirectUris[providerId] ?: defaultRedirectUri
 }

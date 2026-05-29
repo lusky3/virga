@@ -250,14 +250,13 @@ class RcloneEngineImplTest {
 
         engine.startDaemon()
 
-        // First iteration emits in-flight stats, sees the job finished, then
-        // emits a final stats snapshot and completes (two emissions total).
+        // job/status is polled first; job is already finished so only the final
+        // core/stats snapshot is emitted before complete (one emission total).
         val options = SyncOptions(direction = SyncDirection.UPLOAD)
         engine.sync("local:/sdcard/photos", "gdrive:photos", options).test {
-            val first = awaitItem()
-            assertThat(first.bytesTransferred).isEqualTo(500L)
-            assertThat(first.totalBytes).isEqualTo(1000L)
-            awaitItem() // final stats after completion
+            val final = awaitItem()
+            assertThat(final.bytesTransferred).isEqualTo(500L)
+            assertThat(final.totalBytes).isEqualTo(1000L)
             awaitComplete()
         }
     }
@@ -274,8 +273,8 @@ class RcloneEngineImplTest {
 
         engine.startDaemon()
 
+        // job/status is polled first and sees failure immediately; no stats emitted.
         engine.sync("local:/", "gdrive:", SyncOptions(SyncDirection.UPLOAD)).test {
-            awaitItem() // stats before job/status
             val err = awaitError()
             assertThat(err).isInstanceOf(VirgaError.Rclone::class.java)
             assertThat(err.message).contains("permission denied")

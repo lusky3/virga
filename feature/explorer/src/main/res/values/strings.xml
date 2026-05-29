@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- FileBrowserScreen -->
+    <string name="explorer_title_browse">Browse</string>
+    <string name="explorer_cd_back">Back</string>
+    <string name="explorer_truncated_notice">Showing first 2,000 entries — directory is very large.</string>
+    <string name="explorer_empty_folder">Empty folder</string>
+    <string name="explorer_no_remotes">No remotes to browse.</string>
+    <string name="explorer_add_remote">Add a remote</string>
+    <string name="explorer_btn_retry">Retry</string>
+</resources>

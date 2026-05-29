@@ -1,5 +1,6 @@
 package app.lusk.virga.feature.sync
 
+import android.content.res.Configuration
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,26 +12,33 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.model.SyncStatus
+import app.lusk.virga.core.common.util.formatFileSize
+import app.lusk.virga.core.database.entity.SyncRunEntity
 import java.text.DateFormat
 import java.util.Date
-import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,10 +52,13 @@ fun SyncHistoryScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Sync history") },
+                title = { Text(stringResource(R.string.sync_history_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.sync_history_cd_back),
+                        )
                     }
                 },
             )
@@ -55,7 +66,7 @@ fun SyncHistoryScreen(
     ) { padding ->
         if (!state.loading && state.rows.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("No sync runs yet.")
+                Text(stringResource(R.string.sync_history_empty))
             }
         } else {
             LazyColumn(
@@ -72,7 +83,7 @@ fun SyncHistoryScreen(
 }
 
 @Composable
-private fun RunCard(row: SyncRunRow) {
+internal fun RunCard(row: SyncRunRow) {
     val run = row.run
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
@@ -86,7 +97,7 @@ private fun RunCard(row: SyncRunRow) {
                 style = MaterialTheme.typography.bodySmall,
             )
             val detail = buildString {
-                append("${run.filesTransferred} files • ${formatSize(run.bytesTransferred)}")
+                append("${run.filesTransferred} files • ${formatFileSize(run.bytesTransferred)}")
                 run.endedAtEpochMs?.let { append(" • ${formatDuration(it - run.startedAtEpochMs)}") }
             }
             Text(detail, style = MaterialTheme.typography.bodyMedium)
@@ -103,15 +114,48 @@ private fun RunCard(row: SyncRunRow) {
 
 @Composable
 private fun StatusChip(status: SyncStatus) {
-    val (label, color) = when (status) {
-        SyncStatus.SUCCESS -> "success" to Color(0xFF2E7D32)
-        SyncStatus.FAILED -> "failed" to MaterialTheme.colorScheme.error
-        SyncStatus.RUNNING -> "running" to MaterialTheme.colorScheme.primary
-        SyncStatus.QUEUED -> "queued" to MaterialTheme.colorScheme.tertiary
-        SyncStatus.CANCELLED -> "cancelled" to MaterialTheme.colorScheme.outline
-        SyncStatus.IDLE -> "idle" to MaterialTheme.colorScheme.outline
+    val (labelRes, containerColor, contentColor) = when (status) {
+        SyncStatus.SUCCESS -> Triple(
+            R.string.sync_history_status_success,
+            MaterialTheme.colorScheme.tertiaryContainer,
+            MaterialTheme.colorScheme.onTertiaryContainer,
+        )
+        SyncStatus.FAILED -> Triple(
+            R.string.sync_history_status_failed,
+            MaterialTheme.colorScheme.errorContainer,
+            MaterialTheme.colorScheme.onErrorContainer,
+        )
+        SyncStatus.RUNNING -> Triple(
+            R.string.sync_history_status_running,
+            MaterialTheme.colorScheme.primaryContainer,
+            MaterialTheme.colorScheme.onPrimaryContainer,
+        )
+        SyncStatus.QUEUED -> Triple(
+            R.string.sync_history_status_queued,
+            MaterialTheme.colorScheme.secondaryContainer,
+            MaterialTheme.colorScheme.onSecondaryContainer,
+        )
+        SyncStatus.CANCELLED -> Triple(
+            R.string.sync_history_status_cancelled,
+            MaterialTheme.colorScheme.surfaceVariant,
+            MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        SyncStatus.IDLE -> Triple(
+            R.string.sync_history_status_idle,
+            MaterialTheme.colorScheme.surfaceVariant,
+            MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
-    Text(label, style = MaterialTheme.typography.labelMedium, color = color)
+    val label = stringResource(labelRes)
+    AssistChip(
+        onClick = {},
+        label = { Text(label, style = MaterialTheme.typography.labelMedium) },
+        colors = AssistChipDefaults.assistChipColors(
+            containerColor = containerColor,
+            labelColor = contentColor,
+        ),
+        modifier = Modifier.semantics { contentDescription = label },
+    )
 }
 
 private fun formatDuration(ms: Long): String {
@@ -122,13 +166,25 @@ private fun formatDuration(ms: Long): String {
     }
 }
 
-private fun formatSize(bytes: Long): String {
-    if (bytes < 1024) return "$bytes B"
-    val units = listOf("KB", "MB", "GB", "TB")
-    var value = bytes.toDouble() / 1024
-    var i = 0
-    while (value >= 1024 && i < units.size - 1) {
-        value /= 1024; i++
+// ---------------------------------------------------------------------------
+// Previews (Task #26)
+// ---------------------------------------------------------------------------
+
+@Preview(name = "RunCard light", showBackground = true)
+@Preview(name = "RunCard dark", showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Preview(name = "RunCard fontScale=2", showBackground = true, fontScale = 2f)
+@Composable
+private fun RunCardPreview() {
+    Surface {
+        RunCard(
+            row = SyncRunRow(
+                run = SyncRunEntity(
+                    id = 1L, taskId = 1L, status = SyncStatus.SUCCESS,
+                    startedAtEpochMs = 0L, endedAtEpochMs = 60_000L,
+                    filesTransferred = 42, bytesTransferred = 1_234_567L,
+                ),
+                taskName = "Photos Backup",
+            ),
+        )
     }
-    return String.format(Locale.US, "%.1f %s", value, units[i])
 }

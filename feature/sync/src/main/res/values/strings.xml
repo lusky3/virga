@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- SyncTasksScreen -->
+    <string name="sync_tasks_title">Sync tasks</string>
+    <string name="sync_tasks_empty">No sync tasks yet.\nTap + to create one.</string>
+    <string name="sync_task_cd_conflicts">Conflicts</string>
+    <string name="sync_task_cd_history">Sync history</string>
+    <string name="sync_task_cd_add">Add sync task</string>
+    <string name="sync_task_cd_cancel">Cancel sync</string>
+    <string name="sync_task_cd_sync_now">Sync now</string>
+    <string name="sync_task_cd_delete">Delete task</string>
+    <string name="sync_task_delete_dialog_title">Delete sync task?</string>
+    <string name="sync_task_delete_dialog_body">\"%1$s\" will be removed and its schedule cancelled. This cannot be undone.</string>
+    <string name="sync_task_delete_confirm">Delete</string>
+    <string name="sync_task_delete_cancel">Cancel</string>
+
+    <!-- SyncHistoryScreen -->
+    <string name="sync_history_title">Sync history</string>
+    <string name="sync_history_empty">No sync runs yet.</string>
+    <string name="sync_history_cd_back">Back</string>
+    <string name="sync_history_status_success">success</string>
+    <string name="sync_history_status_failed">failed</string>
+    <string name="sync_history_status_running">running</string>
+    <string name="sync_history_status_queued">queued</string>
+    <string name="sync_history_status_cancelled">cancelled</string>
+    <string name="sync_history_status_idle">idle</string>
+    <string name="sync_history_files_transferred">%1$d files</string>
+    <string name="sync_history_error_count">%1$d error(s)</string>
+
+    <!-- SyncTaskEditScreen -->
+    <string name="sync_edit_title_new">New sync task</string>
+    <string name="sync_edit_title_edit">Edit task</string>
+    <string name="sync_edit_cd_back">Back</string>
+    <string name="sync_edit_field_name">Task name *</string>
+    <string name="sync_edit_field_source_path">Local path *</string>
+    <string name="sync_edit_field_source_placeholder">/storage/emulated/0/DCIM</string>
+    <string name="sync_edit_field_required">Required</string>
+    <string name="sync_edit_field_remote">Remote *</string>
+    <string name="sync_edit_field_remote_placeholder">Select a remote</string>
+    <string name="sync_edit_field_remote_required">Required — add a remote first if the list is empty</string>
+    <string name="sync_edit_field_remote_path">Remote path (e.g. /Backup)</string>
+    <string name="sync_edit_field_direction">Direction</string>
+    <string name="sync_edit_field_wifi_only">Wi-Fi only</string>
+    <string name="sync_edit_field_bw_wifi">BW limit (Wi-Fi)</string>
+    <string name="sync_edit_field_bw_wifi_placeholder">e.g. 10M or 10M:1M</string>
+    <string name="sync_edit_field_bw_wifi_hint">Optional. rclone --bwlimit format, blank = unlimited</string>
+    <string name="sync_edit_field_bw_metered">BW limit (metered)</string>
+    <string name="sync_edit_field_bw_metered_placeholder">e.g. 1M</string>
+    <string name="sync_edit_field_buffer">Buffer size</string>
+    <string name="sync_edit_field_buffer_placeholder">16M</string>
+    <string name="sync_edit_field_buffer_hint">rclone --buffer-size, e.g. 16M or 256K</string>
+    <string name="sync_edit_field_schedule">Schedule</string>
+    <string name="sync_edit_save">Save</string>
+    <string name="sync_edit_no_remotes_item">No remotes — tap to add one</string>
+
+    <!-- IntervalDropdown options -->
+    <string name="sync_interval_manual">Manual only</string>
+    <string name="sync_interval_15min">Every 15 min</string>
+    <string name="sync_interval_30min">Every 30 min</string>
+    <string name="sync_interval_1hour">Every hour</string>
+    <string name="sync_interval_6hours">Every 6 hours</string>
+    <string name="sync_interval_12hours">Every 12 hours</string>
+    <string name="sync_interval_daily">Daily</string>
+
+    <!-- ConflictsScreen -->
+    <string name="conflicts_title">Conflicts</string>
+    <string name="conflicts_empty">No conflicts to resolve.</string>
+    <string name="conflicts_cd_back">Back</string>
+    <string name="conflicts_on_remote">on %1$s</string>
+    <string name="conflicts_detected_at">Detected %1$s</string>
+    <string name="conflicts_label_local">Local version</string>
+    <string name="conflicts_label_remote">Remote (cloud) version</string>
+    <string name="conflicts_btn_keep_local">Keep local</string>
+    <string name="conflicts_btn_keep_remote">Keep remote</string>
+    <string name="conflicts_btn_keep_both">Keep both</string>
+    <string name="conflicts_dialog_keep_local_title">Keep local version?</string>
+    <string name="conflicts_dialog_keep_local_body">The remote (cloud) version will be permanently deleted.</string>
+    <string name="conflicts_dialog_keep_remote_title">Keep remote version?</string>
+    <string name="conflicts_dialog_keep_remote_body">The local version will be permanently overwritten.</string>
+    <string name="conflicts_dialog_keep_both_title">Keep both versions?</string>
+    <string name="conflicts_dialog_keep_both_body">Both variants will be left on the remote under their conflict names.</string>
+    <string name="conflicts_dialog_confirm">Confirm</string>
+    <string name="conflicts_dialog_cancel">Cancel</string>
+</resources>

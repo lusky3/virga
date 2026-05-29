@@ -1,4 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Virga</string>
+
+    <!-- OnboardingScreen — navigation buttons -->
+    <string name="onboarding_btn_back">Back</string>
+    <string name="onboarding_btn_skip">Skip</string>
+    <string name="onboarding_btn_next">Next</string>
+    <string name="onboarding_btn_get_started">Get started</string>
+
+    <!-- OnboardingScreen — status hints -->
+    <string name="onboarding_storage_granted">Storage access granted.</string>
+    <string name="onboarding_storage_needed">Storage access not yet granted.</string>
+    <string name="onboarding_battery_exempt">Battery optimization already disabled.</string>
+
+    <!-- OnboardingScreen — snackbar messages -->
+    <string name="onboarding_storage_settings_error">Could not open storage settings. Please grant access manually.</string>
+    <string name="onboarding_battery_settings_error">Could not open battery settings. Please exempt Virga manually.</string>
+
+    <!-- OnboardingScreen — page content (SDCARD_ACCESS_AVAILABLE = true, i.e. foss/github build) -->
+    <string name="onboarding_welcome_title">Welcome to Virga</string>
+    <string name="onboarding_welcome_body_foss">Sync your phone\'s storage — including the SD card — to cloud providers using a bundled rclone engine. No tracking, no accounts, just sync.</string>
+    <string name="onboarding_welcome_body_play">Sync your phone\'s storage to cloud providers using a bundled rclone engine. No tracking, no accounts, just sync. (SD-card access may be restricted on the Play Store build.)</string>
+    <string name="onboarding_storage_title">Storage access</string>
+    <string name="onboarding_storage_body_foss">Virga needs filesystem access to sync your local folders. On Android 11+ this is the \"All files access\" permission; below that it\'s the standard storage permission. Tap Next to grant access.</string>
+    <string name="onboarding_storage_body_play">Virga reads files from the standard media folders the system exposes to apps. Picking individual folders may prompt for additional access. Tap Next to continue.</string>
+    <string name="onboarding_battery_title">Keep syncing in the background</string>
+    <string name="onboarding_battery_body">Some manufacturers aggressively kill background apps, which can stop scheduled syncs. Exempt Virga from battery optimization (tap Next) and see dontkillmyapp.com for device-specific steps.</string>
+    <string name="onboarding_first_remote_title">Add your first remote</string>
+    <string name="onboarding_first_remote_body">On the Remotes tab, add a cloud provider or import an existing rclone.conf from desktop, then create a sync task. Tap Get started.</string>
 </resources>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Self-instrumenting benchmark module: this APK is both the test and the
+    target. Macrobenchmark needs WRITE_EXTERNAL_STORAGE on the older API
+    levels to dump profile files; AGP downscopes this on newer ones.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29"
+        tools:ignore="ScopedStorage" />
+
+    <queries>
+        <package android:name="app.lusk.virga" />
+        <package android:name="app.lusk.virga.debug" />
+    </queries>
+</manifest>
