@@ -75,6 +75,10 @@ fun OnboardingScreen(
     // granted vs still-needed after the user returns from system settings.
     var storageGranted by remember { mutableStateOf(isStorageGranted(context)) }
     var batteryExempt by remember { mutableStateOf(isBatteryExempt(context)) }
+    // Permission pages whose system intent we've already launched. Lets the user
+    // return and see the status update instead of the page auto-advancing past
+    // it; a second tap still proceeds so they're never trapped if they decline.
+    var intentLaunchedPages by remember { mutableStateOf(emptySet<Int>()) }
 
     // Re-query permission state whenever the app resumes from the background.
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -137,25 +141,33 @@ fun OnboardingScreen(
                 }
 
                 Button(onClick = {
-                    when (pagerState.currentPage) {
-                        1 -> {
-                            val ok = requestStorageAccess(context, readPermissionLauncher::launch)
-                            if (!ok) {
-                                scope.launch { snackbar.showSnackbar(storageSettingsError) }
-                            }
-                        }
-                        2 -> {
-                            val ok = openBatterySettings(context)
-                            if (!ok) {
-                                scope.launch { snackbar.showSnackbar(batterySettingsError) }
-                            }
-                        }
+                    val page = pagerState.currentPage
+                    val satisfied = when (page) {
+                        1 -> storageGranted
+                        2 -> batteryExempt
+                        else -> true
                     }
-                    if (pagerState.currentPage == pages.lastIndex) {
+                    // First tap on an unsatisfied permission page: launch the
+                    // system intent and stay, so the user can grant access and
+                    // see the status hint update. A later tap advances regardless.
+                    if (!satisfied && page !in intentLaunchedPages && (page == 1 || page == 2)) {
+                        val ok = when (page) {
+                            1 -> requestStorageAccess(context, readPermissionLauncher::launch)
+                            else -> openBatterySettings(context)
+                        }
+                        if (!ok) {
+                            scope.launch {
+                                snackbar.showSnackbar(if (page == 1) storageSettingsError else batterySettingsError)
+                            }
+                        }
+                        intentLaunchedPages = intentLaunchedPages + page
+                        return@Button
+                    }
+                    if (page == pages.lastIndex) {
                         viewModel.completeOnboarding()
                         onFinished()
                     } else {
-                        scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+                        scope.launch { pagerState.animateScrollToPage(page + 1) }
                     }
                 }) {
                     Text(
@@ -224,6 +236,16 @@ private fun requestStorageAccess(
  */
 private fun openBatterySettings(context: Context): Boolean =
     runCatching {
+        // Targeted "Allow <app> to ignore battery optimizations?" dialog rather
+        // than the full per-app optimization list. Requires the
+        // REQUEST_IGNORE_BATTERY_OPTIMIZATIONS permission (declared in the manifest).
+        context.startActivity(
+            Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:${context.packageName}")
+            },
+        )
+    }.recoverCatching {
+        // Fall back to the optimization list if the targeted dialog is unavailable.
         context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
     }.isSuccess
 

@@ -85,8 +85,17 @@ class RemotesViewModel @Inject constructor(
         }
     }
 
-    /** Creates a remote from a manual config. [paramsText] is "key=value" per line. */
-    fun addRemote(name: String, type: String, paramsText: String, onDone: () -> Unit) {
+    /**
+     * Creates a remote from a manual config. [paramsText] is "key=value" per line.
+     * Reports the outcome via [onResult] so the dialog can show the error inline —
+     * a screen-level snackbar would be hidden behind the still-open Add dialog.
+     */
+    fun addRemote(
+        name: String,
+        type: String,
+        paramsText: String,
+        onResult: (success: Boolean, error: String?) -> Unit,
+    ) {
         val params = paramsText.lines()
             .mapNotNull { line ->
                 val idx = line.indexOf('=')
@@ -94,11 +103,12 @@ class RemotesViewModel @Inject constructor(
             }
             .toMap()
         viewModelScope.launch {
-            val result = repository.addRemote(name.trim(), type.trim(), params)
-            transient.value = transient.value.copy(
-                message = result.exceptionOrNull()?.toUserMessage(),
-            )
-            if (result.isSuccess) onDone()
+            // rclone backend types are always lowercase ("drive", "s3", …).
+            // Lowercase here so a remote still creates even if the keyboard
+            // auto-capitalized the first letter (KeyboardCapitalization.None is
+            // only a hint and some IMEs ignore it).
+            val result = repository.addRemote(name.trim(), type.trim().lowercase(), params)
+            onResult(result.isSuccess, result.exceptionOrNull()?.toUserMessage())
         }
     }
 

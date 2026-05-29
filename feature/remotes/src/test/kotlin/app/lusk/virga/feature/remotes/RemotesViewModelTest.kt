@@ -190,7 +190,7 @@ class RemotesViewModelTest {
                 # comment line — no equals so it's ignored
                 vendor=other
             """.trimIndent(),
-            onDone = { doneCalled = true },
+            onResult = { success, _ -> doneCalled = success },
         )
         advanceUntilIdle()
 

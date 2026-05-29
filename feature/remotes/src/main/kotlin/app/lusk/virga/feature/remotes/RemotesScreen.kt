@@ -73,6 +73,8 @@ fun RemotesScreen(
     val context = LocalContext.current
     var showAdd by remember { mutableStateOf(false) }
     var remoteToDelete by remember { mutableStateOf<RemoteEntity?>(null) }
+    // Error from a failed manual remote creation, shown inline in the Add dialog.
+    var manualError by remember { mutableStateOf<String?>(null) }
 
     // When the VM produces a Custom Tabs URL, hand it off and clear the signal.
     LaunchedEffect(launchUrl) {
@@ -112,7 +114,7 @@ fun RemotesScreen(
         },
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAdd = true }) {
+            FloatingActionButton(onClick = { manualError = null; showAdd = true }) {
                 Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.remotes_cd_add))
             }
         },
@@ -185,9 +187,13 @@ fun RemotesScreen(
     if (showAdd) {
         AddRemoteDialog(
             providers = viewModel.oauthProviders,
-            onDismiss = { showAdd = false },
+            error = manualError,
+            onDismiss = { showAdd = false; manualError = null },
             onManualConfirm = { name, type, params ->
-                viewModel.addRemote(name, type, params) { showAdd = false }
+                manualError = null
+                viewModel.addRemote(name, type, params) { success, error ->
+                    if (success) showAdd = false else manualError = error
+                }
             },
             onOAuth = { provider, name -> viewModel.startOAuth(provider, name) },
         )
@@ -222,6 +228,7 @@ private fun RemoteCard(remote: RemoteEntity, onDelete: () -> Unit) {
 @Composable
 private fun AddRemoteDialog(
     providers: List<OAuthProvider>,
+    error: String?,
     onDismiss: () -> Unit,
     onManualConfirm: (name: String, type: String, params: String) -> Unit,
     onOAuth: (provider: OAuthProvider, name: String) -> Unit,
@@ -279,6 +286,13 @@ private fun AddRemoteDialog(
                     label = { Text(stringResource(R.string.remotes_add_field_params)) },
                     minLines = 3,
                 )
+                if (error != null) {
+                    Text(
+                        error,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
         },
         confirmButton = {
