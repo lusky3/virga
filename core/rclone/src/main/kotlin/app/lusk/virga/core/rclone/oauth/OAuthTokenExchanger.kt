@@ -104,6 +104,62 @@ class OAuthTokenExchanger @Inject constructor(
     }
 
     /**
+     * Provider-specific extra rclone config derived from the freshly-issued
+     * token. OneDrive's backend requires `drive_id` + `drive_type` (rclone
+     * normally resolves these during interactive config); we fetch them from
+     * Microsoft Graph so `config/create` can run non-interactively. Other
+     * providers need no extras.
+     */
+    suspend fun providerConfigExtras(
+        provider: OAuthProvider,
+        rcloneTokenJson: String,
+    ): Result<Map<String, String>> {
+        if (provider.id != OAuthProviders.OneDrive.id) return Result.success(emptyMap())
+        val accessToken = runCatching {
+            (json.parseToJsonElement(rcloneTokenJson) as JsonObject)["access_token"]?.jsonPrimitive?.content
+        }.getOrNull()
+        if (accessToken.isNullOrBlank()) {
+            return Result.failure(VirgaError.Auth(provider.id, "Could not read OneDrive access token"))
+        }
+        return fetchOneDriveDrive(accessToken).map { (id, type) ->
+            mapOf("drive_id" to id, "drive_type" to type)
+        }
+    }
+
+    /** Fetches the signed-in user's OneDrive drive id + type from Microsoft Graph. */
+    private suspend fun fetchOneDriveDrive(accessToken: String): Result<Pair<String, String>> =
+        withContext(dispatchers.io) {
+            val request = Request.Builder()
+                .url("https://graph.microsoft.com/v1.0/me/drive")
+                .header("Authorization", "Bearer $accessToken")
+                .header("Accept", "application/json")
+                .get()
+                .build()
+            try {
+                httpClient.newCall(request).execute().use { response ->
+                    val text = response.body?.string().orEmpty()
+                    if (!response.isSuccessful) {
+                        return@withContext Result.failure(
+                            VirgaError.Auth("onedrive", "Graph /me/drive failed (${response.code}): ${text.take(200)}"),
+                        )
+                    }
+                    val obj = json.parseToJsonElement(text) as? JsonObject
+                        ?: return@withContext Result.failure(
+                            VirgaError.Auth("onedrive", "Graph /me/drive returned non-JSON"),
+                        )
+                    val id = obj["id"]?.jsonPrimitive?.content
+                        ?: return@withContext Result.failure(
+                            VirgaError.Auth("onedrive", "Graph /me/drive missing drive id"),
+                        )
+                    val driveType = obj["driveType"]?.jsonPrimitive?.content ?: "personal"
+                    Result.success(id to driveType)
+                }
+            } catch (e: IOException) {
+                Result.failure(VirgaError.Network("Graph /me/drive network failure", e))
+            }
+        }
+
+    /**
      * Builds the JSON rclone expects in `[remote].token`. rclone writes its
      * `expiry` as an RFC 3339 instant; we compute one from `expires_in`.
      */

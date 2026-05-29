@@ -112,6 +112,7 @@ class RemotesViewModelTest {
     fun oauthSuccess_exchangesAndAddsRemote() = runTest(mainDispatcher.dispatcher) {
         every { tokenExchanger.authorizeUrl(any()) } returns "https://x"
         coEvery { tokenExchanger.exchange(any(), any()) } returns Result.success("""{"access_token":"a"}""")
+        coEvery { tokenExchanger.providerConfigExtras(any(), any()) } returns Result.success(emptyMap())
         coEvery { repository.addRemote(any(), any(), any()) } returns Result.success(Unit)
         val vm = viewModel()
         val collector = backgroundScope.launch { vm.uiState.collect {} }

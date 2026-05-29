@@ -206,13 +206,22 @@ class RemotesViewModel @Inject constructor(
                     )
                     return
                 }
+                // Some backends (OneDrive) need extra config derived from the
+                // token (drive_id/drive_type) before the remote can list.
+                val extras = tokenExchanger.providerConfigExtras(pending.provider, tokenJson).getOrElse { error ->
+                    transient.value = transient.value.copy(
+                        oauthInProgress = false,
+                        message = error.toUserMessage(),
+                    )
+                    return
+                }
                 val createResult = repository.addRemote(
                     name = remoteName,
                     type = pending.provider.type,
                     params = mapOf(
                         "token" to tokenJson,
                         "client_id" to pending.clientId,
-                    ),
+                    ) + extras,
                 )
                 transient.value = transient.value.copy(
                     oauthInProgress = false,
