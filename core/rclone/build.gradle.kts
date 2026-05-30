@@ -23,6 +23,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.serialization.json)
     implementation(libs.security.crypto)
+    implementation(libs.favre.bcrypt)
 
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.robolectric)

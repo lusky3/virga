@@ -7,13 +7,12 @@ import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.rclone.RcloneDaemon
 import dagger.hilt.android.qualifiers.ApplicationContext
+import at.favre.lib.crypto.bcrypt.BCrypt
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
-import java.security.MessageDigest
 import java.security.SecureRandom
-import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -41,9 +40,9 @@ class RcloneDaemonManager @Inject constructor(
 
         // SEC-H1: Pass RC credentials via a private htpasswd file rather than
         // --rc-user/--rc-pass command-line args, which are world-readable via
-        // /proc/<pid>/cmdline. The file uses Apache SHA-1 format
-        // ({SHA}base64(sha1(password))) supported by rclone's htpasswd parser,
-        // and lives in noBackupFilesDir (private, backup-excluded). rclone
+        // /proc/<pid>/cmdline. The file uses a bcrypt ($2a$) hash supported by
+        // rclone's htpasswd parser, and lives in noBackupFilesDir (private,
+        // backup-excluded). rclone
         // re-reads (stat + open) this file on EVERY RC request via go-http-auth's
         // ReloadIfNeeded, so it MUST persist for the daemon's whole lifetime —
         // it is deleted in stop() and on the startup-failure paths below, never
@@ -125,14 +124,15 @@ class RcloneDaemonManager @Inject constructor(
     fun isAlive(daemon: RcloneDaemon): Boolean = daemon.process.isAlive
 
     /**
-     * Writes a temporary htpasswd file containing [user]:{SHA}<base64(sha1(pass))>.
-     * rclone's htpasswd implementation accepts SHA-1 hashes in this Apache format.
+     * Writes a temporary htpasswd file containing [user]:<bcrypt(pass)>.
+     * rclone's htpasswd parser accepts bcrypt ($2a$) entries. bcrypt replaces the
+     * former unsalted Apache SHA-1 format. The password is a 144-bit SecureRandom
+     * token, so cost 10 is more than sufficient and adds only a one-time startup cost.
      * File is placed in noBackupFilesDir which is private and excluded from backups.
      */
     private fun writeHtpasswdFile(user: String, pass: String): File {
-        val sha1 = MessageDigest.getInstance("SHA-1").digest(pass.toByteArray(Charsets.UTF_8))
-        val hash = Base64.getEncoder().encodeToString(sha1)
-        val line = "$user:{SHA}$hash\n"
+        val hash = BCrypt.withDefaults().hashToString(10, pass.toCharArray())
+        val line = "$user:$hash\n"
         val dir = context.noBackupFilesDir.also { it.mkdirs() }
         val file = File(dir, "rc-auth-${System.nanoTime()}.htpasswd")
         file.writeText(line, Charsets.UTF_8)
