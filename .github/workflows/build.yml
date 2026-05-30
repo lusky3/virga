@@ -20,6 +20,11 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # The `dev` environment holds the debug-keystore + debug OAuth client-ID
+    # secrets. It has no protection rules, so this doesn't gate PR builds. Fork
+    # PRs don't receive the secrets — the steps below degrade gracefully and the
+    # build falls back to AGP's default debug keystore.
+    environment: dev
     steps:
       - uses: actions/checkout@v4
 
@@ -50,7 +55,34 @@ jobs:
       - name: Build rclone binaries
         run: ./scripts/build-rclone.sh
 
+      - name: Decode debug keystore
+        # The dev environment stores the shared debug keystore (base64) so CI
+        # debug APKs carry the stable debug signature the registered OAuth
+        # clients and debug assetlinks expect. Skipped on fork PRs (no secret),
+        # where the build falls back to AGP's throwaway debug keystore.
+        if: env.HAS_DEBUG_KEYSTORE == 'true'
+        env:
+          HAS_DEBUG_KEYSTORE: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' }}
+          KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/keystore"
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/keystore/debug.jks"
+          # Only the (non-sensitive) path goes to $GITHUB_ENV; the passwords are
+          # injected straight into the build step's env from secrets.
+          echo "VIRGA_DEBUG_KEYSTORE_FILE=$RUNNER_TEMP/keystore/debug.jks" >> "$GITHUB_ENV"
+
       - name: Build FOSS debug APKs
+        # Debug OAuth client IDs + debug-keystore signing come from the dev
+        # environment so the artifact is installable with working OAuth. The
+        # debug keystore password is the well-known `android`, not a real secret.
+        env:
+          VIRGA_OAUTH_CLIENT_ID_GDRIVE: ${{ secrets.OAUTH_CLIENT_ID_GDRIVE }}
+          VIRGA_OAUTH_CLIENT_ID_ONEDRIVE: ${{ secrets.OAUTH_CLIENT_ID_ONEDRIVE }}
+          VIRGA_OAUTH_CLIENT_ID_DROPBOX: ${{ secrets.OAUTH_CLIENT_ID_DROPBOX }}
+          VIRGA_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          VIRGA_DEBUG_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          VIRGA_DEBUG_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: ./gradlew assembleFossDebug
 
       - name: Unit tests

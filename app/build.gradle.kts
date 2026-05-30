@@ -38,6 +38,18 @@ val releaseStoreFile: java.io.File? =
         ?.let { rootProject.file(it) }
         ?.takeIf { it.exists() }
 
+// Optional debug-signing override. Locally, AGP signs debug with the default
+// ~/.android/debug.keystore — no config needed. On a fresh CI runner that
+// keystore doesn't exist, so AGP would mint a throwaway key whose SHA wouldn't
+// match the registered debug OAuth client or the debug App Links assetlinks.
+// When VIRGA_DEBUG_KEYSTORE_FILE (or keystore.properties debugStoreFile) is
+// provided, pin the debug signingConfig to it so CI debug builds get the stable
+// debug signature. Absent it, the default debug keystore is used unchanged.
+val debugStoreFile: java.io.File? =
+    keystoreProp("debugStoreFile", "VIRGA_DEBUG_KEYSTORE_FILE")
+        ?.let { rootProject.file(it) }
+        ?.takeIf { it.exists() }
+
 android {
     namespace = "app.lusk.virga"
 
@@ -117,6 +129,18 @@ android {
                 storePassword = keystoreProp("storePassword", "VIRGA_KEYSTORE_PASSWORD")
                 keyAlias = keystoreProp("keyAlias", "VIRGA_KEY_ALIAS")
                 keyPassword = keystoreProp("keyPassword", "VIRGA_KEY_PASSWORD")
+            }
+        }
+        // Override AGP's built-in debug signingConfig only when a debug keystore
+        // is explicitly supplied (CI). Locally this is skipped, so AGP keeps using
+        // ~/.android/debug.keystore. The `debug` build type already points at this
+        // config by default, so reconfiguring it is enough.
+        debugStoreFile?.let { f ->
+            getByName("debug") {
+                storeFile = f
+                storePassword = keystoreProp("debugStorePassword", "VIRGA_DEBUG_KEYSTORE_PASSWORD")
+                keyAlias = keystoreProp("debugKeyAlias", "VIRGA_DEBUG_KEY_ALIAS")
+                keyPassword = keystoreProp("debugKeyPassword", "VIRGA_DEBUG_KEY_PASSWORD")
             }
         }
     }
