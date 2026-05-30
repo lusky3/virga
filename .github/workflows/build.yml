@@ -155,27 +155,6 @@ jobs:
           HAS_GG: ${{ secrets.GIT_GUARDIAN_TOKEN != '' }}
           GITGUARDIAN_API_KEY: ${{ secrets.GIT_GUARDIAN_TOKEN }}
 
-  notify-failure:
-    # Ping Discord when CI breaks on main (push only — PR failures are the
-    # author's to see, not channel noise). Runs after the gating jobs regardless
-    # of their result and fires only if one failed.
-    needs: [build, secret-scan]
-    if: ${{ always() && github.event_name == 'push' && (needs.build.result == 'failure' || needs.secret-scan.result == 'failure') }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Notify Discord — CI failed
-        if: ${{ env.HAS_DISCORD == 'true' }}
-        env:
-          HAS_DISCORD: ${{ secrets.DISCORD_WEBHOOK_URL != '' }}
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        run: |
-          set -euo pipefail
-          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          payload=$(jq -n --arg t "❌ CI failed on main" --arg u "$run_url" \
-            --arg d "Commit ${GITHUB_SHA:0:7} by $GITHUB_ACTOR" \
-            '{embeds:[{title:$t,url:$u,description:$d,color:15158332}]}')
-          curl -fsS -H "Content-Type: application/json" -X POST "$DISCORD_WEBHOOK_URL" -d "$payload"
-
   rclone-update-check:
     # Weekly check for a newer rclone release; opens nothing automatically here,
     # just surfaces the latest tag in the job summary for a maintainer to bump.

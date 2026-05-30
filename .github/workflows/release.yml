@@ -146,33 +146,3 @@ jobs:
             app/build/outputs/apk/foss/release/*.apk
             app/build/outputs/apk/foss/release/SHA256SUMS.txt
           fail_on_unmatched_files: true
-
-      - name: Notify Discord — released
-        # Plain webhook POST (no third-party action). jq builds the payload so
-        # interpolated values can't break the JSON. Skipped without the webhook.
-        if: ${{ success() && env.HAS_DISCORD == 'true' }}
-        env:
-          HAS_DISCORD: ${{ secrets.DISCORD_WEBHOOK_URL != '' }}
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          set -euo pipefail
-          url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG"
-          payload=$(jq -n --arg t "🚀 Virga $TAG released" --arg u "$url" \
-            --arg d "Signed FOSS APKs published to GitHub Releases." \
-            '{embeds:[{title:$t,url:$u,description:$d,color:3066993}]}')
-          curl -fsS -H "Content-Type: application/json" -X POST "$DISCORD_WEBHOOK_URL" -d "$payload"
-
-      - name: Notify Discord — release failed
-        if: ${{ failure() && env.HAS_DISCORD == 'true' }}
-        env:
-          HAS_DISCORD: ${{ secrets.DISCORD_WEBHOOK_URL != '' }}
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          set -euo pipefail
-          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          payload=$(jq -n --arg t "❌ Virga $TAG release failed" --arg u "$run_url" \
-            --arg d "The release workflow failed — see the run log." \
-            '{embeds:[{title:$t,url:$u,description:$d,color:15158332}]}')
-          curl -fsS -H "Content-Type: application/json" -X POST "$DISCORD_WEBHOOK_URL" -d "$payload"
