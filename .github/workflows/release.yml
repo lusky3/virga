@@ -86,49 +86,31 @@ jobs:
         env:
           HAS_KEYSTORE: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' }}
           KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/keystore"
           printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/keystore/release.jks"
           # SEC-F6: only the (non-sensitive) keystore PATH is persisted to the job
           # environment. The keystore/key PASSWORDS are NOT written to $GITHUB_ENV
-          # (which is a plaintext file readable by every later step); they are passed
-          # directly into the signing step's `env:` from secrets instead.
-          echo "RELEASE_KEYSTORE_FILE=$RUNNER_TEMP/keystore/release.jks" >> "$GITHUB_ENV"
+          # (which is a plaintext file readable by every later step); they are
+          # passed straight into the build step's `env:` from secrets instead.
+          # VIRGA_KEYSTORE_FILE is the env var the Gradle release signingConfig
+          # reads (see app/build.gradle.kts), so AGP signs during the build —
+          # the single signing path shared with local release builds.
+          echo "VIRGA_KEYSTORE_FILE=$RUNNER_TEMP/keystore/release.jks" >> "$GITHUB_ENV"
 
       - name: Build FOSS release APKs
+        # When the keystore env vars are present, the Gradle signingConfig signs
+        # the APKs in-build (no separate apksigner step). Without them (forks /
+        # inspection builds) the release variant is simply left unsigned.
         env:
           VIRGA_OAUTH_CLIENT_ID_GDRIVE: ${{ secrets.OAUTH_CLIENT_ID_GDRIVE }}
           VIRGA_OAUTH_CLIENT_ID_ONEDRIVE: ${{ secrets.OAUTH_CLIENT_ID_ONEDRIVE }}
           VIRGA_OAUTH_CLIENT_ID_DROPBOX: ${{ secrets.OAUTH_CLIENT_ID_DROPBOX }}
+          VIRGA_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          VIRGA_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          VIRGA_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: ./gradlew assembleFossRelease
-
-      - name: Sign release APKs
-        # apksigner replaces the placeholder signature AGP puts on unsigned APKs.
-        # We skip if no keystore is configured (CI builds for inspection only).
-        if: env.RELEASE_KEYSTORE_FILE != ''
-        env:
-          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          apksigner=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
-          for apk in app/build/outputs/apk/foss/release/*-unsigned.apk; do
-            signed="${apk%-unsigned.apk}.apk"
-            "$apksigner" sign \
-              --ks "$RELEASE_KEYSTORE_FILE" \
-              --ks-pass "pass:$RELEASE_KEYSTORE_PASSWORD" \
-              --ks-key-alias "$RELEASE_KEY_ALIAS" \
-              --key-pass "pass:$RELEASE_KEY_PASSWORD" \
-              --out "$signed" \
-              "$apk"
-            rm "$apk"
-          done
-          ls -lh app/build/outputs/apk/foss/release/
 
       - name: Generate SHA-256 checksums
         run: |
