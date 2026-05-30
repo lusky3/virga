@@ -1,0 +1,22 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.lusk.virga",
+      "sha256_cert_fingerprints": [
+        "REPLACE_WITH_RELEASE_KEYSTORE_SHA256"
+      ]
+    }
+  },
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.lusk.virga.debug",
+      "sha256_cert_fingerprints": [
+        "01:79:16:0E:8F:63:A8:FF:78:1D:BB:1A:9A:B8:D2:D2:1D:AB:A6:69:6E:75:3C:9A:7F:0B:F4:0C:1A:D4:D7:79"
+      ]
+    }
+  }
+]
