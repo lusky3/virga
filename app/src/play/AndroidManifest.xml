@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:node="remove" />
+    <!--
+      Strip the all-files-access permission the FOSS flavor declares: the Play
+      build uses SAF staging instead, so it must not ship MANAGE_EXTERNAL_STORAGE
+      (Play policy). The ScopedStorage warning fires on the tag itself even though
+      this is a removal, hence the suppression.
+    -->
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:node="remove"
+        tools:ignore="ScopedStorage" />
 </manifest>

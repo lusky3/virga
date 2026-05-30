@@ -3,7 +3,7 @@ package app.lusk.virga.onboarding
 import android.Manifest
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
+import androidx.core.net.toUri
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
@@ -245,7 +245,7 @@ private fun requestStorageAccess(
         val result = runCatching {
             context.startActivity(
                 Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-                    data = Uri.parse("package:${context.packageName}")
+                    data = "package:${context.packageName}".toUri()
                 },
             )
         }
@@ -270,7 +270,7 @@ private fun openBatterySettings(context: Context): Boolean =
         // REQUEST_IGNORE_BATTERY_OPTIMIZATIONS permission (declared in the manifest).
         context.startActivity(
             Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                data = Uri.parse("package:${context.packageName}")
+                data = "package:${context.packageName}".toUri()
             },
         )
     }.recoverCatching {
