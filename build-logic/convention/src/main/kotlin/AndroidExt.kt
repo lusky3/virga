@@ -31,6 +31,17 @@ internal fun Project.addCoreLibraryDesugaring() {
 internal fun VersionCatalog.library(alias: String) =
     findLibrary(alias).orElseThrow { IllegalArgumentException("No library aliased '$alias' in catalog") }
 
+/**
+ * Apply Kover so the module's unit-test coverage feeds the root project's
+ * aggregated report (root merges these via `kover(project(...))`). Kover 0.9.8+
+ * auto-populates each module's total report from its Android variants — no
+ * per-variant wiring needed (0.9.1 couldn't see AGP 9's built-in-Kotlin
+ * variants, which is why this needs the newer Kover).
+ */
+internal fun Project.configureKover() {
+    pluginManager.apply("org.jetbrains.kotlinx.kover")
+}
+
 /** Apply JUnit Platform + a one-line summary listener to every Test task. */
 internal fun Project.configureTestTasks() {
     tasks.withType<Test>().configureEach {

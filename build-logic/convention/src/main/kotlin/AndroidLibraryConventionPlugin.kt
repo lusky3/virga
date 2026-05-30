@@ -27,5 +27,6 @@ class AndroidLibraryConventionPlugin : Plugin<Project> {
         configureKotlinJvmTarget()
         addCoreLibraryDesugaring()
         configureTestTasks()
+        configureKover()
     }
 }
