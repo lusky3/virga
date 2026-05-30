@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.os.Build
+import android.os.Environment
 import androidx.core.content.getSystemService
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
@@ -36,6 +37,7 @@ class SyncWorker @AssistedInject constructor(
     private val taskRepository: SyncTaskRepository,
     private val historyRepository: SyncHistoryRepository,
     private val conflictRepository: ConflictRepository,
+    private val staging: LocalStaging,
 ) : CoroutineWorker(appContext, params) {
 
     private val notifications = SyncNotifications(appContext)
@@ -45,6 +47,23 @@ class SyncWorker @AssistedInject constructor(
         if (taskId <= 0) return Result.failure()
         val task = taskRepository.getTask(taskId) ?: return Result.failure()
 
+        // SAF sources cannot bisync: rclone needs read/write access to a real path
+        // on both sides, which staging cannot provide symmetrically.
+        if (task.sourcePath.startsWith("content://") && task.direction == SyncDirection.BISYNC) {
+            val msg = "Two-way sync isn't supported for this folder on this device."
+            historyRepository.finishRun(
+                runId = historyRepository.startRun(taskId),
+                taskId = taskId,
+                startedAtEpochMs = System.currentTimeMillis(),
+                status = SyncStatus.FAILED,
+                filesTransferred = 0,
+                bytesTransferred = 0L,
+                errorCount = 1,
+                errorMessage = msg,
+            )
+            return Result.failure()
+        }
+
         setForeground(foregroundInfo(notifications.progress(task.name, null)))
 
         val startedAt = System.currentTimeMillis()
@@ -52,23 +71,60 @@ class SyncWorker @AssistedInject constructor(
         val metered = applicationContext.getSystemService<ConnectivityManager>()
             ?.isActiveNetworkMetered ?: false
 
+        val staged = staging.prepare(task.sourcePath, task.direction)
+        val effectiveTask = if (staged.isStaged) task.copy(sourcePath = staged.localPath) else task
+
         var last: SyncProgress? = null
         var failure: Throwable? = null
 
+        // Staged SAF downloads are copy-only: write-back into the content tree is
+        // additive, so a mirror-with-deletes would be misleading. Other syncs mirror.
+        val allowDeletes = !(staged.isStaged && task.direction == SyncDirection.DOWNLOAD)
+
         try {
-            executor.run(task, metered)
-                .catch { failure = it }
-                // Only update the foreground notification when the integer percent changes.
-                .distinctUntilChangedBy { p -> (p.fraction * 100).toInt() }
-                .collect { progress ->
-                    last = progress
-                    setForeground(foregroundInfo(notifications.progress(task.name, progress)))
-                }
+            // Guard: a 'local'-type rclone remote points at a real filesystem path,
+            // which the rclone child process can't reach under scoped storage (no
+            // all-files access). Fail with a clear message instead of an opaque
+            // rclone error. listRemotes() reuses the same daemon the sync starts.
+            val remoteType = engine.listRemotes().firstOrNull { it.name == task.remoteName }?.type
+            if (remoteType == "local" && !Environment.isExternalStorageManager()) {
+                failure = VirgaError.Rclone(
+                    message = "Local-disk remotes need all-files access, which isn't granted on this build. Use a cloud remote.",
+                )
+            } else {
+                executor.run(effectiveTask, metered, allowDeletes)
+                    .catch { failure = it }
+                    // Only update the foreground notification when the integer percent changes.
+                    .distinctUntilChangedBy { p -> (p.fraction * 100).toInt() }
+                    .collect { progress ->
+                        last = progress
+                        setForeground(foregroundInfo(notifications.progress(task.name, progress)))
+                    }
+            }
         } finally {
             runCatching { engine.stopDaemon() }
+            runCatching { staging.cleanup(staged) }
         }
 
         return if (failure == null) {
+            // For staged downloads, copy rclone's output back into the SAF tree.
+            if (staged.isStaged && task.direction == SyncDirection.DOWNLOAD) {
+                val writeResult = runCatching { staging.writeBack(staged) }
+                if (writeResult.isFailure) {
+                    val msg = writeResult.exceptionOrNull()?.message ?: "Failed to write back to folder"
+                    historyRepository.finishRun(
+                        runId = runId,
+                        taskId = taskId,
+                        startedAtEpochMs = startedAt,
+                        status = SyncStatus.FAILED,
+                        filesTransferred = last?.transferredFiles ?: 0,
+                        bytesTransferred = last?.bytesTransferred ?: 0L,
+                        errorCount = (last?.errors ?: 0) + 1,
+                        errorMessage = msg,
+                    )
+                    return Result.failure()
+                }
+            }
             historyRepository.finishRun(
                 runId = runId,
                 taskId = taskId,

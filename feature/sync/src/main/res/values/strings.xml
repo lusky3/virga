@@ -153,6 +153,7 @@
     <string name="conflicts_dialog_cancel">Cancel</string>
     <string name="sync_tasks_no_match_title">No matching tasks</string>
     <string name="sync_edit_source_path_unresolvable">Could not use that folder; enter the path manually.</string>
+    <string name="sync_edit_bisync_saf_unsupported">Two-way sync isn\'t available for this folder on this device.</string>
     <string name="sync_task_deleted_snackbar">\"%1$s\" deleted</string>
     <string name="sync_task_deleted_snackbar_undo">Undo</string>
 </resources>

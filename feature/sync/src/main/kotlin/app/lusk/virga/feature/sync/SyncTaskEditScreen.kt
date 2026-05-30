@@ -92,11 +92,17 @@ fun SyncTaskEditScreen(
                 android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
                     android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
             )
-            val path = resolveTreeUriToPath(uri)
-            if (path != null) {
-                viewModel.applySourcePath(path)
+            if (android.os.Environment.isExternalStorageManager()) {
+                val path = resolveTreeUriToPath(uri)
+                if (path != null) {
+                    viewModel.applySourcePath(path)
+                } else {
+                    coroutineScope.launch { snackbarHostState.showSnackbar(unresolvedMsg) }
+                }
             } else {
-                coroutineScope.launch { snackbarHostState.showSnackbar(unresolvedMsg) }
+                // Scoped storage: store the content:// tree URI directly.
+                // SAF permission is already persisted above; staging happens in SyncWorker.
+                viewModel.applySourcePath(uri.toString())
             }
         }
     }
@@ -194,6 +200,7 @@ fun SyncTaskEditScreen(
             // Direction
             DirectionSegmentedRow(
                 selected = form.direction,
+                directionError = form.directionError,
                 onSelect = { viewModel.update { f -> f.copy(direction = it) } },
             )
 
@@ -317,7 +324,11 @@ private fun RemoteDropdown(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DirectionSegmentedRow(selected: SyncDirection, onSelect: (SyncDirection) -> Unit) {
+private fun DirectionSegmentedRow(
+    selected: SyncDirection,
+    directionError: String?,
+    onSelect: (SyncDirection) -> Unit,
+) {
     val entries = SyncDirection.entries
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(stringResource(R.string.sync_edit_field_direction), style = MaterialTheme.typography.labelLarge)
@@ -336,6 +347,14 @@ private fun DirectionSegmentedRow(selected: SyncDirection, onSelect: (SyncDirect
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (directionError != null) {
+            Text(
+                text = directionError,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.semantics { error(directionError) },
+            )
+        }
     }
 }
 

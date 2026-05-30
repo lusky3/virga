@@ -22,7 +22,14 @@ class SyncExecutor @Inject constructor(
      * The returned flow emits progress and completes when the sync finishes;
      * failures propagate as exceptions for the caller to record.
      */
-    fun run(task: SyncTaskEntity, metered: Boolean): Flow<SyncProgress> {
+    /**
+     * @param allowDeletes when false, the sync mirrors additions/updates only
+     * (rclone `copy`, not `sync`). The worker sets this false for SAF-staged
+     * downloads, whose write-back into the content tree is additive-only — so a
+     * mirror-with-deletes would be misleading. Network/direct-path syncs keep the
+     * default true (true mirror).
+     */
+    fun run(task: SyncTaskEntity, metered: Boolean, allowDeletes: Boolean = true): Flow<SyncProgress> {
         val local = task.sourcePath
         val remote = remoteSpec(task)
         val bwLimit = if (metered) task.bwLimitMetered else task.bwLimitWifi
@@ -49,6 +56,7 @@ class SyncExecutor @Inject constructor(
                     checkers = task.checkers,
                     bufferSize = task.bufferSize,
                     filters = filters,
+                    deleteExtraneous = allowDeletes,
                 ),
             )
         }

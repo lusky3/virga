@@ -36,6 +36,7 @@ data class SyncTaskForm(
     val bwLimitMeteredError: String? = null,
     val bufferSizeError: String? = null,
     val customIntervalError: String? = null,
+    val directionError: String? = null,
     // Touched flags — errors only shown after field blur or failed save attempt
     val nameTouched: Boolean = false,
     val sourcePathTouched: Boolean = false,
@@ -58,7 +59,8 @@ data class SyncTaskForm(
             bwLimitWifiError == null &&
             bwLimitMeteredError == null &&
             bufferSizeError == null &&
-            customIntervalError == null
+            customIntervalError == null &&
+            directionError == null
 }
 
 @HiltViewModel
@@ -86,6 +88,7 @@ class SyncTaskEditViewModel @Inject constructor(
                 taskRepository.getTask(taskId)?.let { task ->
                     val isCustomInterval = task.intervalMinutes != null &&
                         task.intervalMinutes !in PRESET_INTERVAL_MINUTES
+                    val isSaf = task.sourcePath.startsWith("content://")
                     _form.value = SyncTaskForm(
                         id = task.id,
                         name = task.name,
@@ -99,6 +102,7 @@ class SyncTaskEditViewModel @Inject constructor(
                         bwLimitWifi = task.bwLimitWifi.orEmpty(),
                         bwLimitMetered = task.bwLimitMetered.orEmpty(),
                         bufferSize = task.bufferSize,
+                        directionError = if (isSaf && task.direction == SyncDirection.BISYNC) BISYNC_SAF_ERROR else null,
                     )
                 }
             }
@@ -112,7 +116,14 @@ class SyncTaskEditViewModel @Inject constructor(
         }
     }
 
-    fun applySourcePath(path: String) = _form.update { it.copy(sourcePath = path, sourcePathTouched = true) }
+    fun applySourcePath(path: String) = _form.update {
+        val isSaf = path.startsWith("content://")
+        it.copy(
+            sourcePath = path,
+            sourcePathTouched = true,
+            directionError = if (isSaf && it.direction == SyncDirection.BISYNC) BISYNC_SAF_ERROR else null,
+        )
+    }
 
     fun clearSourcePath() = _form.update { it.copy(sourcePath = "", sourcePathTouched = true) }
 
@@ -123,12 +134,16 @@ class SyncTaskEditViewModel @Inject constructor(
     fun update(transform: (SyncTaskForm) -> SyncTaskForm) = _form.update { current ->
         val next = transform(current)
         val isCustomInterval = next.intervalMinutes == CUSTOM_INTERVAL_SENTINEL
+        val isSafSource = next.sourcePath.startsWith("content://")
         next.copy(
             bwLimitWifiError = validateBwLimit(next.bwLimitWifi),
             bwLimitMeteredError = validateBwLimit(next.bwLimitMetered),
             bufferSizeError = validateBufferSize(next.bufferSize),
             customIntervalError = if (isCustomInterval && (next.customIntervalMinutes ?: 0) < 15) {
                 "Minimum 15 minutes"
+            } else null,
+            directionError = if (isSafSource && next.direction == SyncDirection.BISYNC) {
+                BISYNC_SAF_ERROR
             } else null,
         )
     }
@@ -166,6 +181,7 @@ class SyncTaskEditViewModel @Inject constructor(
 
     private companion object {
         const val CUSTOM_INTERVAL_SENTINEL = -1
+        const val BISYNC_SAF_ERROR = "Two-way sync isn't available for this folder on this device."
         private val PRESET_INTERVAL_MINUTES = setOf(null, 15, 30, 60, 360, 720, 1440)
         private val BW_LIMIT_REGEX = Regex("""^\d+[KMGTkmgt]?(:\d+[KMGTkmgt]?)?$""")
         private val BUFFER_SIZE_REGEX = Regex("""^\d+[KMGkmg]?$""")

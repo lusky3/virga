@@ -25,6 +25,7 @@ dependencies {
     implementation(libs.hilt.work)
     ksp(libs.hilt.work.compiler)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.documentfile)
 
     testImplementation(libs.work.testing)
     // Integration tests run with Robolectric so they exercise the real
