@@ -27,5 +27,19 @@
     <string name="onboarding_battery_title">Keep syncing in the background</string>
     <string name="onboarding_battery_body">Some manufacturers aggressively kill background apps, which can stop scheduled syncs. Exempt Virga from battery optimization (tap Next) and see dontkillmyapp.com for device-specific steps.</string>
     <string name="onboarding_first_remote_title">Add your first remote</string>
-    <string name="onboarding_first_remote_body">On the Remotes tab, add a cloud provider or import an existing rclone.conf from desktop, then create a sync task. Tap Get started.</string>
+    <!-- beg-01: define "remote" and "sync task" in plain language before using them -->
+    <string name="onboarding_first_remote_body">A remote is a connection to a cloud account (Google Drive, Dropbox, OneDrive…). A sync task copies files between a folder on your phone and a remote.\n\nOn the Remotes tab, add a cloud provider or import an existing rclone.conf from desktop, then create a sync task. Tap Get started.</string>
+
+    <!-- Navigation tab labels (ui-09) -->
+    <string name="nav_tab_sync">Sync</string>
+    <string name="nav_tab_remotes">Remotes</string>
+    <string name="nav_tab_settings">Settings</string>
+
+    <!-- OnboardingScreen — accessibility labels for permission action buttons (a11y-05) -->
+    <string name="onboarding_btn_open_storage_settings">Open storage settings</string>
+    <string name="onboarding_btn_open_battery_settings">Open battery settings</string>
+
+    <!-- OnboardingScreen — page indicator accessibility (a11y-04) -->
+    <string name="onboarding_page_indicator">Page %1$d of %2$d</string>
+    <string name="exit_confirm_toast">Press back again to exit</string>
 </resources>

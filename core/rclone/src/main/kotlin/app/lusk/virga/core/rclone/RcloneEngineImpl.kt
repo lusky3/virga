@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.time.Instant
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.booleanOrNull
@@ -128,12 +129,15 @@ class RcloneEngineImpl @Inject constructor(
         })
         val list = result["list"]?.jsonArray ?: return emptyList()
         return list.map { it.jsonObject }.map { obj ->
+            val modTimeMs = obj["ModTime"]?.jsonPrimitive?.contentOrNull?.let { raw ->
+                runCatching { Instant.parse(raw).toEpochMilli() }.getOrNull()
+            }
             FileItem(
                 name = obj["Name"]?.jsonPrimitive?.contentOrNull.orEmpty(),
                 path = obj["Path"]?.jsonPrimitive?.contentOrNull.orEmpty(),
                 isDir = obj["IsDir"]?.jsonPrimitive?.booleanOrNull ?: false,
                 size = obj["Size"]?.jsonPrimitive?.longOrNull ?: 0L,
-                modTimeEpochMs = null,
+                modTimeEpochMs = modTimeMs,
                 mimeType = obj["MimeType"]?.jsonPrimitive?.contentOrNull,
             )
         }

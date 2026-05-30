@@ -2,7 +2,6 @@ package app.lusk.virga.feature.sync
 
 import android.content.res.Configuration
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,9 +12,11 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -27,11 +28,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -48,9 +50,11 @@ import kotlin.time.Duration.Companion.milliseconds
 @Composable
 fun SyncHistoryScreen(
     onBack: () -> Unit,
+    onOpenRun: (Long) -> Unit = {},
     viewModel: SyncHistoryViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    var overflowExpanded by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -64,15 +68,31 @@ fun SyncHistoryScreen(
                         )
                     }
                 },
+                actions = {
+                    IconButton(onClick = { overflowExpanded = true }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.sync_history_cd_more))
+                    }
+                    DropdownMenu(
+                        expanded = overflowExpanded,
+                        onDismissRequest = { overflowExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.sync_history_clear)) },
+                            onClick = { overflowExpanded = false; viewModel.clearHistory() },
+                        )
+                    }
+                },
             )
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             if (state.tasks.isNotEmpty()) {
-                TaskFilterRow(
+                TaskAndStatusFilterRow(
                     tasks = state.tasks,
                     selectedTaskId = state.selectedTaskId,
-                    onSelect = viewModel::setFilter,
+                    statusFilter = state.statusFilter,
+                    onSelectTask = viewModel::setFilter,
+                    onSelectStatus = viewModel::setStatusFilter,
                 )
             }
             if (!state.loading && state.rows.isEmpty()) {
@@ -84,7 +104,15 @@ fun SyncHistoryScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     items(state.rows, key = { it.run.id }) { row ->
-                        RunCard(row, onClick = { viewModel.setFilter(row.run.taskId) })
+                        RunCard(
+                            row = row,
+                            onClick = { onOpenRun(row.run.id) },
+                            onRetry = if (SyncHistoryViewModel.isTerminal(row.run.status) &&
+                                row.run.status != SyncStatus.SUCCESS
+                            ) {
+                                { viewModel.retryRun(row.run) }
+                            } else null,
+                        )
                     }
                 }
             }
@@ -93,10 +121,12 @@ fun SyncHistoryScreen(
 }
 
 @Composable
-private fun TaskFilterRow(
-    tasks: List<TaskFilter>,
+private fun TaskAndStatusFilterRow(
+    tasks: List<HistoryTaskFilter>,
     selectedTaskId: Long?,
-    onSelect: (Long?) -> Unit,
+    statusFilter: SyncStatus?,
+    onSelectTask: (Long?) -> Unit,
+    onSelectStatus: (SyncStatus?) -> Unit,
 ) {
     LazyRow(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -105,28 +135,53 @@ private fun TaskFilterRow(
         item {
             FilterChip(
                 selected = selectedTaskId == null,
-                onClick = { onSelect(null) },
+                onClick = { onSelectTask(null) },
                 label = { Text(stringResource(R.string.sync_history_filter_all)) },
             )
         }
         items(tasks, key = { it.id }) { task ->
             FilterChip(
                 selected = selectedTaskId == task.id,
-                onClick = { onSelect(task.id) },
+                onClick = { onSelectTask(task.id) },
                 label = { Text(task.name, maxLines = 1) },
+            )
+        }
+        item {
+            FilterChip(
+                selected = statusFilter == SyncStatus.FAILED,
+                onClick = {
+                    onSelectStatus(if (statusFilter == SyncStatus.FAILED) null else SyncStatus.FAILED)
+                },
+                label = { Text(stringResource(R.string.sync_history_filter_failed)) },
             )
         }
     }
 }
 
 @Composable
-internal fun RunCard(row: SyncRunRow, onClick: () -> Unit = {}) {
+internal fun RunCard(
+    row: SyncRunRow,
+    onClick: () -> Unit = {},
+    onRetry: (() -> Unit)? = null,
+) {
     val run = row.run
     Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(row.taskName, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                StatusChip(run.status)
+                Text(
+                    row.taskName,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                SyncStatusBadge(run.status)
+                if (onRetry != null) {
+                    IconButton(onClick = onRetry) {
+                        Icon(
+                            Icons.Filled.Replay,
+                            contentDescription = stringResource(R.string.sync_history_retry),
+                        )
+                    }
+                }
             }
             Text(
                 DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
@@ -134,8 +189,8 @@ internal fun RunCard(row: SyncRunRow, onClick: () -> Unit = {}) {
                 style = MaterialTheme.typography.bodySmall,
             )
             val detail = buildString {
-                append("${run.filesTransferred} files • ${formatFileSize(run.bytesTransferred)}")
-                run.endedAtEpochMs?.let { append(" • ${formatDuration(it - run.startedAtEpochMs)}") }
+                append("${run.filesTransferred} files · ${formatFileSize(run.bytesTransferred)}")
+                run.endedAtEpochMs?.let { append(" · ${formatDuration(it - run.startedAtEpochMs)}") }
             }
             Text(detail, style = MaterialTheme.typography.bodyMedium)
             if (run.errorCount > 0 || run.errorMessage != null) {
@@ -149,52 +204,6 @@ internal fun RunCard(row: SyncRunRow, onClick: () -> Unit = {}) {
     }
 }
 
-@Composable
-private fun StatusChip(status: SyncStatus) {
-    val (labelRes, containerColor, contentColor) = when (status) {
-        SyncStatus.SUCCESS -> Triple(
-            R.string.sync_history_status_success,
-            MaterialTheme.colorScheme.tertiaryContainer,
-            MaterialTheme.colorScheme.onTertiaryContainer,
-        )
-        SyncStatus.FAILED -> Triple(
-            R.string.sync_history_status_failed,
-            MaterialTheme.colorScheme.errorContainer,
-            MaterialTheme.colorScheme.onErrorContainer,
-        )
-        SyncStatus.RUNNING -> Triple(
-            R.string.sync_history_status_running,
-            MaterialTheme.colorScheme.primaryContainer,
-            MaterialTheme.colorScheme.onPrimaryContainer,
-        )
-        SyncStatus.QUEUED -> Triple(
-            R.string.sync_history_status_queued,
-            MaterialTheme.colorScheme.secondaryContainer,
-            MaterialTheme.colorScheme.onSecondaryContainer,
-        )
-        SyncStatus.CANCELLED -> Triple(
-            R.string.sync_history_status_cancelled,
-            MaterialTheme.colorScheme.surfaceVariant,
-            MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        SyncStatus.IDLE -> Triple(
-            R.string.sync_history_status_idle,
-            MaterialTheme.colorScheme.surfaceVariant,
-            MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-    val label = stringResource(labelRes)
-    AssistChip(
-        onClick = {},
-        label = { Text(label, style = MaterialTheme.typography.labelMedium) },
-        colors = AssistChipDefaults.assistChipColors(
-            containerColor = containerColor,
-            labelColor = contentColor,
-        ),
-        modifier = Modifier.semantics { contentDescription = label },
-    )
-}
-
 private fun formatDuration(ms: Long): String {
     val d = ms.milliseconds
     return when {
@@ -204,12 +213,11 @@ private fun formatDuration(ms: Long): String {
 }
 
 // ---------------------------------------------------------------------------
-// Previews (Task #26)
+// Previews
 // ---------------------------------------------------------------------------
 
 @Preview(name = "RunCard light", showBackground = true)
 @Preview(name = "RunCard dark", showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)
-@Preview(name = "RunCard fontScale=2", showBackground = true, fontScale = 2f)
 @Composable
 private fun RunCardPreview() {
     Surface {
@@ -225,3 +233,4 @@ private fun RunCardPreview() {
         )
     }
 }
+

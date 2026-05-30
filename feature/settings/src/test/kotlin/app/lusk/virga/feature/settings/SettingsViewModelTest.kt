@@ -92,4 +92,89 @@ class SettingsViewModelTest {
             repository.setWifiOnlyByDefault(true)
         }
     }
+
+    // --- setDynamicColor ---
+
+    @Test
+    fun setDynamicColor_enabled_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setDynamicColor(true)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { repository.setDynamicColor(true) }
+    }
+
+    @Test
+    fun setDynamicColor_disabled_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setDynamicColor(false)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { repository.setDynamicColor(false) }
+    }
+
+    // --- initial / default state ---
+
+    @Test
+    fun state_initialValue_matchesAppPreferencesDefaults() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.state.collect {} }
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.themeMode).isEqualTo(ThemeMode.SYSTEM)
+        assertThat(vm.state.value.dynamicColor).isTrue()
+        assertThat(vm.state.value.wifiOnlyByDefault).isTrue()
+        assertThat(vm.state.value.requireChargingByDefault).isFalse()
+        assertThat(vm.state.value.defaultBwLimitWifi).isNull()
+        assertThat(vm.state.value.defaultBwLimitMetered).isEqualTo("1M")
+        job.cancel()
+    }
+
+    @Test
+    fun state_reflectsWifiAndChargingAndBandwidthFields() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.state.collect {} }
+
+        prefsFlow.value = AppPreferences(
+            wifiOnlyByDefault = false,
+            requireChargingByDefault = true,
+            defaultBwLimitWifi = "10M",
+            defaultBwLimitMetered = null,
+        )
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.wifiOnlyByDefault).isFalse()
+        assertThat(vm.state.value.requireChargingByDefault).isTrue()
+        assertThat(vm.state.value.defaultBwLimitWifi).isEqualTo("10M")
+        assertThat(vm.state.value.defaultBwLimitMetered).isNull()
+        job.cancel()
+    }
+
+    // --- setDefaultBwLimits edge cases ---
+
+    @Test
+    fun setDefaultBwLimits_bothNull_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setDefaultBwLimits(wifi = null, metered = null)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { repository.setDefaultBwLimits(wifi = null, metered = null) }
+    }
+
+    @Test
+    fun setDefaultBwLimits_meteredNull_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setDefaultBwLimits(wifi = "5M", metered = null)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { repository.setDefaultBwLimits(wifi = "5M", metered = null) }
+    }
+
+    // --- ThemeMode variants ---
+
+    @Test
+    fun setThemeMode_dark_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setThemeMode(ThemeMode.DARK)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { repository.setThemeMode(ThemeMode.DARK) }
+    }
+
+    @Test
+    fun setThemeMode_system_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setThemeMode(ThemeMode.SYSTEM)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { repository.setThemeMode(ThemeMode.SYSTEM) }
+    }
 }

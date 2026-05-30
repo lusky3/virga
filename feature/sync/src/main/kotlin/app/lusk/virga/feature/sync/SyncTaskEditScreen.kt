@@ -1,5 +1,10 @@
 package app.lusk.virga.feature.sync
 
+import android.net.Uri
+import android.os.Environment
+import android.provider.DocumentsContract
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,61 +13,102 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.error
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.model.SyncDirection
+import java.io.File
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SyncTaskEditScreen(
     taskId: Long,
+    prefillRemote: String? = null,
+    prefillRemotePath: String? = null,
     onBack: () -> Unit,
     onNavigateToRemotes: () -> Unit = {},
     viewModel: SyncTaskEditViewModel = hiltViewModel(),
 ) {
-    LaunchedEffect(taskId) { viewModel.load(taskId) }
+    LaunchedEffect(taskId) { viewModel.load(taskId, prefillRemote, prefillRemotePath) }
     val form by viewModel.form.collectAsStateWithLifecycle()
     val remotes by viewModel.availableRemotes.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+    val unresolvedMsg = stringResource(R.string.sync_edit_source_path_unresolvable)
+
+    val folderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { uri: Uri? ->
+        if (uri != null) {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+            val path = resolveTreeUriToPath(uri)
+            if (path != null) {
+                viewModel.applySourcePath(path)
+            } else {
+                coroutineScope.launch { snackbarHostState.showSnackbar(unresolvedMsg) }
+            }
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        if (taskId > 0) {
-                            stringResource(R.string.sync_edit_title_edit)
-                        } else {
-                            stringResource(R.string.sync_edit_title_new)
-                        },
+                        if (taskId > 0) stringResource(R.string.sync_edit_title_edit)
+                        else stringResource(R.string.sync_edit_title_new),
                     )
                 },
                 navigationIcon = {
@@ -84,65 +130,89 @@ fun SyncTaskEditScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            // Task name. Track focus-then-blur so the "required" error only appears
+            // after real user interaction (onFocusChanged fires with isFocused=false
+            // on initial composition, which must NOT mark the field touched).
+            val nameWasFocused = remember { mutableStateOf(false) }
             OutlinedTextField(
                 value = form.name,
-                onValueChange = { v -> viewModel.update { it.copy(name = v) } },
+                onValueChange = { viewModel.update { f -> f.copy(name = it) } },
                 label = { Text(stringResource(R.string.sync_edit_field_name)) },
-                isError = form.name.isBlank(),
-                supportingText = if (form.name.isBlank()) {
-                    { Text(stringResource(R.string.sync_edit_field_required)) }
+                singleLine = true,
+                isError = form.nameError != null,
+                supportingText = form.nameError?.let { msg ->
+                    { Text(msg, modifier = Modifier.semantics { error(msg) }) }
+                },
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.None,
+                    autoCorrectEnabled = false,
+                    imeAction = ImeAction.Next,
+                ),
+                trailingIcon = if (form.name.isNotEmpty()) {
+                    { IconButton(onClick = { viewModel.update { f -> f.copy(name = "") } }) { Icon(Icons.Filled.Clear, null) } }
                 } else null,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = form.sourcePath,
-                onValueChange = { v -> viewModel.update { it.copy(sourcePath = v) } },
-                label = { Text(stringResource(R.string.sync_edit_field_source_path)) },
-                placeholder = { Text(stringResource(R.string.sync_edit_field_source_placeholder)) },
-                isError = form.sourcePath.isBlank(),
-                supportingText = if (form.sourcePath.isBlank()) {
-                    { Text(stringResource(R.string.sync_edit_field_required)) }
-                } else null,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged {
+                        if (it.isFocused) nameWasFocused.value = true
+                        else if (nameWasFocused.value) viewModel.touchName()
+                    }
+                    .semantics { form.nameError?.let { error(it) } },
             )
 
+            // Source path
+            SourcePathField(
+                value = form.sourcePath,
+                error = form.sourcePathError,
+                onValueChange = { viewModel.update { f -> f.copy(sourcePath = it) } },
+                onBlur = viewModel::touchSourcePath,
+                onClear = viewModel::clearSourcePath,
+                onChooseFolder = { folderLauncher.launch(null) },
+            )
+
+            // Remote
             RemoteDropdown(
                 remotes = remotes,
                 selected = form.remoteName,
-                onSelect = { v -> viewModel.update { it.copy(remoteName = v) } },
+                error = form.remoteNameError,
+                onSelect = { v -> viewModel.update { f -> f.copy(remoteName = v) }; viewModel.touchRemoteName() },
                 onNavigateToRemotes = onNavigateToRemotes,
             )
+
             OutlinedTextField(
                 value = form.remotePath,
-                onValueChange = { v -> viewModel.update { it.copy(remotePath = v) } },
+                onValueChange = { viewModel.update { f -> f.copy(remotePath = it) } },
                 label = { Text(stringResource(R.string.sync_edit_field_remote_path)) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                trailingIcon = if (form.remotePath.isNotEmpty()) {
+                    { IconButton(onClick = { viewModel.update { f -> f.copy(remotePath = "") } }) { Icon(Icons.Filled.Clear, null) } }
+                } else null,
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            Text(stringResource(R.string.sync_edit_field_direction), style = MaterialTheme.typography.labelLarge)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SyncDirection.entries.forEach { dir ->
-                    FilterChip(
-                        selected = form.direction == dir,
-                        onClick = { viewModel.update { it.copy(direction = dir) } },
-                        label = { Text(dir.name.lowercase()) },
-                    )
-                }
-            }
+            // Direction
+            DirectionSegmentedRow(
+                selected = form.direction,
+                onSelect = { viewModel.update { f -> f.copy(direction = it) } },
+            )
 
             IntervalDropdown(
                 selected = form.intervalMinutes,
-                onSelect = { v -> viewModel.update { it.copy(intervalMinutes = v) } },
+                customMinutes = form.customIntervalMinutes,
+                customIntervalError = form.customIntervalError,
+                onSelect = { viewModel.update { f -> f.copy(intervalMinutes = it) } },
+                onCustomMinutes = { viewModel.update { f -> f.copy(customIntervalMinutes = it) } },
             )
 
-            // Task #24: merge Row + Switch semantics so TalkBack announces label + state together
+            // Wi-Fi only toggle
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .toggleable(
                         value = form.wifiOnly,
                         role = Role.Switch,
-                        onValueChange = { v -> viewModel.update { it.copy(wifiOnly = v) } },
+                        onValueChange = { v -> viewModel.update { f -> f.copy(wifiOnly = v) } },
                     )
                     .padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -155,42 +225,8 @@ fun SyncTaskEditScreen(
                 Switch(checked = form.wifiOnly, onCheckedChange = null)
             }
 
-            OutlinedTextField(
-                value = form.bwLimitWifi,
-                onValueChange = { v -> viewModel.update { it.copy(bwLimitWifi = v) } },
-                label = { Text(stringResource(R.string.sync_edit_field_bw_wifi)) },
-                placeholder = { Text(stringResource(R.string.sync_edit_field_bw_wifi_placeholder)) },
-                isError = form.bwLimitError != null,
-                supportingText = if (form.bwLimitError != null) {
-                    { Text(form.bwLimitError!!) }
-                } else {
-                    { Text(stringResource(R.string.sync_edit_field_bw_wifi_hint)) }
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            OutlinedTextField(
-                value = form.bwLimitMetered,
-                onValueChange = { v -> viewModel.update { it.copy(bwLimitMetered = v) } },
-                label = { Text(stringResource(R.string.sync_edit_field_bw_metered)) },
-                placeholder = { Text(stringResource(R.string.sync_edit_field_bw_metered_placeholder)) },
-                isError = form.bwLimitError != null,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            OutlinedTextField(
-                value = form.bufferSize,
-                onValueChange = { v -> viewModel.update { it.copy(bufferSize = v) } },
-                label = { Text(stringResource(R.string.sync_edit_field_buffer)) },
-                placeholder = { Text(stringResource(R.string.sync_edit_field_buffer_placeholder)) },
-                isError = form.bufferSizeError != null,
-                supportingText = if (form.bufferSizeError != null) {
-                    { Text(form.bufferSizeError!!) }
-                } else {
-                    { Text(stringResource(R.string.sync_edit_field_buffer_hint)) }
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
+            // Advanced section
+            AdvancedSection(form = form, viewModel = viewModel)
 
             Button(
                 onClick = { viewModel.save(onBack) },
@@ -201,11 +237,47 @@ fun SyncTaskEditScreen(
     }
 }
 
+@Composable
+private fun SourcePathField(
+    value: String,
+    error: String?,
+    onValueChange: (String) -> Unit,
+    onBlur: () -> Unit,
+    onClear: () -> Unit,
+    onChooseFolder: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            label = { Text(stringResource(R.string.sync_edit_field_source_path)) },
+            placeholder = { Text(stringResource(R.string.sync_edit_field_source_placeholder)) },
+            singleLine = true,
+            isError = error != null,
+            supportingText = error?.let { msg ->
+                { Text(msg, modifier = Modifier.semantics { error(msg) }) }
+            },
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+            trailingIcon = if (value.isNotEmpty()) {
+                { IconButton(onClick = onClear) { Icon(Icons.Filled.Clear, null) } }
+            } else null,
+            modifier = Modifier.fillMaxWidth().semantics { error?.let { error(it) } },
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = onChooseFolder) {
+                Icon(Icons.Filled.FolderOpen, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                Text(stringResource(R.string.sync_edit_source_choose_folder))
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RemoteDropdown(
     remotes: List<String>,
     selected: String,
+    error: String?,
     onSelect: (String) -> Unit,
     onNavigateToRemotes: () -> Unit,
 ) {
@@ -217,20 +289,20 @@ private fun RemoteDropdown(
             readOnly = true,
             label = { Text(stringResource(R.string.sync_edit_field_remote)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            isError = selected.isBlank(),
-            supportingText = if (selected.isBlank()) {
-                { Text(stringResource(R.string.sync_edit_field_remote_required)) }
-            } else null,
-            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+            isError = error != null,
+            supportingText = error?.let { msg ->
+                { Text(msg, modifier = Modifier.semantics { error(msg) }) }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                .semantics { error?.let { error(it) } },
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             if (remotes.isEmpty()) {
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.sync_edit_no_remotes_item)) },
-                    onClick = {
-                        expanded = false
-                        onNavigateToRemotes()
-                    },
+                    onClick = { expanded = false; onNavigateToRemotes() },
                 )
             }
             remotes.forEach { name ->
@@ -245,57 +317,56 @@ private fun RemoteDropdown(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun IntervalDropdown(selected: Int?, onSelect: (Int?) -> Unit) {
-    val options = listOf<Pair<Int?, Int?>>(
-        null to null,
-        R.string.sync_interval_15min to 15,
-        R.string.sync_interval_30min to 30,
-        R.string.sync_interval_1hour to 60,
-        R.string.sync_interval_6hours to 360,
-        R.string.sync_interval_12hours to 720,
-        R.string.sync_interval_daily to 1440,
-    )
-    var expanded by remember { mutableStateOf(false) }
-    val labelRes = options.firstOrNull { it.second == selected }?.first
-    val label = labelRes?.let { stringResource(it) } ?: stringResource(R.string.sync_interval_manual)
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-        OutlinedTextField(
-            value = label,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(stringResource(R.string.sync_edit_field_schedule)) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
-        )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.sync_interval_manual)) },
-                onClick = { onSelect(null); expanded = false },
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.sync_interval_15min)) },
-                onClick = { onSelect(15); expanded = false },
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.sync_interval_30min)) },
-                onClick = { onSelect(30); expanded = false },
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.sync_interval_1hour)) },
-                onClick = { onSelect(60); expanded = false },
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.sync_interval_6hours)) },
-                onClick = { onSelect(360); expanded = false },
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.sync_interval_12hours)) },
-                onClick = { onSelect(720); expanded = false },
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.sync_interval_daily)) },
-                onClick = { onSelect(1440); expanded = false },
-            )
+private fun DirectionSegmentedRow(selected: SyncDirection, onSelect: (SyncDirection) -> Unit) {
+    val entries = SyncDirection.entries
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(stringResource(R.string.sync_edit_field_direction), style = MaterialTheme.typography.labelLarge)
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            entries.forEachIndexed { index, dir ->
+                SegmentedButton(
+                    selected = selected == dir,
+                    onClick = { onSelect(dir) },
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = entries.size),
+                    label = { Text(stringResource(directionLabelRes(dir))) },
+                )
+            }
         }
+        Text(
+            text = stringResource(directionHintRes(selected)),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
+
+private fun directionLabelRes(dir: SyncDirection): Int = when (dir) {
+    SyncDirection.UPLOAD -> R.string.sync_direction_upload
+    SyncDirection.DOWNLOAD -> R.string.sync_direction_download
+    SyncDirection.BISYNC -> R.string.sync_direction_bisync
+}
+
+private fun directionHintRes(dir: SyncDirection): Int = when (dir) {
+    SyncDirection.UPLOAD -> R.string.sync_direction_hint_upload
+    SyncDirection.DOWNLOAD -> R.string.sync_direction_hint_download
+    SyncDirection.BISYNC -> R.string.sync_direction_hint_bisync
+}
+
+/**
+ * Converts a SAF tree URI (content://...) to a real filesystem path that rclone can use.
+ * Returns null if the path cannot be resolved or does not exist on disk.
+ */
+private fun resolveTreeUriToPath(uri: Uri): String? {
+    val docId = DocumentsContract.getTreeDocumentId(uri) ?: return null
+    val colonIdx = docId.indexOf(':')
+    if (colonIdx < 0) return null
+    val volume = docId.substring(0, colonIdx)
+    val relativePath = docId.substring(colonIdx + 1)
+    val base = if (volume.equals("primary", ignoreCase = true)) {
+        Environment.getExternalStorageDirectory().absolutePath
+    } else {
+        "/storage/$volume"
+    }
+    val resolved = if (relativePath.isEmpty()) File(base) else File(base, relativePath)
+    return if (resolved.exists()) resolved.absolutePath else null
+}
+

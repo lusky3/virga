@@ -37,6 +37,8 @@ class SyncTaskEditViewModelTest {
 
     private fun viewModel() = SyncTaskEditViewModel(taskRepository, remoteRepository, scheduler)
 
+    // --- pre-existing tests -------------------------------------------------
+
     @Test
     fun isValid_isFalseUntilRequiredFieldsArePopulated() {
         val vm = viewModel()
@@ -141,4 +143,293 @@ class SyncTaskEditViewModelTest {
             ),
         )
     }
+
+    // --- load(new) defaults -------------------------------------------------
+
+    @Test
+    fun load_newTask_startsWithBlankFormDefaults() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        vm.load(taskId = 0)
+        advanceUntilIdle()
+
+        val form = vm.form.value
+        assertThat(form.id).isEqualTo(0L)
+        assertThat(form.name).isEmpty()
+        assertThat(form.sourcePath).isEmpty()
+        assertThat(form.remoteName).isEmpty()
+        assertThat(form.direction).isEqualTo(SyncDirection.UPLOAD)
+        assertThat(form.wifiOnly).isTrue()
+        assertThat(form.bufferSize).isEqualTo("16M")
+    }
+
+    // --- non-preset interval → CUSTOM mapping -------------------------------
+
+    @Test
+    fun load_nonPresetInterval_mapsToCustomSentinelAndStoresActualInCustomIntervalMinutes() = runTest(mainDispatcher.dispatcher) {
+        val entity = task(id = 3, intervalMinutes = 45)
+        coEvery { taskRepository.getTask(3L) } returns entity
+
+        val vm = viewModel()
+        vm.load(taskId = 3L)
+        advanceUntilIdle()
+
+        // sentinel value that drives the "Custom" radio selection
+        assertThat(vm.form.value.intervalMinutes).isEqualTo(-1)
+        assertThat(vm.form.value.customIntervalMinutes).isEqualTo(45)
+    }
+
+    @Test
+    fun load_presetInterval_doesNotMapToCustomSentinel() = runTest(mainDispatcher.dispatcher) {
+        val entity = task(id = 4, intervalMinutes = 60)
+        coEvery { taskRepository.getTask(4L) } returns entity
+
+        val vm = viewModel()
+        vm.load(taskId = 4L)
+        advanceUntilIdle()
+
+        assertThat(vm.form.value.intervalMinutes).isEqualTo(60)
+        assertThat(vm.form.value.customIntervalMinutes).isNull()
+    }
+
+    // --- prefillRemote / prefillRemotePath ----------------------------------
+
+    @Test
+    fun load_newTask_appliesPrefillRemote() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        vm.load(taskId = 0, prefillRemote = "gdrive", prefillRemotePath = "/Photos")
+        advanceUntilIdle()
+
+        assertThat(vm.form.value.remoteName).isEqualTo("gdrive")
+        assertThat(vm.form.value.remotePath).isEqualTo("/Photos")
+    }
+
+    @Test
+    fun load_existingTask_ignoresPrefillRemote() = runTest(mainDispatcher.dispatcher) {
+        val entity = task(id = 5, remoteName = "dropbox")
+        coEvery { taskRepository.getTask(5L) } returns entity
+
+        val vm = viewModel()
+        vm.load(taskId = 5L, prefillRemote = "gdrive", prefillRemotePath = "/shouldBeIgnored")
+        advanceUntilIdle()
+
+        assertThat(vm.form.value.remoteName).isEqualTo("dropbox")
+    }
+
+    // --- validation — errors only after touched / submitAttempted -----------
+
+    @Test
+    fun nameError_isNullBeforeTouchedOrSubmitAttempted() {
+        val vm = viewModel()
+        vm.update { it.copy(name = "") }
+
+        assertThat(vm.form.value.nameError).isNull()
+    }
+
+    @Test
+    fun nameError_isSetAfterTouched() {
+        val vm = viewModel()
+        vm.update { it.copy(name = "") }
+        vm.touchName()
+
+        assertThat(vm.form.value.nameError).isEqualTo("Name is required")
+    }
+
+    @Test
+    fun nameError_isSetAfterSubmitAttempted() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        vm.save {}
+        advanceUntilIdle()
+
+        assertThat(vm.form.value.nameError).isEqualTo("Name is required")
+    }
+
+    @Test
+    fun sourcePathError_isNullBeforeTouchedOrSubmitAttempted() {
+        val vm = viewModel()
+        vm.update { it.copy(sourcePath = "") }
+
+        assertThat(vm.form.value.sourcePathError).isNull()
+    }
+
+    @Test
+    fun sourcePathError_isSetAfterTouched() {
+        val vm = viewModel()
+        vm.update { it.copy(sourcePath = "") }
+        vm.touchSourcePath()
+
+        assertThat(vm.form.value.sourcePathError).isEqualTo("Source path is required")
+    }
+
+    @Test
+    fun remoteNameError_isNullBeforeTouchedOrSubmitAttempted() {
+        val vm = viewModel()
+        vm.update { it.copy(remoteName = "") }
+
+        assertThat(vm.form.value.remoteNameError).isNull()
+    }
+
+    @Test
+    fun remoteNameError_isSetAfterTouched() {
+        val vm = viewModel()
+        vm.update { it.copy(remoteName = "") }
+        vm.touchRemoteName()
+
+        assertThat(vm.form.value.remoteNameError).isNotNull()
+    }
+
+    // --- bwLimit validation — wifi and metered are independent --------------
+
+    @Test
+    fun bwLimitWifiError_isSetForInvalidFormat_bwLimitMeteredError_isNull() {
+        val vm = viewModel()
+        vm.update { it.copy(bwLimitWifi = "bad!!!", bwLimitMetered = "1M") }
+
+        assertThat(vm.form.value.bwLimitWifiError).isNotNull()
+        assertThat(vm.form.value.bwLimitMeteredError).isNull()
+    }
+
+    @Test
+    fun bwLimitMeteredError_isSetForInvalidFormat_bwLimitWifiError_isNull() {
+        val vm = viewModel()
+        vm.update { it.copy(bwLimitWifi = "2M", bwLimitMetered = "xyz???") }
+
+        assertThat(vm.form.value.bwLimitWifiError).isNull()
+        assertThat(vm.form.value.bwLimitMeteredError).isNotNull()
+    }
+
+    @Test
+    fun bwLimitWifiError_isNullForBlankValue() {
+        val vm = viewModel()
+        vm.update { it.copy(bwLimitWifi = "") }
+
+        assertThat(vm.form.value.bwLimitWifiError).isNull()
+    }
+
+    @Test
+    fun bwLimitWifiError_isNullForValidRateWithColonTimespec() {
+        val vm = viewModel()
+        vm.update { it.copy(bwLimitWifi = "10M:1M") }
+
+        assertThat(vm.form.value.bwLimitWifiError).isNull()
+    }
+
+    // --- customIntervalError blocks isValid when custom < 15 ----------------
+
+    @Test
+    fun customIntervalError_isSetWhenCustomIntervalBelowMinimum() {
+        val vm = viewModel()
+        vm.update { it.copy(intervalMinutes = -1, customIntervalMinutes = 10) }
+
+        assertThat(vm.form.value.customIntervalError).isEqualTo("Minimum 15 minutes")
+    }
+
+    @Test
+    fun isValid_isFalseWhenCustomIntervalTooShort() {
+        val vm = viewModel()
+        vm.update {
+            it.copy(
+                name = "T",
+                sourcePath = "/s",
+                remoteName = "r",
+                intervalMinutes = -1,
+                customIntervalMinutes = 10,
+            )
+        }
+
+        assertThat(vm.form.value.isValid).isFalse()
+    }
+
+    @Test
+    fun customIntervalError_isNullWhenCustomIntervalAtMinimum() {
+        val vm = viewModel()
+        vm.update { it.copy(intervalMinutes = -1, customIntervalMinutes = 15) }
+
+        assertThat(vm.form.value.customIntervalError).isNull()
+    }
+
+    // --- applySourcePath ----------------------------------------------------
+
+    @Test
+    fun applySourcePath_setsPathAndMarksTouched() {
+        val vm = viewModel()
+        vm.applySourcePath("/sdcard/DCIM")
+
+        assertThat(vm.form.value.sourcePath).isEqualTo("/sdcard/DCIM")
+        assertThat(vm.form.value.sourcePathTouched).isTrue()
+    }
+
+    // --- save with custom interval ------------------------------------------
+
+    @Test
+    fun save_customInterval_writesCustomIntervalMinutesToEntity() = runTest(mainDispatcher.dispatcher) {
+        coEvery { taskRepository.save(any()) } returns 1L
+        val vm = viewModel()
+        vm.update {
+            it.copy(
+                name = "Backup",
+                sourcePath = "/sdcard",
+                remoteName = "gdrive",
+                intervalMinutes = -1,
+                customIntervalMinutes = 20,
+            )
+        }
+
+        vm.save {}
+        advanceUntilIdle()
+
+        coVerify {
+            taskRepository.save(match<SyncTaskEntity> { it.intervalMinutes == 20 })
+        }
+    }
+
+    @Test
+    fun save_presetInterval_writesPresetIntervalToEntity() = runTest(mainDispatcher.dispatcher) {
+        coEvery { taskRepository.save(any()) } returns 1L
+        val vm = viewModel()
+        vm.update {
+            it.copy(
+                name = "Backup",
+                sourcePath = "/sdcard",
+                remoteName = "gdrive",
+                intervalMinutes = 360,
+            )
+        }
+
+        vm.save {}
+        advanceUntilIdle()
+
+        coVerify {
+            taskRepository.save(match<SyncTaskEntity> { it.intervalMinutes == 360 })
+        }
+    }
+
+    @Test
+    fun save_callsOnSavedAndSchedules() = runTest(mainDispatcher.dispatcher) {
+        coEvery { taskRepository.save(any()) } returns 55L
+        val vm = viewModel()
+        vm.update { it.copy(name = "T", sourcePath = "/s", remoteName = "r") }
+        var saved = false
+
+        vm.save { saved = true }
+        advanceUntilIdle()
+
+        assertThat(saved).isTrue()
+        coVerify(exactly = 1) { scheduler.schedule(match<SyncTaskEntity> { it.id == 55L }) }
+    }
+
+    // --- helpers ------------------------------------------------------------
+
+    private fun task(
+        id: Long,
+        remoteName: String = "gdrive",
+        intervalMinutes: Int? = null,
+    ) = SyncTaskEntity(
+        id = id,
+        name = "task-$id",
+        sourcePath = "/src",
+        remoteName = remoteName,
+        remotePath = "/dst",
+        direction = SyncDirection.UPLOAD,
+        intervalMinutes = intervalMinutes,
+    )
 }

@@ -27,24 +27,38 @@ data class SyncTaskForm(
     val remotePath: String = "",
     val direction: SyncDirection = SyncDirection.UPLOAD,
     val intervalMinutes: Int? = null,
+    val customIntervalMinutes: Int? = null,
     val wifiOnly: Boolean = true,
-    /** rclone --bwlimit on WiFi; blank = no limit. e.g. "1M" or "10M:1M". */
     val bwLimitWifi: String = "",
-    /** rclone --bwlimit on metered connections; blank = no limit. */
     val bwLimitMetered: String = "",
-    /** rclone --buffer-size; positive integer with optional unit suffix. */
     val bufferSize: String = "16M",
-    /** Non-null when bwLimitWifi or bwLimitMetered have an invalid format. */
-    val bwLimitError: String? = null,
-    /** Non-null when bufferSize has an invalid format. */
+    val bwLimitWifiError: String? = null,
+    val bwLimitMeteredError: String? = null,
     val bufferSizeError: String? = null,
+    val customIntervalError: String? = null,
+    // Touched flags — errors only shown after field blur or failed save attempt
+    val nameTouched: Boolean = false,
+    val sourcePathTouched: Boolean = false,
+    val remoteNameTouched: Boolean = false,
+    val submitAttempted: Boolean = false,
 ) {
+    val nameError: String? get() =
+        if ((nameTouched || submitAttempted) && name.isBlank()) "Name is required" else null
+
+    val sourcePathError: String? get() =
+        if ((sourcePathTouched || submitAttempted) && sourcePath.isBlank()) "Source path is required" else null
+
+    val remoteNameError: String? get() =
+        if ((remoteNameTouched || submitAttempted) && remoteName.isBlank()) "Required — add a remote first if the list is empty" else null
+
     val isValid: Boolean
         get() = name.isNotBlank() &&
             sourcePath.isNotBlank() &&
             remoteName.isNotBlank() &&
-            bwLimitError == null &&
-            bufferSizeError == null
+            bwLimitWifiError == null &&
+            bwLimitMeteredError == null &&
+            bufferSizeError == null &&
+            customIntervalError == null
 }
 
 @HiltViewModel
@@ -62,44 +76,65 @@ class SyncTaskEditViewModel @Inject constructor(
             .map { remotes -> remotes.map { it.name } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** Loads an existing task into the form, or leaves a blank form for new tasks. */
-    fun load(taskId: Long) {
-        if (taskId <= 0) return
-        viewModelScope.launch {
-            taskRepository.getTask(taskId)?.let { task ->
-                _form.value = SyncTaskForm(
-                    id = task.id,
-                    name = task.name,
-                    sourcePath = task.sourcePath,
-                    remoteName = task.remoteName,
-                    remotePath = task.remotePath,
-                    direction = task.direction,
-                    intervalMinutes = task.intervalMinutes,
-                    wifiOnly = task.wifiOnly,
-                    bwLimitWifi = task.bwLimitWifi.orEmpty(),
-                    bwLimitMetered = task.bwLimitMetered.orEmpty(),
-                    bufferSize = task.bufferSize,
+    /**
+     * Loads an existing task, or applies prefill values for a new task.
+     * [prefillRemote] and [prefillRemotePath] are only applied when [taskId] <= 0.
+     */
+    fun load(taskId: Long, prefillRemote: String? = null, prefillRemotePath: String? = null) {
+        if (taskId > 0) {
+            viewModelScope.launch {
+                taskRepository.getTask(taskId)?.let { task ->
+                    val isCustomInterval = task.intervalMinutes != null &&
+                        task.intervalMinutes !in PRESET_INTERVAL_MINUTES
+                    _form.value = SyncTaskForm(
+                        id = task.id,
+                        name = task.name,
+                        sourcePath = task.sourcePath,
+                        remoteName = task.remoteName,
+                        remotePath = task.remotePath,
+                        direction = task.direction,
+                        intervalMinutes = if (isCustomInterval) CUSTOM_INTERVAL_SENTINEL else task.intervalMinutes,
+                        customIntervalMinutes = if (isCustomInterval) task.intervalMinutes else null,
+                        wifiOnly = task.wifiOnly,
+                        bwLimitWifi = task.bwLimitWifi.orEmpty(),
+                        bwLimitMetered = task.bwLimitMetered.orEmpty(),
+                        bufferSize = task.bufferSize,
+                    )
+                }
+            }
+        } else {
+            _form.update { current ->
+                current.copy(
+                    remoteName = prefillRemote ?: current.remoteName,
+                    remotePath = prefillRemotePath ?: current.remotePath,
                 )
             }
         }
     }
 
-    /**
-     * Updates the form, validating bwLimit and bufferSize fields inline so
-     * the UI can reflect errors immediately. SEC-L: validates free-text rclone
-     * flags at the ViewModel boundary before they can reach the repository.
-     */
+    fun applySourcePath(path: String) = _form.update { it.copy(sourcePath = path, sourcePathTouched = true) }
+
+    fun clearSourcePath() = _form.update { it.copy(sourcePath = "", sourcePathTouched = true) }
+
+    fun touchName() = _form.update { it.copy(nameTouched = true) }
+    fun touchSourcePath() = _form.update { it.copy(sourcePathTouched = true) }
+    fun touchRemoteName() = _form.update { it.copy(remoteNameTouched = true) }
+
     fun update(transform: (SyncTaskForm) -> SyncTaskForm) = _form.update { current ->
         val next = transform(current)
+        val isCustomInterval = next.intervalMinutes == CUSTOM_INTERVAL_SENTINEL
         next.copy(
-            bwLimitError = validateBwLimit(next.bwLimitWifi)
-                ?: validateBwLimit(next.bwLimitMetered),
+            bwLimitWifiError = validateBwLimit(next.bwLimitWifi),
+            bwLimitMeteredError = validateBwLimit(next.bwLimitMetered),
             bufferSizeError = validateBufferSize(next.bufferSize),
+            customIntervalError = if (isCustomInterval && (next.customIntervalMinutes ?: 0) < 15) {
+                "Minimum 15 minutes"
+            } else null,
         )
     }
 
-    /** Persists the form and (re)schedules it. Invokes [onSaved] on success. */
     fun save(onSaved: () -> Unit) {
+        _form.update { it.copy(submitAttempted = true) }
         val form = _form.value
         if (!form.isValid) return
         viewModelScope.launch {
@@ -110,7 +145,14 @@ class SyncTaskEditViewModel @Inject constructor(
                 remoteName = form.remoteName.trim(),
                 remotePath = form.remotePath.trim(),
                 direction = form.direction,
-                intervalMinutes = form.intervalMinutes,
+                // Resolve the CUSTOM sentinel to the entered minutes; presets/manual pass
+                // through. Guard the value so a stale/invalid custom entry can never persist
+                // the sentinel or a sub-minimum interval (falls back to manual = null).
+                intervalMinutes = if (form.intervalMinutes == CUSTOM_INTERVAL_SENTINEL) {
+                    form.customIntervalMinutes?.takeIf { it >= 15 }
+                } else {
+                    form.intervalMinutes
+                },
                 wifiOnly = form.wifiOnly,
                 bwLimitWifi = form.bwLimitWifi.trim().ifBlank { null },
                 bwLimitMetered = form.bwLimitMetered.trim().ifBlank { null },
@@ -123,16 +165,11 @@ class SyncTaskEditViewModel @Inject constructor(
     }
 
     private companion object {
-        // rclone bwlimit: rate[SUFFIX][:timetable] where rate is digits with
-        // optional K/M/G/T suffix, timetable is same format.
-        // Regex: \d+[KMGTkmgt]?(:\d+[KMGTkmgt]?)? — blank is allowed (no limit).
+        const val CUSTOM_INTERVAL_SENTINEL = -1
+        private val PRESET_INTERVAL_MINUTES = setOf(null, 15, 30, 60, 360, 720, 1440)
         private val BW_LIMIT_REGEX = Regex("""^\d+[KMGTkmgt]?(:\d+[KMGTkmgt]?)?$""")
-
-        // rclone buffer-size: digits with optional K/M/G suffix (no T per rclone docs).
-        // Regex: \d+[KMGkmg]? — blank not allowed for bufferSize (default enforced).
         private val BUFFER_SIZE_REGEX = Regex("""^\d+[KMGkmg]?$""")
 
-        /** Returns an error message if [value] is non-blank and does not match bwlimit format. */
         fun validateBwLimit(value: String): String? {
             val trimmed = value.trim()
             return if (trimmed.isNotBlank() && !BW_LIMIT_REGEX.matches(trimmed)) {
@@ -140,7 +177,6 @@ class SyncTaskEditViewModel @Inject constructor(
             } else null
         }
 
-        /** Returns an error message if [value] is blank or does not match buffer-size format. */
         fun validateBufferSize(value: String): String? {
             val trimmed = value.trim()
             return when {
@@ -151,3 +187,4 @@ class SyncTaskEditViewModel @Inject constructor(
         }
     }
 }
+

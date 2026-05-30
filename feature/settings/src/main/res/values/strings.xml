@@ -4,18 +4,31 @@
     <string name="settings_title">Settings</string>
     <string name="settings_section_appearance">Appearance</string>
     <string name="settings_label_theme">Theme</string>
+    <string name="settings_theme_system">System</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
     <string name="settings_toggle_dynamic_color">Dynamic color (Android 12+)</string>
     <string name="settings_section_sync_defaults">Sync defaults</string>
     <string name="settings_toggle_wifi_only">Wi-Fi only by default</string>
     <string name="settings_toggle_require_charging">Require charging by default</string>
+    <string name="settings_sync_defaults_hint">Applied to new sync tasks; change per-task in the editor.</string>
     <string name="settings_field_bw_metered">Default metered bandwidth limit</string>
     <string name="settings_field_bw_metered_placeholder">e.g. 1M — blank = no limit</string>
-    <string name="settings_field_bw_metered_hint">Applied to sync tasks that don\'t override it</string>
+    <string name="settings_field_bw_metered_hint">Format: 1M, 500k, 10G. Applied when metered connection is active.</string>
     <string name="settings_field_bw_wifi">Default Wi-Fi bandwidth limit</string>
     <string name="settings_field_bw_wifi_placeholder">e.g. 10M — blank = no limit</string>
-    <string name="settings_btn_save_bw">Save bandwidth limits</string>
+    <string name="settings_field_bw_wifi_hint">Format: 1M, 500k, 10G. Applied on Wi-Fi connections.</string>
     <string name="settings_section_battery">Battery &amp; reliability</string>
     <string name="settings_battery_hint">Some manufacturers aggressively kill background apps, which can stop scheduled syncs. Exempt Virga from battery optimization and see dontkillmyapp.com for device-specific steps.</string>
     <string name="settings_btn_battery_settings">Battery settings</string>
     <string name="settings_btn_dontkillmyapp">dontkillmyapp.com</string>
+    <string name="settings_section_help_about">Help &amp; About</string>
+    <string name="settings_item_how_virga_works">How Virga works</string>
+    <string name="settings_item_rclone_docs">rclone documentation</string>
+    <string name="settings_item_about">About</string>
+    <string name="settings_about_version">Version %1$s</string>
+    <string name="settings_how_virga_works_title">How Virga works</string>
+    <string name="settings_how_virga_works_body">Virga schedules sync tasks that run rclone in the background. Each task has a source and destination remote (a cloud drive, local folder, or SD card). Tasks run automatically when their conditions are met — Wi-Fi, charging state, or on a schedule.\n\nRemotes are configured using rclone\'s standard config. Virga stores the rclone config securely on-device. All sync operations run locally; no data passes through Virga\'s servers.</string>
+    <string name="settings_dialog_ok">OK</string>
+    <string name="settings_snack_no_browser">No browser app found</string>
 </resources>

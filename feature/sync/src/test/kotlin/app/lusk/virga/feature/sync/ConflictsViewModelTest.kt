@@ -30,6 +30,8 @@ class ConflictsViewModelTest {
 
     private fun viewModel() = ConflictsViewModel(repository)
 
+    // --- pre-existing tests -------------------------------------------------
+
     @Test
     fun resolve_callsRepositoryWithChoice() = runTest(mainDispatcher.dispatcher) {
         coEvery { repository.resolve(any(), any()) } returns Result.success(Unit)
@@ -81,6 +83,156 @@ class ConflictsViewModelTest {
         assertThat(vm.uiState.value.conflicts.map { it.id }).containsExactly(1L, 2L)
         job.cancel()
     }
+
+    // --- single resolution --------------------------------------------------
+
+    @Test
+    fun resolve_keepVariant2_callsRepositoryWithCorrectChoice() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.resolve(any(), any()) } returns Result.success(Unit)
+        val c = conflict(id = 3)
+
+        viewModel().resolve(c, ConflictChoice.KEEP_VARIANT_2)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { repository.resolve(c, ConflictChoice.KEEP_VARIANT_2) }
+    }
+
+    @Test
+    fun resolve_keepBoth_callsRepositoryWithKeepBothChoice() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.resolve(any(), any()) } returns Result.success(Unit)
+        val c = conflict(id = 4)
+
+        viewModel().resolve(c, ConflictChoice.KEEP_BOTH)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { repository.resolve(c, ConflictChoice.KEEP_BOTH) }
+    }
+
+    // --- selection toggle ---------------------------------------------------
+
+    @Test
+    fun toggleSelection_addsConflictIdToSelectedSet() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.toggleSelection(5L)
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.selectedIds).containsExactly(5L)
+        job.cancel()
+    }
+
+    @Test
+    fun toggleSelection_removesIdWhenAlreadySelected() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.toggleSelection(5L)
+        vm.toggleSelection(5L)
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.selectedIds).isEmpty()
+        job.cancel()
+    }
+
+    @Test
+    fun clearSelection_emptiesSelectedIds() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.toggleSelection(1L)
+        vm.toggleSelection(2L)
+        vm.clearSelection()
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.selectedIds).isEmpty()
+        job.cancel()
+    }
+
+    // --- bulk resolution applies choice to selected items ------------------
+
+    @Test
+    fun confirmBulkChoice_appliesChoiceToSelectedConflicts() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.resolve(any(), any()) } returns Result.success(Unit)
+        val c1 = conflict(id = 1)
+        val c2 = conflict(id = 2)
+        val c3 = conflict(id = 3)
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.uiState.collect {} }
+        unresolvedFlow.value = listOf(c1, c2, c3)
+        advanceUntilIdle()
+
+        vm.toggleSelection(1L)
+        vm.toggleSelection(2L)
+        vm.requestBulkChoice(ConflictChoice.KEEP_VARIANT_1)
+        vm.confirmBulkChoice()
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { repository.resolve(c1, ConflictChoice.KEEP_VARIANT_1) }
+        coVerify(exactly = 1) { repository.resolve(c2, ConflictChoice.KEEP_VARIANT_1) }
+        coVerify(exactly = 0) { repository.resolve(c3, any()) }
+        job.cancel()
+    }
+
+    @Test
+    fun confirmBulkChoice_appliesChoiceToAllConflictsWhenNoneSelected() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.resolve(any(), any()) } returns Result.success(Unit)
+        val c1 = conflict(id = 1)
+        val c2 = conflict(id = 2)
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.uiState.collect {} }
+        unresolvedFlow.value = listOf(c1, c2)
+        advanceUntilIdle()
+
+        vm.requestBulkChoice(ConflictChoice.KEEP_VARIANT_2)
+        vm.confirmBulkChoice()
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { repository.resolve(c1, ConflictChoice.KEEP_VARIANT_2) }
+        coVerify(exactly = 1) { repository.resolve(c2, ConflictChoice.KEEP_VARIANT_2) }
+        job.cancel()
+    }
+
+    @Test
+    fun confirmBulkChoice_clearsSelectionAfterApplying() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.resolve(any(), any()) } returns Result.success(Unit)
+        val c1 = conflict(id = 1)
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.uiState.collect {} }
+        unresolvedFlow.value = listOf(c1)
+        advanceUntilIdle()
+
+        vm.toggleSelection(1L)
+        vm.requestBulkChoice(ConflictChoice.KEEP_BOTH)
+        vm.confirmBulkChoice()
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.selectedIds).isEmpty()
+        assertThat(vm.uiState.value.pendingBulkChoice).isNull()
+        job.cancel()
+    }
+
+    @Test
+    fun cancelBulkChoice_setsPendingBulkChoiceToNull() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.requestBulkChoice(ConflictChoice.KEEP_VARIANT_1)
+        advanceUntilIdle()
+        assertThat(vm.uiState.value.pendingBulkChoice).isEqualTo(ConflictChoice.KEEP_VARIANT_1)
+
+        vm.cancelBulkChoice()
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.pendingBulkChoice).isNull()
+        job.cancel()
+    }
+
+    // --- helpers ------------------------------------------------------------
 
     private fun conflict(id: Long) = ConflictEntity(
         id = id,

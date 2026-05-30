@@ -140,6 +140,7 @@ dependencies {
     implementation(libs.androidx.navigation3.runtime)
     implementation(libs.androidx.navigation3.ui)
     implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+    implementation(libs.compose.material3.adaptive.navigation.suite)
     implementation(libs.serialization.json)
     implementation(libs.hilt.navigation.compose)
     implementation(libs.hilt.work)

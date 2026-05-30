@@ -68,6 +68,9 @@ interface SyncRunDao {
     @Query("SELECT * FROM sync_runs ORDER BY startedAtEpochMs DESC LIMIT :limit")
     fun observeRecent(limit: Int = 100): Flow<List<SyncRunEntity>>
 
+    @Query("SELECT * FROM sync_runs WHERE id = :id")
+    fun observeById(id: Long): Flow<SyncRunEntity?>
+
     @Query("SELECT * FROM sync_runs WHERE taskId = :taskId ORDER BY startedAtEpochMs DESC")
     fun observeForTask(taskId: Long): Flow<List<SyncRunEntity>>
 
@@ -79,6 +82,9 @@ interface SyncRunDao {
 
     @Query("DELETE FROM sync_runs WHERE startedAtEpochMs < :beforeEpochMs")
     suspend fun pruneOlderThan(beforeEpochMs: Long)
+
+    @Query("DELETE FROM sync_runs")
+    suspend fun deleteAll()
 }
 
 @Dao

@@ -2,22 +2,57 @@
 <resources>
     <!-- SyncTasksScreen -->
     <string name="sync_tasks_title">Sync tasks</string>
+    <string name="sync_tasks_empty_title">No sync tasks yet</string>
+    <string name="sync_tasks_empty_body">Create your first sync task to back up files automatically.</string>
+    <string name="sync_tasks_empty_action">Create sync task</string>
     <string name="sync_tasks_empty">No sync tasks yet.\nTap + to create one.</string>
     <string name="sync_task_cd_conflicts">Conflicts</string>
     <string name="sync_task_cd_history">Sync history</string>
     <string name="sync_task_cd_add">Add sync task</string>
+    <string name="sync_task_fab_new">New task</string>
     <string name="sync_task_cd_cancel">Cancel sync</string>
     <string name="sync_task_cd_sync_now">Sync now</string>
     <string name="sync_task_cd_delete">Delete task</string>
+    <string name="sync_task_cd_more">More options</string>
+    <string name="sync_task_cd_sync_all">Sync all enabled</string>
+    <string name="sync_task_cd_cancel_all">Cancel all active syncs</string>
+    <string name="sync_task_cd_clear_selection">Clear selection</string>
+    <string name="sync_task_cd_bulk_enable">Enable selected</string>
+    <string name="sync_task_cd_bulk_disable">Disable selected</string>
+    <string name="sync_task_cd_edit">Edit task: %1$s</string>
+    <string name="sync_task_selection_count">%1$d selected</string>
+    <string name="sync_task_bulk_delete_title">Delete selected tasks?</string>
+    <string name="sync_task_bulk_delete_body">%1$d tasks will be removed and their schedules cancelled. This cannot be undone.</string>
     <string name="sync_task_delete_dialog_title">Delete sync task?</string>
     <string name="sync_task_delete_dialog_body">\"%1$s\" will be removed and its schedule cancelled. This cannot be undone.</string>
     <string name="sync_task_delete_confirm">Delete</string>
     <string name="sync_task_delete_cancel">Cancel</string>
+    <string name="sync_task_menu_run">Sync now</string>
+    <string name="sync_task_menu_duplicate">Duplicate</string>
+    <string name="sync_task_menu_edit">Edit</string>
+    <string name="sync_task_menu_history">View history</string>
+    <string name="sync_task_menu_delete">Delete</string>
+    <string name="sync_task_path_summary">%1$s → %2$s:%3$s</string>
+    <string name="sync_task_schedule_summary">%1$s • %2$s</string>
+
+    <!-- Search / filter / sort -->
+    <string name="sync_search_hint">Search tasks…</string>
+    <string name="sync_sort_menu_cd">Sort options</string>
+    <string name="sync_sort_name">Sort by name</string>
+    <string name="sync_sort_last_run">Sort by last run</string>
+    <string name="sync_sort_status">Sort by status</string>
+    <string name="sync_filter_all">All</string>
+    <string name="sync_filter_enabled">Enabled</string>
+    <string name="sync_filter_failing">Failing</string>
+    <string name="sync_filter_scheduled">Scheduled</string>
 
     <!-- SyncHistoryScreen -->
     <string name="sync_history_title">Sync history</string>
     <string name="sync_history_empty">No sync runs yet.</string>
     <string name="sync_history_cd_back">Back</string>
+    <string name="sync_history_cd_more">More options</string>
+    <string name="sync_history_clear">Clear history</string>
+    <string name="sync_history_retry">Retry</string>
     <string name="sync_history_status_success">success</string>
     <string name="sync_history_status_failed">failed</string>
     <string name="sync_history_status_running">running</string>
@@ -26,7 +61,20 @@
     <string name="sync_history_status_idle">idle</string>
     <string name="sync_history_files_transferred">%1$d files</string>
     <string name="sync_history_error_count">%1$d error(s)</string>
-    <string name="sync_history_filter_all">All</string>
+    <string name="sync_history_filter_all">All tasks</string>
+    <string name="sync_history_filter_failed">Failed only</string>
+
+    <!-- RunDetailScreen -->
+    <string name="run_detail_title">Run detail</string>
+    <string name="run_detail_not_found">Run not found.</string>
+    <string name="run_detail_started">Started</string>
+    <string name="run_detail_ended">Ended</string>
+    <string name="run_detail_duration">Duration</string>
+    <string name="run_detail_files">Files transferred</string>
+    <string name="run_detail_bytes">Data transferred</string>
+    <string name="run_detail_errors">Errors</string>
+    <string name="run_detail_log">Log / error message</string>
+    <string name="run_detail_copy_log">Copy log</string>
 
     <!-- SyncTaskEditScreen -->
     <string name="sync_edit_title_new">New sync task</string>
@@ -35,6 +83,7 @@
     <string name="sync_edit_field_name">Task name *</string>
     <string name="sync_edit_field_source_path">Local path *</string>
     <string name="sync_edit_field_source_placeholder">/storage/emulated/0/DCIM</string>
+    <string name="sync_edit_source_choose_folder">Choose folder</string>
     <string name="sync_edit_field_required">Required</string>
     <string name="sync_edit_field_remote">Remote *</string>
     <string name="sync_edit_field_remote_placeholder">Select a remote</string>
@@ -42,17 +91,29 @@
     <string name="sync_edit_field_remote_path">Remote path (e.g. /Backup)</string>
     <string name="sync_edit_field_direction">Direction</string>
     <string name="sync_edit_field_wifi_only">Wi-Fi only</string>
-    <string name="sync_edit_field_bw_wifi">BW limit (Wi-Fi)</string>
+    <string name="sync_edit_field_bw_wifi">Upload limit (Wi-Fi)</string>
     <string name="sync_edit_field_bw_wifi_placeholder">e.g. 10M or 10M:1M</string>
-    <string name="sync_edit_field_bw_wifi_hint">Optional. rclone --bwlimit format, blank = unlimited</string>
-    <string name="sync_edit_field_bw_metered">BW limit (metered)</string>
+    <string name="sync_edit_field_bw_wifi_hint">Optional. Leave blank for no limit. Uses rclone --bwlimit format.</string>
+    <string name="sync_edit_field_bw_metered">Upload limit (metered data)</string>
     <string name="sync_edit_field_bw_metered_placeholder">e.g. 1M</string>
-    <string name="sync_edit_field_buffer">Buffer size</string>
+    <string name="sync_edit_field_bw_metered_hint">Optional. Leave blank for no limit on metered connections.</string>
+    <string name="sync_edit_field_buffer">Transfer buffer size</string>
     <string name="sync_edit_field_buffer_placeholder">16M</string>
-    <string name="sync_edit_field_buffer_hint">rclone --buffer-size, e.g. 16M or 256K</string>
+    <string name="sync_edit_field_buffer_hint">Memory per transfer stream. Use 16M unless you have a reason to change it.</string>
     <string name="sync_edit_field_schedule">Schedule</string>
     <string name="sync_edit_save">Save</string>
     <string name="sync_edit_no_remotes_item">No remotes — tap to add one</string>
+    <string name="sync_edit_advanced_title">Advanced settings</string>
+    <string name="sync_edit_advanced_expand">Show</string>
+    <string name="sync_edit_advanced_collapse">Hide</string>
+
+    <!-- Direction labels and hints -->
+    <string name="sync_direction_upload">Upload</string>
+    <string name="sync_direction_download">Download</string>
+    <string name="sync_direction_bisync">Two-way</string>
+    <string name="sync_direction_hint_upload">Upload: phone → cloud. Local files are the source of truth. Never deletes cloud files.</string>
+    <string name="sync_direction_hint_download">Download: cloud → phone. Cloud files are the source of truth. Never deletes local files.</string>
+    <string name="sync_direction_hint_bisync">Two-way sync. Changes on either side are mirrored. Conflicts may occur.</string>
 
     <!-- IntervalDropdown options -->
     <string name="sync_interval_manual">Manual only</string>
@@ -62,6 +123,9 @@
     <string name="sync_interval_6hours">Every 6 hours</string>
     <string name="sync_interval_12hours">Every 12 hours</string>
     <string name="sync_interval_daily">Daily</string>
+    <string name="sync_interval_custom_option">Custom…</string>
+    <string name="sync_interval_custom">Every %1$d min (custom)</string>
+    <string name="sync_interval_custom_label">Interval (minutes)</string>
 
     <!-- ConflictsScreen -->
     <string name="conflicts_title">Conflicts</string>
@@ -74,6 +138,11 @@
     <string name="conflicts_btn_keep_local">Keep local</string>
     <string name="conflicts_btn_keep_remote">Keep remote</string>
     <string name="conflicts_btn_keep_both">Keep both</string>
+    <string name="conflicts_selection_count">%1$d selected</string>
+    <string name="conflicts_bulk_keep_local">Keep all local</string>
+    <string name="conflicts_bulk_keep_remote">Keep all remote</string>
+    <string name="conflicts_bulk_keep_both">Keep both (all)</string>
+    <string name="conflicts_bulk_body">Apply to %1$d conflict(s):\n%2$s</string>
     <string name="conflicts_dialog_keep_local_title">Keep local version?</string>
     <string name="conflicts_dialog_keep_local_body">The remote (cloud) version will be permanently deleted.</string>
     <string name="conflicts_dialog_keep_remote_title">Keep remote version?</string>
@@ -82,4 +151,9 @@
     <string name="conflicts_dialog_keep_both_body">Both variants will be left on the remote under their conflict names.</string>
     <string name="conflicts_dialog_confirm">Confirm</string>
     <string name="conflicts_dialog_cancel">Cancel</string>
+    <string name="sync_tasks_no_match_title">No matching tasks</string>
+    <string name="sync_edit_source_path_unresolvable">Could not use that folder; enter the path manually.</string>
+    <string name="sync_task_deleted_snackbar">\"%1$s\" deleted</string>
+    <string name="sync_task_deleted_snackbar_undo">Undo</string>
 </resources>
+

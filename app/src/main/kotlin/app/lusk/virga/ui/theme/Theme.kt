@@ -28,6 +28,15 @@ private val DarkColors = darkColorScheme(
 /**
  * App theme. Uses Material You dynamic color on Android 12+ when [dynamicColor]
  * is enabled; otherwise the brand palette.
+ *
+ * Success color (ui-10): M3's color system has no first-class "success" role.
+ * [VirgaSuccess] / [VirgaSuccessDark] in Color.kt are preserved as named
+ * constants for any future custom component that needs them. The feature/sync
+ * StatusChip currently maps SUCCESS → MaterialTheme.colorScheme.tertiary
+ * (tertiaryContainer tint), which is the closest semantic slot available in
+ * the shared M3 scheme without a custom ColorScheme extension. If a more
+ * prominent semantic mapping is needed project-wide, introduce a
+ * CompositionLocal<Color> named LocalSuccessColor in a future ADR.
  */
 @Composable
 fun VirgaTheme(

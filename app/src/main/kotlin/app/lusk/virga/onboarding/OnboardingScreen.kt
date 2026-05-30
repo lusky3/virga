@@ -9,6 +9,9 @@ import android.os.Environment
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,9 +19,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -33,7 +37,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +46,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -140,36 +147,58 @@ fun OnboardingScreen(
                     }) { Text(stringResource(R.string.onboarding_btn_skip)) }
                 }
 
-                Button(onClick = {
-                    val page = pagerState.currentPage
-                    val satisfied = when (page) {
-                        1 -> storageGranted
-                        2 -> batteryExempt
-                        else -> true
-                    }
-                    // First tap on an unsatisfied permission page: launch the
-                    // system intent and stay, so the user can grant access and
-                    // see the status hint update. A later tap advances regardless.
-                    if (!satisfied && page !in intentLaunchedPages && (page == 1 || page == 2)) {
-                        val ok = when (page) {
-                            1 -> requestStorageAccess(context, readPermissionLauncher::launch)
-                            else -> openBatterySettings(context)
+                // a11y-05: when the primary action will launch a system settings
+                // intent (first tap on an unsatisfied permission page), override the
+                // semantic onClick label to describe the real action.
+                val page = pagerState.currentPage
+                val satisfied = when (page) {
+                    1 -> storageGranted
+                    2 -> batteryExempt
+                    else -> true
+                }
+                val willLaunchIntent = !satisfied && page !in intentLaunchedPages && (page == 1 || page == 2)
+                val actionLabel = when {
+                    willLaunchIntent && page == 1 -> stringResource(R.string.onboarding_btn_open_storage_settings)
+                    willLaunchIntent && page == 2 -> stringResource(R.string.onboarding_btn_open_battery_settings)
+                    else -> null
+                }
+
+                Button(
+                    onClick = {
+                        val currentPage = pagerState.currentPage
+                        val currentSatisfied = when (currentPage) {
+                            1 -> storageGranted
+                            2 -> batteryExempt
+                            else -> true
                         }
-                        if (!ok) {
-                            scope.launch {
-                                snackbar.showSnackbar(if (page == 1) storageSettingsError else batterySettingsError)
+                        if (!currentSatisfied && currentPage !in intentLaunchedPages && (currentPage == 1 || currentPage == 2)) {
+                            val ok = when (currentPage) {
+                                1 -> requestStorageAccess(context, readPermissionLauncher::launch)
+                                else -> openBatterySettings(context)
                             }
+                            if (!ok) {
+                                scope.launch {
+                                    snackbar.showSnackbar(
+                                        if (currentPage == 1) storageSettingsError else batterySettingsError,
+                                    )
+                                }
+                            }
+                            intentLaunchedPages = intentLaunchedPages + currentPage
+                            return@Button
                         }
-                        intentLaunchedPages = intentLaunchedPages + page
-                        return@Button
-                    }
-                    if (page == pages.lastIndex) {
-                        viewModel.completeOnboarding()
-                        onFinished()
+                        if (currentPage == pages.lastIndex) {
+                            viewModel.completeOnboarding()
+                            onFinished()
+                        } else {
+                            scope.launch { pagerState.animateScrollToPage(currentPage + 1) }
+                        }
+                    },
+                    modifier = if (actionLabel != null) {
+                        Modifier.semantics { onClick(label = actionLabel, action = null) }
                     } else {
-                        scope.launch { pagerState.animateScrollToPage(page + 1) }
-                    }
-                }) {
+                        Modifier
+                    },
+                ) {
                     Text(
                         if (pagerState.currentPage == pages.lastIndex) {
                             stringResource(R.string.onboarding_btn_get_started)
@@ -278,21 +307,47 @@ private fun PageContent(title: String, body: String, statusHint: String? = null)
     }
 }
 
+/**
+ * Animated page indicator.
+ *
+ * a11y-04: the containing Row carries a "Page X of N" stateDescription and the
+ * individual dots are cleared of semantics so TalkBack announces the row as a
+ * single status element rather than N unlabelled tappable blobs.
+ *
+ * ui-12: the active dot animates its width and color.
+ */
 @Composable
 private fun PageIndicator(pageCount: Int, current: Int) {
+    val pageLabel = stringResource(R.string.onboarding_page_indicator, current + 1, pageCount)
     Row(
-        Modifier.fillMaxWidth(),
+        Modifier
+            .fillMaxWidth()
+            .semantics { stateDescription = pageLabel },
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         repeat(pageCount) { i ->
-            val color = if (i == current) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.outlineVariant
+            val isActive = i == current
+
+            val dotWidth by animateDpAsState(
+                targetValue = if (isActive) 20.dp else 8.dp,
+                animationSpec = tween(durationMillis = 200),
+                label = "dotWidth",
+            )
+            val dotColor by animateColorAsState(
+                targetValue = if (isActive) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.outlineVariant,
+                animationSpec = tween(durationMillis = 200),
+                label = "dotColor",
+            )
+
             Box(
                 Modifier
+                    .clearAndSetSemantics {}
                     .padding(horizontal = 4.dp)
-                    .size(if (i == current) 10.dp else 8.dp)
-                    .background(color = color, shape = CircleShape),
+                    .width(dotWidth)
+                    .height(8.dp)
+                    .background(color = dotColor, shape = CircleShape),
             )
         }
     }

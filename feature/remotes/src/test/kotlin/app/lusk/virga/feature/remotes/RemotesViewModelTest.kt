@@ -1,5 +1,8 @@
 package app.lusk.virga.feature.remotes
 
+import android.content.ContentResolver
+import android.content.Context
+import android.net.Uri
 import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.database.entity.RemoteEntity
 import app.lusk.virga.core.rclone.oauth.OAuthConfig
@@ -21,6 +24,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
+import java.io.ByteArrayInputStream
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RemotesViewModelTest {
@@ -36,6 +40,38 @@ class RemotesViewModelTest {
     private val tokenExchanger: OAuthTokenExchanger = mockk(relaxed = true)
     private val store = OAuthStore()  // real instance — simple data holder
 
+    /**
+     * Mock Context that resolves getString calls to predictable values matching
+     * the English string templates in strings.xml, without requiring Robolectric.
+     */
+    private val context: Context = mockk {
+        every { getString(any()) } answers {
+            val id = firstArg<Int>()
+            when (id) {
+                R.string.remotes_msg_state_mismatch -> "Sign-in state mismatch; please try again."
+                R.string.remotes_msg_could_not_save -> "Could not save remote."
+                R.string.remotes_msg_config_imported -> "Config imported."
+                R.string.remotes_msg_import_too_large -> "Config file is too large to import (max 256 KB)."
+                else -> "string#$id"
+            }
+        }
+        every { getString(any(), *anyVararg()) } answers {
+            val id = firstArg<Int>()
+            // MockK may record the format varargs either flattened or wrapped in a
+            // single Object[] — normalise both shapes to a flat list.
+            val args = args.drop(1).flatMap { if (it is Array<*>) it.toList() else listOf(it) }
+            when (id) {
+                R.string.remotes_msg_oauth_not_configured ->
+                    "${args[0]} OAuth client ID isn't configured yet."
+                R.string.remotes_msg_sign_in_failed ->
+                    "Sign-in failed: ${args[0]}"
+                R.string.remotes_msg_added_remote ->
+                    "Added ${args[0]} remote \"${args[1]}\""
+                else -> "string#$id(${args.joinToString()})"
+            }
+        }
+    }
+
     private fun config(gdriveClientId: String = "client-google") = OAuthConfig(
         defaultRedirectUri = "virga://oauth/callback",
         clientIds = mapOf(
@@ -45,8 +81,15 @@ class RemotesViewModelTest {
         ),
     )
 
+    // Route the VM's IO work onto the test scheduler so advanceUntilIdle() awaits it.
+    private val testDispatchers = object : app.lusk.virga.core.common.dispatchers.DispatcherProvider {
+        override val main = mainDispatcher.dispatcher
+        override val default = mainDispatcher.dispatcher
+        override val io = mainDispatcher.dispatcher
+    }
+
     private fun viewModel(cfg: OAuthConfig = config()) =
-        RemotesViewModel(repository, cfg, store, tokenExchanger)
+        RemotesViewModel(context, repository, cfg, store, tokenExchanger, testDispatchers)
 
     // --- Provider list -----------------------------------------------------------
 
@@ -221,6 +264,220 @@ class RemotesViewModelTest {
 
         assertThat(vm.uiState.value.message).isNull()
         collector.cancel()
+    }
+
+    @Test
+    fun addRemote_lowercasesAndTrimsBeckendType() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.addRemote(any(), any(), any()) } returns Result.success(Unit)
+        val vm = viewModel()
+
+        vm.addRemote(
+            name = "my-bucket",
+            type = " S3 ",
+            paramsText = "",
+            onResult = { _, _ -> },
+        )
+        advanceUntilIdle()
+
+        coVerify {
+            repository.addRemote(
+                name = "my-bucket",
+                type = "s3",
+                params = any(),
+            )
+        }
+    }
+
+    // --- importConfigFromUri ---------------------------------------------------
+
+    /**
+     * Builds a mock Uri + Context whose ContentResolver returns [bytes] from
+     * openInputStream.
+     */
+    private fun uriReturning(bytes: ByteArray): Uri {
+        val stream = ByteArrayInputStream(bytes)
+        val resolver: ContentResolver = mockk {
+            every { openInputStream(any()) } returns stream
+        }
+        every { context.contentResolver } returns resolver
+        return mockk()
+    }
+
+    @Test
+    fun `importConfigFromUri emits config-imported message on success`() = runTest(mainDispatcher.dispatcher) {
+        val confText = "[myremote]\ntype = drive\n"
+        val uri = uriReturning(confText.toByteArray(Charsets.UTF_8))
+        coEvery { repository.importConfig(any()) } returns Result.success(Unit)
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.importConfigFromUri(uri)
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.message).isEqualTo("Config imported.")
+        coVerify { repository.importConfig(confText) }
+        collector.cancel()
+    }
+
+    @Test
+    fun `importConfigFromUri emits too-large message when content exceeds 256 KB`() = runTest(mainDispatcher.dispatcher) {
+        // 256 * 1024 + 1 bytes — just over the cap
+        val oversizedBytes = ByteArray(256 * 1024 + 1) { 'x'.code.toByte() }
+        val uri = uriReturning(oversizedBytes)
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.importConfigFromUri(uri)
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.message).contains("too large")
+        coVerify(exactly = 0) { repository.importConfig(any()) }
+        collector.cancel()
+    }
+
+    @Test
+    fun `importConfigFromUri does not call repository when content is exactly at the cap`() = runTest(mainDispatcher.dispatcher) {
+        // exactly 256 * 1024 bytes — should succeed (boundary is strictly greater than)
+        val exactBytes = ByteArray(256 * 1024) { 'a'.code.toByte() }
+        val uri = uriReturning(exactBytes)
+        coEvery { repository.importConfig(any()) } returns Result.success(Unit)
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.importConfigFromUri(uri)
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.message).isEqualTo("Config imported.")
+        coVerify(exactly = 1) { repository.importConfig(any()) }
+        collector.cancel()
+    }
+
+    @Test
+    fun `importConfigFromUri surfaces repository failure message`() = runTest(mainDispatcher.dispatcher) {
+        val confText = "[remote]\ntype = s3\n"
+        val uri = uriReturning(confText.toByteArray(Charsets.UTF_8))
+        coEvery { repository.importConfig(any()) } returns Result.failure(RuntimeException("parse error"))
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.importConfigFromUri(uri)
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.message).isEqualTo("parse error")
+        collector.cancel()
+    }
+
+    // --- startOAuth with getString vararg pattern ----------------------------
+
+    @Test
+    fun `startOAuth missing client id message contains provider display name`() = runTest(mainDispatcher.dispatcher) {
+        // OneDrive has an empty client ID in the default config()
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.startOAuth(OAuthProviders.OneDrive, "my-onedrive")
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.message).contains("OneDrive")
+        assertThat(vm.uiState.value.message).contains("OAuth client ID")
+        collector.cancel()
+    }
+
+    @Test
+    fun `startOAuth missing client id does not set oauthInProgress`() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.startOAuth(OAuthProviders.OneDrive, "my-onedrive")
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.oauthInProgress).isFalse()
+        collector.cancel()
+    }
+
+    @Test
+    fun `startOAuth missing client id does not publish launchUrl`() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.startOAuth(OAuthProviders.OneDrive, "my-onedrive")
+        advanceUntilIdle()
+
+        assertThat(vm.launchUrl.value).isNull()
+        collector.cancel()
+    }
+
+    @Test
+    fun `startOAuth valid client id sets oauthInProgress true`() = runTest(mainDispatcher.dispatcher) {
+        every { tokenExchanger.authorizeUrl(any()) } returns "https://auth.example/authorize?state=x"
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.startOAuth(OAuthProviders.GoogleDrive, "gdrive-remote")
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.oauthInProgress).isTrue()
+        collector.cancel()
+    }
+
+    @Test
+    fun `startOAuth valid client id publishes non-null launchUrl`() = runTest(mainDispatcher.dispatcher) {
+        every { tokenExchanger.authorizeUrl(any()) } returns "https://auth.example/authorize?state=x"
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.startOAuth(OAuthProviders.GoogleDrive, "gdrive-remote")
+        advanceUntilIdle()
+
+        assertThat(vm.launchUrl.value).isNotNull()
+        collector.cancel()
+    }
+
+    // --- addRemote lowercase/trim (additional coverage) ----------------------
+
+    @Test
+    fun `addRemote lowercases mixed-case backend type`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.addRemote(any(), any(), any()) } returns Result.success(Unit)
+        val vm = viewModel()
+
+        vm.addRemote(name = "gdrive", type = "Drive", paramsText = "", onResult = { _, _ -> })
+        advanceUntilIdle()
+
+        coVerify { repository.addRemote(name = "gdrive", type = "drive", params = any()) }
+    }
+
+    @Test
+    fun `addRemote trims whitespace from name and type`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.addRemote(any(), any(), any()) } returns Result.success(Unit)
+        val vm = viewModel()
+
+        vm.addRemote(name = "  spaces  ", type = "  S3  ", paramsText = "", onResult = { _, _ -> })
+        advanceUntilIdle()
+
+        coVerify { repository.addRemote(name = "spaces", type = "s3", params = any()) }
+    }
+
+    @Test
+    fun `addRemote invokes onResult with success false when repository fails`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.addRemote(any(), any(), any()) } returns Result.failure(RuntimeException("conflict"))
+        val vm = viewModel()
+        var resultSuccess: Boolean? = null
+        var resultError: String? = null
+
+        vm.addRemote(name = "bad", type = "ftp", paramsText = "", onResult = { s, e -> resultSuccess = s; resultError = e })
+        advanceUntilIdle()
+
+        assertThat(resultSuccess).isFalse()
+        assertThat(resultError).isEqualTo("conflict")
     }
 
     private fun OAuthProvider.unused() = Unit  // silence unused-import warning for OAuthProvider import

@@ -5,7 +5,39 @@
     <string name="explorer_cd_back">Back</string>
     <string name="explorer_truncated_notice">Showing first 2,000 entries — directory is very large.</string>
     <string name="explorer_empty_folder">Empty folder</string>
+    <string name="explorer_empty_folder_body">There are no files or folders here.</string>
     <string name="explorer_no_remotes">No remotes to browse.</string>
     <string name="explorer_add_remote">Add a remote</string>
     <string name="explorer_btn_retry">Retry</string>
+
+    <!-- Loading / error a11y -->
+    <string name="explorer_cd_loading">Loading files</string>
+    <string name="explorer_error_label">Error:</string>
+
+    <!-- Search -->
+    <string name="explorer_search_hint">Search in this folder…</string>
+    <string name="explorer_cd_search_open">Search</string>
+    <string name="explorer_cd_search_close">Close search</string>
+
+    <!-- Sort menu -->
+    <string name="explorer_cd_sort">Sort</string>
+    <string name="explorer_sort_name_asc">Name (A → Z)</string>
+    <string name="explorer_sort_name_desc">Name (Z → A)</string>
+    <string name="explorer_sort_size_asc">Size (smallest first)</string>
+    <string name="explorer_sort_size_desc">Size (largest first)</string>
+    <string name="explorer_sort_modified_asc">Modified (oldest first)</string>
+    <string name="explorer_sort_modified_desc">Modified (newest first)</string>
+
+    <!-- Sync FAB -->
+    <string name="explorer_sync_folder">Sync this folder</string>
+
+    <!-- Item a11y content descriptions -->
+    <!-- %1$s = folder name -->
+    <string name="explorer_a11y_folder">Folder, %1$s</string>
+    <!-- %1$s = file name, %2$s = size string -->
+    <string name="explorer_a11y_file_size">File, %1$s, %2$s</string>
+    <!-- %1$s = file name (no size available) -->
+    <string name="explorer_a11y_file">File, %1$s</string>
+    <!-- click label for folder items -->
+    <string name="explorer_cd_open_folder">Open folder</string>
 </resources>

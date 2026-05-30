@@ -13,6 +13,8 @@ class SyncHistoryRepository @Inject constructor(
 ) {
     val recentRuns: Flow<List<SyncRunEntity>> = runDao.observeRecent()
 
+    fun observeRun(id: Long): Flow<SyncRunEntity?> = runDao.observeById(id)
+
     fun runsForTask(taskId: Long): Flow<List<SyncRunEntity>> = runDao.observeForTask(taskId)
 
     /** Records the start of a run and returns its id for later [finishRun]. */
@@ -50,4 +52,6 @@ class SyncHistoryRepository @Inject constructor(
     )
 
     suspend fun pruneOlderThan(beforeEpochMs: Long) = runDao.pruneOlderThan(beforeEpochMs)
+
+    suspend fun clearAll() = runDao.deleteAll()
 }
