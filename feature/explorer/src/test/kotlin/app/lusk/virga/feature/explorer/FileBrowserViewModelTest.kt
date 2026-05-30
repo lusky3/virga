@@ -1,5 +1,6 @@
 package app.lusk.virga.feature.explorer
 
+import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.database.entity.RemoteEntity
@@ -37,7 +38,17 @@ class FileBrowserViewModelTest {
         every { remotes } returns remotesFlow
     }
 
-    private fun viewModel() = FileBrowserViewModel(engine, repository)
+    // Route the ViewModel's background work onto the test dispatcher so the
+    // load() coroutine's withContext(default) block resolves on the virtual-time
+    // scheduler instead of a real thread — otherwise its resume onto Main can
+    // outlive runTest and crash a later test after resetMain (flaky leak).
+    private val testDispatchers = object : DispatcherProvider {
+        override val main = mainDispatcher.dispatcher
+        override val default = mainDispatcher.dispatcher
+        override val io = mainDispatcher.dispatcher
+    }
+
+    private fun viewModel() = FileBrowserViewModel(engine, repository, testDispatchers)
 
     private fun file(name: String, size: Long = 0L, modMs: Long? = null) =
         FileItem(name = name, path = name, isDir = false, size = size, modTimeEpochMs = modMs)

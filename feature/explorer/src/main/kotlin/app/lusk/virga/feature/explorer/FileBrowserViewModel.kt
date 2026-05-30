@@ -2,13 +2,13 @@ package app.lusk.virga.feature.explorer
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.common.error.toUserMessage
 import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.rclone.RcloneEngine
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -61,6 +61,7 @@ data class FileBrowserUiState(
 class FileBrowserViewModel @Inject constructor(
     private val engine: RcloneEngine,
     remoteRepository: RemoteRepository,
+    private val dispatchers: DispatcherProvider,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(FileBrowserUiState())
@@ -153,7 +154,7 @@ class FileBrowserViewModel @Inject constructor(
             _state.update { it.copy(remoteName = remote, path = path, loading = true, error = null) }
             try {
                 val raw = engine.listDir("$remote:", path)
-                val (capped, truncated) = withContext(Dispatchers.Default) {
+                val (capped, truncated) = withContext(dispatchers.default) {
                     val truncated = raw.size > MAX_ENTRIES
                     (if (truncated) raw.take(MAX_ENTRIES) else raw) to truncated
                 }

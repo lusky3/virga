@@ -55,7 +55,7 @@ for abi in $ABIS; do
     go build \
       -tags "noselfupdate" \
       -trimpath \
-      -ldflags "-s -w -X github.com/rclone/rclone/fs.Version=$VERSION_TAG-virga" \
+      -ldflags "-s -w -X github.com/rclone/rclone/fs.Version=$VERSION_TAG-virga -extldflags=-Wl,-z,max-page-size=16384,-z,common-page-size=16384" \
       -o "$outdir/librclone.so" \
       .
   echo "   -> $outdir/librclone.so ($(du -h "$outdir/librclone.so" | cut -f1))"

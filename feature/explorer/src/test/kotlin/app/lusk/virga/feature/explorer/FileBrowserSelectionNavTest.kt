@@ -1,5 +1,6 @@
 package app.lusk.virga.feature.explorer
 
+import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.database.entity.RemoteEntity
@@ -35,7 +36,13 @@ class FileBrowserSelectionNavTest {
         every { remotes } returns remotesFlow
     }
 
-    private fun viewModel() = FileBrowserViewModel(engine, repository)
+    private val testDispatchers = object : DispatcherProvider {
+        override val main = mainDispatcher.dispatcher
+        override val default = mainDispatcher.dispatcher
+        override val io = mainDispatcher.dispatcher
+    }
+
+    private fun viewModel() = FileBrowserViewModel(engine, repository, testDispatchers)
 
     private fun file(name: String, path: String = name) =
         FileItem(name = name, path = path, isDir = false, size = 0L, modTimeEpochMs = null)

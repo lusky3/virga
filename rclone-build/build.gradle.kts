@@ -7,7 +7,7 @@ plugins {
     base
 }
 
-val rcloneVersion = "v1.69.1"
+val rcloneVersion = "v1.74.2"
 val ndkVersion = "27.2.12479018"
 val minSdk = 26
 val abis = listOf("arm64-v8a", "armeabi-v7a", "x86_64")
@@ -40,9 +40,10 @@ val buildRcloneBinaries by tasks.registering(Exec::class) {
     }
 
     // Skip entirely when prebuilt binaries are already on disk. The binaries
-    // are checked into git for contributor convenience, so the default
-    // `./gradlew assemble*` is a no-op for this task. CI rebuilds by deleting
-    // the jniLibs/ directory, or by bumping `rcloneVersion`.
+    // are gitignored (too large for the repo), so the first build on a fresh
+    // checkout produces them and subsequent `./gradlew assemble*` runs are a
+    // no-op for this task. Force a rebuild by deleting the jniLibs/ binaries or
+    // bumping `rcloneVersion` (e.g. after changing the build script's flags).
     onlyIf {
         abis.any { abi ->
             !jniLibsDir.file("$abi/librclone.so").asFile.exists()
