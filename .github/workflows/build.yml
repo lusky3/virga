@@ -27,6 +27,9 @@ jobs:
     environment: dev
     steps:
       - uses: actions/checkout@v4
+        with:
+          # SonarCloud needs full history for accurate blame/new-code detection.
+          fetch-depth: 0
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -85,17 +88,72 @@ jobs:
           VIRGA_DEBUG_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: ./gradlew assembleFossDebug
 
-      - name: Unit tests
-        run: ./gradlew testFossDebugUnitTest
+      - name: Unit tests + coverage
+        # koverXmlReport runs every module's unit tests (incl. the library
+        # modules' testDebugUnitTest, which a bare testFossDebugUnitTest misses)
+        # and emits the aggregated JaCoCo-format report Codecov + Sonar consume.
+        run: ./gradlew koverXmlReport
 
       - name: Lint
         run: ./gradlew lintFossDebug
+
+      - name: Upload coverage to Codecov
+        if: ${{ env.HAS_CODECOV == 'true' }}
+        env:
+          HAS_CODECOV: ${{ secrets.CODECOV_TOKEN != '' }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: build/reports/kover/report.xml
+          fail_ci_if_error: false
+
+      - name: SonarCloud analysis
+        # Reuses the already-compiled classes + the Kover XML (path configured in
+        # the root build.gradle.kts). Skipped when no token (e.g. fork PRs).
+        if: ${{ env.HAS_SONAR == 'true' }}
+        env:
+          HAS_SONAR: ${{ secrets.SONAR_TOKEN != '' }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: ./gradlew sonar --info
+
+      - name: Snyk dependency scan
+        # Reuses the configured Gradle project (Android SDK already set up). Reports
+        # high-severity dependency CVEs and sends a snapshot to Snyk. Non-blocking
+        # for now (|| true) so transitive CVEs don't wall the build; tighten by
+        # dropping the `|| true` on `snyk test` once the baseline is triaged.
+        if: ${{ env.HAS_SNYK == 'true' }}
+        env:
+          HAS_SNYK: ${{ secrets.SNYK_TOKEN != '' }}
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          npm install -g snyk
+          snyk test --all-sub-projects --severity-threshold=high || true
+          snyk monitor --all-sub-projects || true
 
       - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
           name: foss-debug-apks
           path: app/build/outputs/apk/foss/debug/*.apk
+
+  secret-scan:
+    # GitGuardian secret scanning over the commit range. Independent of the build
+    # so it runs in parallel. Needs full history. The token is a repo-level secret
+    # (this job has no environment); skipped when absent, e.g. on fork PRs.
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: GitGuardian scan
+        # ggshield auto-detects the push/PR commit range from the GitHub context;
+        # it only needs the API key. Skipped when the repo-level token is absent.
+        if: ${{ env.HAS_GG == 'true' }}
+        uses: GitGuardian/ggshield-action@v1
+        env:
+          HAS_GG: ${{ secrets.GIT_GUARDIAN_TOKEN != '' }}
+          GITGUARDIAN_API_KEY: ${{ secrets.GIT_GUARDIAN_TOKEN }}
 
   rclone-update-check:
     # Weekly check for a newer rclone release; opens nothing automatically here,

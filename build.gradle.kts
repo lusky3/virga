@@ -12,6 +12,24 @@ plugins {
     alias(libs.plugins.room) apply false
     // Applied (not apply-false) so the root project is the coverage aggregator.
     alias(libs.plugins.kover)
+    // Applied at root: the sonar task analyzes the whole multi-module build.
+    alias(libs.plugins.sonarqube)
+}
+
+// SonarCloud analysis (org "lusk", project "lusky3_virga"). Coverage is fed from
+// Kover's aggregated XML — Kover emits a JaCoCo-format report, which Sonar reads
+// via sonar.coverage.jacoco.xmlReportPaths. host.url is omitted: the plugin
+// targets SonarCloud automatically when sonar.organization is set. CI runs
+// `./gradlew koverXmlReport sonar` with SONAR_TOKEN.
+sonar {
+    properties {
+        property("sonar.projectKey", "lusky3_virga")
+        property("sonar.organization", "lusk")
+        property(
+            "sonar.coverage.jacoco.xmlReportPaths",
+            layout.buildDirectory.file("reports/kover/report.xml").get().asFile.path,
+        )
+    }
 }
 
 // Aggregate unit-test coverage from every code module into one report.

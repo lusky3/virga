@@ -42,6 +42,7 @@ robolectric = "4.16.1"
 truth = "1.4.5"
 desugar = "2.1.5"
 kover = "0.9.8"
+sonarqube = "7.3.0.8198"
 
 [libraries]
 # Core
@@ -153,6 +154,7 @@ android-test = { id = "com.android.test", version.ref = "agp" }
 baselineprofile = { id = "androidx.baselineprofile", version.ref = "baselineprofile" }
 roborazzi = { id = "io.github.takahirom.roborazzi", version.ref = "roborazzi" }
 kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }
+sonarqube = { id = "org.sonarqube", version.ref = "sonarqube" }
 
 [bundles]
 compose = ["compose-ui", "compose-ui-graphics", "compose-ui-tooling-preview", "compose-material3", "compose-material-icons"]
