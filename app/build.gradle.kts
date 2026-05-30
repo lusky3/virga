@@ -21,6 +21,23 @@ fun oauthClientId(provider: String): String =
         ?: localProps.getProperty("oauthClientId.$provider")
         ?: ""
 
+// Release signing. The keystore and its passwords never enter git: read from
+// keystore.properties (gitignored) for local release builds, with env-var
+// overrides (VIRGA_KEYSTORE_*) so CI can inject secrets. storeFile is resolved
+// relative to the project root. When no keystore is configured (e.g. an open-
+// source contributor's CI without the secrets) release stays unsigned rather
+// than failing the build.
+val keystoreProps = Properties().apply {
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+fun keystoreProp(key: String, env: String): String? =
+    System.getenv(env) ?: keystoreProps.getProperty(key)
+val releaseStoreFile: java.io.File? =
+    keystoreProp("storeFile", "VIRGA_KEYSTORE_FILE")
+        ?.let { rootProject.file(it) }
+        ?.takeIf { it.exists() }
+
 android {
     namespace = "app.lusk.virga"
 
@@ -93,6 +110,17 @@ android {
         }
     }
 
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = keystoreProp("storePassword", "VIRGA_KEYSTORE_PASSWORD")
+                keyAlias = keystoreProp("keyAlias", "VIRGA_KEY_ALIAS")
+                keyPassword = keystoreProp("keyPassword", "VIRGA_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
@@ -106,6 +134,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            // Sign with the upload keystore when configured (keystore.properties
+            // or VIRGA_KEYSTORE_* env vars). The App Links assetlinks.json trusts
+            // this key's SHA-256, so an unsigned/wrong-key release would fail
+            // domain verification. Left unsigned only when no keystore is present.
+            signingConfigs.findByName("release")?.let { signingConfig = it }
         }
     }
 
