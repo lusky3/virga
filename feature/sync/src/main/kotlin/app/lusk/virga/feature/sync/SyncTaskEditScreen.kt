@@ -367,6 +367,12 @@ private fun resolveTreeUriToPath(uri: Uri): String? {
         "/storage/$volume"
     }
     val resolved = if (relativePath.isEmpty()) File(base) else File(base, relativePath)
-    return if (resolved.exists()) resolved.absolutePath else null
+    // Reject path traversal: a malicious DocumentsProvider could return a docId with
+    // ".." segments. Canonicalize (resolves "../" and symlinks) and require the result
+    // to stay within the storage root.
+    val canonical = runCatching { resolved.canonicalPath }.getOrNull() ?: return null
+    val canonicalBase = runCatching { File(base).canonicalPath }.getOrNull() ?: return null
+    if (canonical != canonicalBase && !canonical.startsWith("$canonicalBase/")) return null
+    return if (resolved.exists()) canonical else null
 }
 

@@ -17,7 +17,12 @@ captures/
 # Signing
 *.keystore
 *.jks
+*.p12
 keystore.properties
+
+# Google services (contains API keys)
+google-services.json
+google-services-*.json
 
 # OS
 .DS_Store

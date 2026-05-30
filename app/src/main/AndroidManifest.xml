@@ -66,5 +66,13 @@
                 tools:node="remove" />
         </provider>
 
+        <!-- SEC-L2: WorkManager's diagnostics receiver (exported, DUMP-protected) only
+             dumps internal queue state for adb tooling we don't use in production —
+             strip it to remove the attack surface. (ProfileInstallReceiver is kept:
+             it is needed by the baseline-profile/benchmark tooling and is DUMP-gated.) -->
+        <receiver
+            android:name="androidx.work.impl.diagnostics.DiagnosticsReceiver"
+            tools:node="remove" />
+
     </application>
 </manifest>

@@ -6,7 +6,7 @@
 # Prerequisites: Go (pinned), Android NDK. See rclone-build/README.md.
 set -euo pipefail
 
-RCLONE_VERSION="${RCLONE_VERSION:-v1.69.1}"
+RCLONE_VERSION="${RCLONE_VERSION:-v1.74.2}"
 NDK_VERSION="${NDK_VERSION:-27.2.12479018}"
 MIN_SDK="${MIN_SDK:-26}"
 

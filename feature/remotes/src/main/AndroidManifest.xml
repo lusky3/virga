@@ -12,6 +12,7 @@
             android:name=".oauth.OAuthRedirectActivity"
             android:exported="true"
             android:launchMode="singleTask"
+            android:taskAffinity=""
             android:noHistory="true"
             android:theme="@android:style/Theme.NoDisplay">
             <intent-filter android:autoVerify="false">

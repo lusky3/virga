@@ -99,6 +99,7 @@ android {
             isDebuggable = true
         }
         release {
+            isDebuggable = false // explicit guard (AGP default) so release can never ship debuggable
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

@@ -9,8 +9,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege: this workflow only builds and uploads artifacts.
+permissions:
+  contents: read
+
 env:
-  RCLONE_VERSION: v1.69.1
+  RCLONE_VERSION: v1.74.2
   NDK_VERSION: 27.2.12479018
 
 jobs:
@@ -31,7 +35,8 @@ jobs:
           go-version: '1.25.x'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        # SEC-F2: third-party action pinned to a commit SHA (not a mutable tag).
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
 
       - name: Install NDK
         run: sdkmanager "ndk;${NDK_VERSION}"

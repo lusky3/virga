@@ -52,7 +52,13 @@ class RcloneEngineImpl @Inject constructor(
     override suspend fun startDaemon(): RcloneDaemon = lock.withLock {
         daemon?.takeIf { daemonManager.isAlive(it) }?.let { return it }
         val configFile = configManager.decryptForDaemon()
-        daemonManager.start(configFile).also { daemon = it }
+        try {
+            daemonManager.start(configFile).also { daemon = it }
+        } catch (t: Throwable) {
+            // Don't leave the decrypted plaintext config on disk if startup failed.
+            runCatching { configManager.cleanup() }
+            throw t
+        }
     }
 
     override suspend fun stopDaemon() = lock.withLock {

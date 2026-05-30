@@ -11,7 +11,7 @@ on:
         required: true
 
 env:
-  RCLONE_VERSION: v1.69.1
+  RCLONE_VERSION: v1.74.2
   NDK_VERSION: 27.2.12479018
 
 permissions:
@@ -56,7 +56,8 @@ jobs:
           go-version: '1.25.x'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        # SEC-F2: third-party action pinned to a commit SHA (not a mutable tag).
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
 
       - name: Install NDK
         env:
@@ -92,12 +93,11 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/keystore"
           printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/keystore/release.jks"
-          {
-            echo "RELEASE_KEYSTORE_FILE=$RUNNER_TEMP/keystore/release.jks"
-            echo "RELEASE_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
-            echo "RELEASE_KEY_ALIAS=$KEY_ALIAS"
-            echo "RELEASE_KEY_PASSWORD=$KEY_PASSWORD"
-          } >> "$GITHUB_ENV"
+          # SEC-F6: only the (non-sensitive) keystore PATH is persisted to the job
+          # environment. The keystore/key PASSWORDS are NOT written to $GITHUB_ENV
+          # (which is a plaintext file readable by every later step); they are passed
+          # directly into the signing step's `env:` from secrets instead.
+          echo "RELEASE_KEYSTORE_FILE=$RUNNER_TEMP/keystore/release.jks" >> "$GITHUB_ENV"
 
       - name: Build FOSS release APKs
         env:
@@ -110,6 +110,10 @@ jobs:
         # apksigner replaces the placeholder signature AGP puts on unsigned APKs.
         # We skip if no keystore is configured (CI builds for inspection only).
         if: env.RELEASE_KEYSTORE_FILE != ''
+        env:
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           apksigner=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
@@ -149,7 +153,8 @@ jobs:
           fi
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        # SEC-F2: third-party action pinned to a commit SHA (not a mutable tag).
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: Virga ${{ steps.version.outputs.version }}

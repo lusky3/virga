@@ -21,7 +21,17 @@ class RcloneConfigManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val dispatchers: DispatcherProvider,
 ) {
-    private val encryptedConf = File(context.filesDir, "rclone.conf.enc")
+    // Stored in noBackupFilesDir so the encrypted config (OAuth tokens) is never
+    // eligible for cloud backup / device transfer, independent of XML backup rules.
+    private val encryptedConf = File(context.noBackupFilesDir, "rclone.conf.enc").also { dest ->
+        // One-time migration: earlier builds stored this in the backup-eligible filesDir.
+        // The EncryptedFile master key is Keystore-bound (not path-bound), so moving the
+        // ciphertext keeps it decryptable.
+        val legacy = File(context.filesDir, "rclone.conf.enc")
+        if (legacy.exists() && !dest.exists()) {
+            runCatching { legacy.copyTo(dest, overwrite = true); legacy.delete() }
+        }
+    }
     private val plaintextConf = File(context.noBackupFilesDir, "rclone.conf")
 
     private val masterKey: MasterKey by lazy {

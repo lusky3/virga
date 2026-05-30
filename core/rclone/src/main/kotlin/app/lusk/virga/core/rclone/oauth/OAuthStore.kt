@@ -3,6 +3,7 @@ package app.lusk.virga.core.rclone.oauth
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -62,7 +63,14 @@ class OAuthStore @Inject constructor() {
                 _pending.compareAndSet(timed, null)
                 return null
             }
-            if (timed.auth.state != state) return null
+            // Constant-time comparison to avoid leaking the expected state via timing.
+            if (!MessageDigest.isEqual(
+                    timed.auth.state.toByteArray(Charsets.UTF_8),
+                    state.toByteArray(Charsets.UTF_8),
+                )
+            ) {
+                return null
+            }
             // CAS clear: only one caller wins the race; the other sees null next loop.
             if (_pending.compareAndSet(timed, null)) return timed.auth
             // Another thread won the CAS — re-read and retry (next iteration
