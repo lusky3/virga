@@ -3,6 +3,11 @@ package app.lusk.virga.navigation
 import android.app.Activity
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Settings
@@ -22,6 +27,8 @@ import androidx.lifecycle.compose.dropUnlessResumed
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
+import app.lusk.virga.core.designsystem.theme.VirgaMotion
+import app.lusk.virga.core.designsystem.theme.rememberReduceMotion
 import app.lusk.virga.R
 import app.lusk.virga.feature.explorer.FileBrowserScreen
 import app.lusk.virga.feature.remotes.RemotesScreen
@@ -185,9 +192,36 @@ fun VirgaNavHost() {
             }
         },
     ) {
+        // Shared X-axis nav motion + predictive back (BRAND §12). Falls back to a
+        // plain crossfade when the system "remove animations" setting is on.
+        val reduceMotion = rememberReduceMotion()
         NavDisplay(
             entries = navigationState.toEntries(entryProvider),
             onBack = { navigator.goBack() },
+            transitionSpec = {
+                if (reduceMotion) {
+                    fadeIn(VirgaMotion.navTween()) togetherWith fadeOut(VirgaMotion.navTween())
+                } else {
+                    (slideInHorizontally(VirgaMotion.navTween()) { it / 4 } + fadeIn(VirgaMotion.navTween())) togetherWith
+                        (slideOutHorizontally(VirgaMotion.navTween()) { -it / 4 } + fadeOut(VirgaMotion.navTween()))
+                }
+            },
+            popTransitionSpec = {
+                if (reduceMotion) {
+                    fadeIn(VirgaMotion.navTween()) togetherWith fadeOut(VirgaMotion.navTween())
+                } else {
+                    (slideInHorizontally(VirgaMotion.navTween()) { -it / 4 } + fadeIn(VirgaMotion.navTween())) togetherWith
+                        (slideOutHorizontally(VirgaMotion.navTween()) { it / 4 } + fadeOut(VirgaMotion.navTween()))
+                }
+            },
+            predictivePopTransitionSpec = {
+                if (reduceMotion) {
+                    fadeIn(VirgaMotion.navTween()) togetherWith fadeOut(VirgaMotion.navTween())
+                } else {
+                    (slideInHorizontally(VirgaMotion.navTween()) { -it / 4 } + fadeIn(VirgaMotion.navTween())) togetherWith
+                        (slideOutHorizontally(VirgaMotion.navTween()) { it / 4 } + fadeOut(VirgaMotion.navTween()))
+                }
+            },
         )
         // Double-tap-to-exit, active only at the home tab root.
         BackHandler(enabled = atHomeRoot) {
