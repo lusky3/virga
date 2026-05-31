@@ -159,11 +159,14 @@ class RcloneEngineImplTest {
         every { daemonManager.isAlive(fakeDaemon) } returns true
         coEvery { apiClient.call(any(), any(), any(), "config/create", any()) } returns buildJsonObject {}
         coEvery { configManager.persistAndCleanup() } returns Unit
+        // mutatingConfig tears down the daemon (releasing the plaintext config) before persisting.
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
 
         val result = engine.createRemote("newdrive", "drive", mapOf("client_id" to "abc"))
 
         assertThat(result.isSuccess).isTrue()
         coVerify { apiClient.call(any(), any(), any(), "config/create", any()) }
+        coVerify { daemonManager.stop(fakeDaemon) }
         coVerify { configManager.persistAndCleanup() }
     }
 
@@ -173,11 +176,15 @@ class RcloneEngineImplTest {
         every { daemonManager.isAlive(fakeDaemon) } returns true
         coEvery { apiClient.call(any(), any(), any(), "config/create", any()) } throws
             VirgaError.Rclone(exitCode = 400, message = "already exists")
+        // On failure mutatingConfig tears down the daemon and discards the plaintext config.
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.cleanup() } returns Unit
 
         val result = engine.createRemote("dupe", "drive", emptyMap())
 
         assertThat(result.isFailure).isTrue()
         assertThat(result.exceptionOrNull()).isInstanceOf(VirgaError.Rclone::class.java)
+        coVerify { configManager.cleanup() }
     }
 
     // --- listDir ---

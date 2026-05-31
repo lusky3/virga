@@ -5,6 +5,8 @@ import androidx.security.crypto.EncryptedFile
 import androidx.security.crypto.MasterKey
 import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
@@ -34,6 +36,13 @@ class RcloneConfigManager @Inject constructor(
     }
     private val plaintextConf = File(context.noBackupFilesDir, "rclone.conf")
 
+    // Serializes every mutation of the shared rclone.conf / rclone.conf.enc files.
+    // decrypt/persist/cleanup/import all read-modify-write the same two paths; an
+    // interleaving (e.g. a concurrent createRemote and stopDaemon) could otherwise
+    // delete-then-write the ciphertext out from under each other and lose or
+    // corrupt the encrypted credential store.
+    private val ioLock = Mutex()
+
     private val masterKey: MasterKey by lazy {
         MasterKey.Builder(context)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -42,43 +51,53 @@ class RcloneConfigManager @Inject constructor(
 
     /** Decrypts the config to a temp file for the daemon. Creates an empty one if absent. */
     suspend fun decryptForDaemon(): File = withContext(dispatchers.io) {
-        if (plaintextConf.exists()) plaintextConf.delete()
-        if (!encryptedConf.exists()) {
-            // First run: hand the daemon an empty, writable config.
-            plaintextConf.writeText("")
-            return@withContext plaintextConf
+        ioLock.withLock {
+            if (plaintextConf.exists()) plaintextConf.delete()
+            if (!encryptedConf.exists()) {
+                // First run: hand the daemon an empty, writable config.
+                plaintextConf.writeText("")
+                return@withContext plaintextConf
+            }
+            encryptedFile(encryptedConf).openFileInput().use { input ->
+                plaintextConf.outputStream().use { output -> input.copyTo(output) }
+            }
+            plaintextConf
         }
-        encryptedFile(encryptedConf).openFileInput().use { input ->
-            plaintextConf.outputStream().use { output -> input.copyTo(output) }
-        }
-        plaintextConf
     }
 
     /** Re-encrypts the (possibly daemon-modified) plaintext config and removes the temp file. */
     suspend fun persistAndCleanup() = withContext(dispatchers.io) {
-        if (plaintextConf.exists()) {
-            val bytes = plaintextConf.readBytes()
-            if (encryptedConf.exists()) encryptedConf.delete()
-            encryptedFile(encryptedConf).openFileOutput().use { it.write(bytes) }
-            plaintextConf.delete()
+        ioLock.withLock {
+            if (plaintextConf.exists()) {
+                val bytes = plaintextConf.readBytes()
+                if (encryptedConf.exists()) encryptedConf.delete()
+                encryptedFile(encryptedConf).openFileOutput().use { it.write(bytes) }
+                plaintextConf.delete()
+            }
         }
     }
 
     /** Discards the temp plaintext config without persisting (e.g. on crash). */
     suspend fun cleanup() = withContext(dispatchers.io) {
-        if (plaintextConf.exists()) plaintextConf.delete()
+        ioLock.withLock {
+            if (plaintextConf.exists()) plaintextConf.delete()
+        }
     }
 
     /** Imports an external rclone.conf, encrypting it into place. */
     suspend fun import(confContent: String) = withContext(dispatchers.io) {
-        if (encryptedConf.exists()) encryptedConf.delete()
-        encryptedFile(encryptedConf).openFileOutput().use { it.write(confContent.toByteArray()) }
+        ioLock.withLock {
+            if (encryptedConf.exists()) encryptedConf.delete()
+            encryptedFile(encryptedConf).openFileOutput().use { it.write(confContent.toByteArray()) }
+        }
     }
 
     /** Exports the decrypted config text (for the user to back up — with a warning in UI). */
     suspend fun exportPlaintext(): String = withContext(dispatchers.io) {
-        if (!encryptedConf.exists()) return@withContext ""
-        encryptedFile(encryptedConf).openFileInput().use { it.readBytes().decodeToString() }
+        ioLock.withLock {
+            if (!encryptedConf.exists()) return@withContext ""
+            encryptedFile(encryptedConf).openFileInput().use { it.readBytes().decodeToString() }
+        }
     }
 
     suspend fun hasConfig(): Boolean = withContext(dispatchers.io) { encryptedConf.exists() }

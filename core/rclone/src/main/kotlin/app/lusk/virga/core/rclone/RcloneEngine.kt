@@ -3,7 +3,6 @@ package app.lusk.virga.core.rclone
 import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.common.model.SyncProgress
-import app.lusk.virga.core.common.model.TransferProgress
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -40,5 +39,4 @@ interface RcloneEngine {
     /** Emits progress until the sync completes; the terminal emission has full counts. */
     fun sync(source: String, dest: String, options: SyncOptions): Flow<SyncProgress>
     fun bisync(path1: String, path2: String, options: BisyncOptions): Flow<SyncProgress>
-    fun copyFile(source: String, dest: String): Flow<TransferProgress>
 }

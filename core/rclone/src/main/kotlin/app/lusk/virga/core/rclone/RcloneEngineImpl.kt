@@ -6,7 +6,6 @@ import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.common.model.SyncProgress
-import app.lusk.virga.core.common.model.TransferProgress
 import app.lusk.virga.core.rclone.api.RcApiClient
 import app.lusk.virga.core.rclone.config.RcloneConfigManager
 import app.lusk.virga.core.rclone.daemon.RcloneDaemonManager
@@ -49,10 +48,18 @@ class RcloneEngineImpl @Inject constructor(
     private val lock = Mutex()
     @Volatile private var daemon: RcloneDaemon? = null
 
-    override suspend fun startDaemon(): RcloneDaemon = lock.withLock {
+    override suspend fun startDaemon(): RcloneDaemon = lock.withLock { ensureDaemonLocked() }
+
+    /**
+     * Start-or-reuse the daemon. MUST be called while holding [lock]: the
+     * check-then-act on [daemon] (read health, decrypt config, start, assign)
+     * has to be atomic, or two callers can each start a daemon, or one can read
+     * a daemon another is concurrently tearing down.
+     */
+    private suspend fun ensureDaemonLocked(): RcloneDaemon {
         daemon?.takeIf { daemonManager.isAlive(it) }?.let { return it }
         val configFile = configManager.decryptForDaemon()
-        try {
+        return try {
             daemonManager.start(configFile).also { daemon = it }
         } catch (t: Throwable) {
             // Don't leave the decrypted plaintext config on disk if startup failed.
@@ -92,27 +99,26 @@ class RcloneEngineImpl @Inject constructor(
         type: String,
         params: Map<String, String>,
     ): Result<Unit> = runCatchingRclone {
-        val d = ensureDaemon()
-        rc(d, "config/create", buildJsonObject {
-            put("name", name)
-            put("type", type)
-            putJsonObject("parameters") { params.forEach { (k, v) -> put(k, v) } }
-            // Create the remote non-interactively using the OAuth token already
-            // supplied in [parameters]. Without nonInteractive, rclone's backend
-            // config runs its own browser OAuth ("Waiting for code...") and the
-            // config/create RC call blocks forever.
-            putJsonObject("opt") { put("nonInteractive", true) }
-        })
-        configManager.persistAndCleanup()
-        // Daemon keeps running on the now-deleted plaintext temp; restart lazily.
-        daemon = null
+        mutatingConfig {
+            val d = ensureDaemon()
+            rc(d, "config/create", buildJsonObject {
+                put("name", name)
+                put("type", type)
+                putJsonObject("parameters") { params.forEach { (k, v) -> put(k, v) } }
+                // Create the remote non-interactively using the OAuth token already
+                // supplied in [parameters]. Without nonInteractive, rclone's backend
+                // config runs its own browser OAuth ("Waiting for code...") and the
+                // config/create RC call blocks forever.
+                putJsonObject("opt") { put("nonInteractive", true) }
+            })
+        }
     }
 
     override suspend fun deleteRemote(name: String): Result<Unit> = runCatchingRclone {
-        val d = ensureDaemon()
-        rc(d, "config/delete", buildJsonObject { put("name", name) })
-        configManager.persistAndCleanup()
-        daemon = null
+        mutatingConfig {
+            val d = ensureDaemon()
+            rc(d, "config/delete", buildJsonObject { put("name", name) })
+        }
     }
 
     override suspend fun importConfig(confContent: String): Result<Unit> = runCatchingRclone {
@@ -177,17 +183,6 @@ class RcloneEngineImpl @Inject constructor(
             })
         }
 
-    override fun copyFile(source: String, dest: String): Flow<TransferProgress> = flow {
-        val d = ensureDaemon()
-        rc(d, "operations/copyfile", buildJsonObject {
-            val (srcFs, srcRemote) = splitFs(source)
-            val (dstFs, dstRemote) = splitFs(dest)
-            put("srcFs", srcFs); put("srcRemote", srcRemote)
-            put("dstFs", dstFs); put("dstRemote", dstRemote)
-        })
-        emit(TransferProgress(name = dest, bytes = 0, size = 0, speedBytesPerSec = 0.0))
-    }.flowOn(dispatchers.io)
-
     override suspend fun deleteFile(remote: String, path: String): Result<Unit> = runCatchingRclone {
         val d = ensureDaemon()
         rc(d, "operations/deletefile", buildJsonObject {
@@ -249,8 +244,29 @@ class RcloneEngineImpl @Inject constructor(
         errors = this["errors"]?.jsonPrimitive?.intOrNull ?: 0,
     )
 
-    private suspend fun ensureDaemon(): RcloneDaemon =
-        daemon?.takeIf { daemonManager.isAlive(it) } ?: startDaemon()
+    private suspend fun ensureDaemon(): RcloneDaemon = lock.withLock { ensureDaemonLocked() }
+
+    /**
+     * Run a config-mutating block, then atomically tear down the daemon (so it
+     * releases the stale plaintext config it has open) and either re-encrypt the
+     * new config on success or discard the decrypted plaintext on failure. The
+     * teardown + persist/cleanup run in a finally so a failed config/create can
+     * never leave decrypted OAuth tokens on disk, and the daemon never keeps
+     * serving a config that no longer exists.
+     */
+    private suspend fun mutatingConfig(block: suspend () -> Unit) {
+        var ok = false
+        try {
+            block()
+            ok = true
+        } finally {
+            lock.withLock {
+                daemon?.let { daemonManager.stop(it) }
+                daemon = null
+            }
+            if (ok) configManager.persistAndCleanup() else runCatching { configManager.cleanup() }
+        }
+    }
 
     private suspend fun rc(d: RcloneDaemon, command: String, params: JsonObject = JsonObject(emptyMap())): JsonObject =
         apiClient.call(d.baseUrl, d.user, d.pass, command, params)

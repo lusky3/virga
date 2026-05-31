@@ -4,7 +4,6 @@ import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.common.model.SyncProgress
-import app.lusk.virga.core.common.model.TransferProgress
 import app.lusk.virga.core.database.entity.SyncTaskEntity
 import app.lusk.virga.core.rclone.BisyncOptions
 import app.lusk.virga.core.rclone.RcloneConfig
@@ -46,7 +45,6 @@ class SyncExecutorTest {
         override suspend fun listDir(remote: String, path: String, recurse: Boolean, filters: List<String>): List<FileItem> = emptyList()
         override suspend fun deleteFile(remote: String, path: String) = Result.success(Unit)
         override suspend fun moveFile(source: String, dest: String) = Result.success(Unit)
-        override fun copyFile(source: String, dest: String): Flow<TransferProgress> = flowOf()
     }
 
     private fun task(

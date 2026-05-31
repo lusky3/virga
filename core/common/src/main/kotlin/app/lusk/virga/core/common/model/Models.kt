@@ -51,11 +51,3 @@ data class SyncProgress(
     val fraction: Float
         get() = if (totalBytes > 0) (bytesTransferred.toFloat() / totalBytes).coerceIn(0f, 1f) else 0f
 }
-
-/** Progress for a single file transfer. */
-data class TransferProgress(
-    val name: String,
-    val bytes: Long,
-    val size: Long,
-    val speedBytesPerSec: Double,
-)
