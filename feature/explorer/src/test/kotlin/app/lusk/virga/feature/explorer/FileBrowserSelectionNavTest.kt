@@ -2,6 +2,7 @@ package app.lusk.virga.feature.explorer
 
 import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import app.lusk.virga.core.common.model.FileItem
+import app.lusk.virga.core.data.FileBrowserRepository
 import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.database.entity.RemoteEntity
 import app.lusk.virga.core.rclone.RcloneEngine
@@ -42,7 +43,8 @@ class FileBrowserSelectionNavTest {
         override val io = mainDispatcher.dispatcher
     }
 
-    private fun viewModel() = FileBrowserViewModel(engine, repository, testDispatchers)
+    private fun viewModel() =
+        FileBrowserViewModel(FileBrowserRepository(engine), repository, testDispatchers)
 
     private fun file(name: String, path: String = name) =
         FileItem(name = name, path = path, isDir = false, size = 0L, modTimeEpochMs = null)

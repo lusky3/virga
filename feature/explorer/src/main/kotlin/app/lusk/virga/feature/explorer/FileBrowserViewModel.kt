@@ -6,8 +6,8 @@ import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.common.error.toUserMessage
 import app.lusk.virga.core.common.model.FileItem
+import app.lusk.virga.core.data.FileBrowserRepository
 import app.lusk.virga.core.data.RemoteRepository
-import app.lusk.virga.core.rclone.RcloneEngine
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -59,7 +59,7 @@ data class FileBrowserUiState(
 
 @HiltViewModel
 class FileBrowserViewModel @Inject constructor(
-    private val engine: RcloneEngine,
+    private val fileBrowser: FileBrowserRepository,
     remoteRepository: RemoteRepository,
     private val dispatchers: DispatcherProvider,
 ) : ViewModel() {
@@ -153,7 +153,7 @@ class FileBrowserViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(remoteName = remote, path = path, loading = true, error = null) }
             try {
-                val raw = engine.listDir("$remote:", path)
+                val raw = fileBrowser.list(remote, path)
                 val (capped, truncated) = withContext(dispatchers.default) {
                     val truncated = raw.size > MAX_ENTRIES
                     (if (truncated) raw.take(MAX_ENTRIES) else raw) to truncated
@@ -172,7 +172,7 @@ class FileBrowserViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        viewModelScope.launch { runCatching { engine.stopDaemon() } }
+        viewModelScope.launch { runCatching { fileBrowser.releaseDaemon() } }
     }
 
     private companion object {
