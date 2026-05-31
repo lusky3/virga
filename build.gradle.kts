@@ -47,7 +47,6 @@ dependencies {
         ":core:database",
         ":core:datastore",
         ":core:rclone",
-        ":core:storage",
         ":core:data",
         ":sync-worker",
         ":feature:sync",

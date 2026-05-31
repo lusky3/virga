@@ -6,22 +6,6 @@ enum class SyncDirection { UPLOAD, DOWNLOAD, BISYNC }
 /** Lifecycle state of a sync task / run, surfaced in list UIs. */
 enum class SyncStatus { IDLE, QUEUED, RUNNING, SUCCESS, FAILED, CANCELLED }
 
-enum class StorageType { INTERNAL, SD_CARD, USB }
-
-/**
- * A mounted storage volume the user can sync from. [filesystemPath] is only
- * populated when MANAGE_EXTERNAL_STORAGE is granted; without it rclone cannot
- * read the volume directly.
- */
-data class StorageRoot(
-    val id: String,
-    val displayName: String,
-    val type: StorageType,
-    val filesystemPath: String?,
-    val totalBytes: Long,
-    val availableBytes: Long,
-)
-
 /** A configured rclone remote (e.g. a Google Drive account). */
 data class Remote(
     val name: String,

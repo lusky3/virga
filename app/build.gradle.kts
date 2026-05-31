@@ -184,7 +184,9 @@ android {
 dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:data"))
-    implementation(project(":core:storage"))
+    // Direct rclone use (OAuthConfig DI module) — explicit now that core:data no
+    // longer re-exports rclone via api().
+    implementation(project(":core:rclone"))
     implementation(project(":sync-worker"))
     implementation(project(":feature:sync"))
     implementation(project(":feature:remotes"))

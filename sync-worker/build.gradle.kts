@@ -19,6 +19,9 @@ android {
 dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:data"))
+    // Direct rclone use (RcloneEngine in SyncWorker/SyncExecutor) — explicit now
+    // that core:data no longer re-exports rclone via api().
+    implementation(project(":core:rclone"))
 
     implementation(libs.bundles.coroutines)
     implementation(libs.work.runtime.ktx)
