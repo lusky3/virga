@@ -53,5 +53,13 @@ class SyncHistoryRepository @Inject constructor(
 
     suspend fun pruneOlderThan(beforeEpochMs: Long) = runDao.pruneOlderThan(beforeEpochMs)
 
+    /**
+     * Reconcile runs left RUNNING by a worker that died mid-run (process death /
+     * force-stop, where the finally never executed). Marks them FAILED. Call once
+     * at app startup. Returns the number of rows reconciled.
+     */
+    suspend fun reconcileInterruptedRuns(): Int =
+        runDao.failInterruptedRuns(System.currentTimeMillis(), "Interrupted (app stopped mid-sync)")
+
     suspend fun clearAll() = runDao.deleteAll()
 }

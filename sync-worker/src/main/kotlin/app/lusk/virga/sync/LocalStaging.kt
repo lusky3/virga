@@ -35,6 +35,15 @@ class LocalStaging @Inject constructor(
         val isStaged: Boolean,
         val treeUriString: String? = null,
         val cacheDir: File? = null,
+        /**
+         * For a staged UPLOAD/BISYNC: whether the SAF tree was actually readable.
+         * False means the persisted URI permission was lost — the worker MUST NOT
+         * proceed (an empty staged dir mirror-synced upstream would delete the
+         * cloud destination). Always true for DOWNLOAD / non-staged sources.
+         */
+        val sourceReadable: Boolean = true,
+        /** Number of files copied into the staging dir (staged UPLOAD/BISYNC only). */
+        val stagedFileCount: Int = 0,
     )
 
     /** Prepare the local path rclone should operate on. */
@@ -50,10 +59,30 @@ class LocalStaging @Inject constructor(
 
             if (direction == SyncDirection.UPLOAD || direction == SyncDirection.BISYNC) {
                 val tree = DocumentFile.fromTreeUri(context, Uri.parse(sourcePath))
-                if (tree != null) copyTreeToLocal(tree, stageDir)
+                // canRead() reflects whether we still hold the persisted permission.
+                // If the tree is gone/unreadable, signal it so the worker fails
+                // rather than treating an empty stage as "source has no files".
+                if (tree == null || !tree.canRead()) {
+                    return@withContext StagedSource(
+                        localPath = stageDir.absolutePath,
+                        isStaged = true,
+                        treeUriString = sourcePath,
+                        cacheDir = stageDir,
+                        sourceReadable = false,
+                        stagedFileCount = 0,
+                    )
+                }
+                val count = copyTreeToLocal(tree, stageDir)
+                return@withContext StagedSource(
+                    localPath = stageDir.absolutePath,
+                    isStaged = true,
+                    treeUriString = sourcePath,
+                    cacheDir = stageDir,
+                    sourceReadable = true,
+                    stagedFileCount = count,
+                )
             }
             // DOWNLOAD: leave stageDir empty; rclone fills it, writeBack copies out.
-
             StagedSource(
                 localPath = stageDir.absolutePath,
                 isStaged = true,
@@ -81,16 +110,20 @@ class LocalStaging @Inject constructor(
 
     // --- private helpers ---
 
-    private fun copyTreeToLocal(dir: DocumentFile, dest: File) {
+    /** Copies [dir] into [dest] recursively; returns the number of files written. */
+    private fun copyTreeToLocal(dir: DocumentFile, dest: File): Int {
+        var count = 0
         for (child in dir.listFiles()) {
             val target = safeChild(dest, child.name) ?: continue
             if (child.isDirectory) {
                 target.mkdirs()
-                copyTreeToLocal(child, target)
+                count += copyTreeToLocal(child, target)
             } else {
                 copyDocumentToFile(child.uri, target)
+                count++
             }
         }
+        return count
     }
 
     /**

@@ -214,6 +214,14 @@ class RcloneEngineImpl @Inject constructor(
             ?: throw VirgaError.Rclone(message = "rclone did not return a job id")
         val group = "job/$jobId"
 
+        // Stall guard: if the async job never reports finished AND makes no
+        // progress (bytes + transferred files unchanged) for STALL_TIMEOUT_MS,
+        // abort instead of polling forever — otherwise a wedged job would leave
+        // the worker (and its sync_run row) stuck RUNNING indefinitely.
+        var lastBytes = -1L
+        var lastTransfers = -1
+        var lastProgressAtMs = System.currentTimeMillis()
+
         while (true) {
             val status = rc(d, "job/status", buildJsonObject { put("jobid", jobId) })
             val finished = status["finished"]?.jsonPrimitive?.booleanOrNull ?: false
@@ -229,7 +237,17 @@ class RcloneEngineImpl @Inject constructor(
             }
             // Fetch stats only while running (drives the throttled UI update).
             val stats = rc(d, "core/stats", buildJsonObject { put("group", group) })
-            emit(stats.toSyncProgress())
+            val progress = stats.toSyncProgress()
+            if (progress.bytesTransferred != lastBytes || progress.transferredFiles != lastTransfers) {
+                lastBytes = progress.bytesTransferred
+                lastTransfers = progress.transferredFiles
+                lastProgressAtMs = System.currentTimeMillis()
+            } else if (System.currentTimeMillis() - lastProgressAtMs > STALL_TIMEOUT_MS) {
+                throw VirgaError.Rclone(
+                    message = "Sync stalled — no progress for ${STALL_TIMEOUT_MS / 1000}s.",
+                )
+            }
+            emit(progress)
             delay(POLL_INTERVAL_MS)
         }
     }.flowOn(dispatchers.io)
@@ -289,6 +307,8 @@ class RcloneEngineImpl @Inject constructor(
 
     private companion object {
         const val POLL_INTERVAL_MS = 750L
+        // Max time an in-flight job may make zero progress before we abort it.
+        const val STALL_TIMEOUT_MS = 120_000L
     }
 }
 

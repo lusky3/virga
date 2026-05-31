@@ -74,16 +74,27 @@ class SyncWorker @AssistedInject constructor(
         val allowDeletes = !(staged.isStaged && task.direction == SyncDirection.DOWNLOAD)
 
         try {
-            // Guard: a 'local'-type rclone remote points at a real filesystem path,
-            // which the rclone child process can't reach under scoped storage (no
-            // all-files access). Fail with a clear message instead of an opaque
-            // rclone error. listRemotes() reuses the same daemon the sync starts.
-            val remoteType = engine.listRemotes().firstOrNull { it.name == task.remoteName }?.type
-            if (remoteType == "local" && !Environment.isExternalStorageManager()) {
-                failure = VirgaError.Rclone(
-                    message = "Local-disk remotes need all-files access, which isn't granted on this build. Use a cloud remote.",
+            // Guard: the SAF source folder couldn't be read (its persisted access
+            // permission was lost). Staging is empty, so proceeding with an upload
+            // mirror would DELETE the cloud destination. Fail loudly and tell the
+            // user to re-select the folder instead.
+            if (staged.isStaged && !staged.sourceReadable &&
+                (task.direction == SyncDirection.UPLOAD || task.direction == SyncDirection.BISYNC)
+            ) {
+                failure = VirgaError.Storage(
+                    "Can't read the selected folder — re-select it for this task (its access permission was lost).",
                 )
             } else {
+                // Guard: a 'local'-type rclone remote points at a real filesystem path,
+                // which the rclone child process can't reach under scoped storage (no
+                // all-files access). Fail with a clear message instead of an opaque
+                // rclone error. listRemotes() reuses the same daemon the sync starts.
+                val remoteType = engine.listRemotes().firstOrNull { it.name == task.remoteName }?.type
+                if (remoteType == "local" && !Environment.isExternalStorageManager()) {
+                    failure = VirgaError.Rclone(
+                        message = "Local-disk remotes need all-files access, which isn't granted on this build. Use a cloud remote.",
+                    )
+                } else {
                 executor.run(effectiveTask, metered, allowDeletes)
                     .catch { failure = it }
                     // Only update the foreground notification when the integer percent changes.
@@ -92,6 +103,7 @@ class SyncWorker @AssistedInject constructor(
                         last = progress
                         setForeground(foregroundInfo(notifications.progress(task.name, progress)))
                     }
+                }
             }
         } catch (t: Throwable) {
             // A direct throw in the orchestration body — e.g. listRemotes() in the

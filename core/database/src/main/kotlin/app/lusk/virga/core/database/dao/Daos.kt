@@ -83,6 +83,17 @@ interface SyncRunDao {
     @Query("DELETE FROM sync_runs WHERE startedAtEpochMs < :beforeEpochMs")
     suspend fun pruneOlderThan(beforeEpochMs: Long)
 
+    /**
+     * Mark runs still flagged RUNNING as FAILED. A worker killed mid-run (process
+     * death / force-stop) can't execute its finally to finalize the row, leaving
+     * it stuck RUNNING forever. Called once at startup to reconcile those.
+     */
+    @Query(
+        "UPDATE sync_runs SET status = 'FAILED', endedAtEpochMs = :now, " +
+            "errorCount = errorCount + 1, errorMessage = :message WHERE status = 'RUNNING'",
+    )
+    suspend fun failInterruptedRuns(now: Long, message: String): Int
+
     @Query("DELETE FROM sync_runs")
     suspend fun deleteAll()
 }
