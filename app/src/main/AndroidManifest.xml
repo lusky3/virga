@@ -74,5 +74,17 @@
             android:name="androidx.work.impl.diagnostics.DiagnosticsReceiver"
             tools:node="remove" />
 
+        <!-- The sync runs as a dataSync foreground service. WorkManager's library
+             manifest declares SystemForegroundService WITHOUT a
+             foregroundServiceType, so on API 31+ calling
+             setForeground(FOREGROUND_SERVICE_TYPE_DATA_SYNC) throws
+             "foregroundServiceType 0x1 is not a subset of 0x0" and crashes the
+             process mid-sync. Merge the dataSync type onto the service so the
+             type the worker requests is actually declared. -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+
     </application>
 </manifest>

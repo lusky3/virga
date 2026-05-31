@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
@@ -207,7 +207,10 @@ private fun FileList(
     onToggleSelect: (String) -> Unit,
 ) {
     LazyColumn(Modifier.fillMaxSize()) {
-        items(entries, key = { it.path }) { item ->
+        // Drive (and other backends) can hold multiple files with the SAME name
+        // in one folder, so path alone isn't a unique LazyColumn key — collisions
+        // crash with "Key … was already used". Disambiguate with the index.
+        itemsIndexed(entries, key = { index, item -> "${item.path} $index" }) { _, item ->
             val isSelected = item.path in selectedPaths
             val openFolderLabel = stringResource(R.string.explorer_cd_open_folder)
             val a11yDesc = buildItemDescription(item)
