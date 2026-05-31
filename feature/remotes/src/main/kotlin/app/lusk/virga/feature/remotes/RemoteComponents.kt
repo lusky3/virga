@@ -64,7 +64,7 @@ internal val RcloneBackendTypes: List<Pair<String, String>> = listOf(
 internal fun RemoteCard(
     remote: Remote,
     onOpenBrowser: () -> Unit,
-    onCreateTask: () -> Unit,
+    onCreateTask: (String) -> Unit,
     onDelete: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -101,7 +101,7 @@ internal fun RemoteCard(
                 )
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.remotes_card_menu_new_task)) },
-                    onClick = { menuExpanded = false; onCreateTask() },
+                    onClick = { menuExpanded = false; onCreateTask(remote.name) },
                 )
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.remotes_card_menu_delete)) },

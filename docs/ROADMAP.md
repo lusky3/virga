@@ -86,7 +86,7 @@ Definition of Done.
 | 0 | `VirgaCard` + migrate existing cards | ✅ done | 2026-05-31 |
 | 1 | Live sync visualization (card strip + summary panel) | ✅ done | 2026-05-31 |
 | 1 | Guided first-sync wizard + returnable add-remote | ☐ todo | |
-| 1 | Unify task-creation entry points | ☐ todo | |
+| 1 | Unify task-creation entry points | ✅ done | 2026-05-31 |
 | 1 | Nav transitions + predictive-back | ✅ done | 2026-05-31 |
 | 1 | Teach the mental model in empty states | ☐ todo | |
 | 2 | Tier-1: Filters editor | ☐ todo | |

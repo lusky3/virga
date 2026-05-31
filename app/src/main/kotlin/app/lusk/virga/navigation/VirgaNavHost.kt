@@ -149,7 +149,7 @@ fun VirgaNavHost() {
         entry<RemotesRoute> {
             RemotesScreen(
                 onOpenBrowser = { r -> navigator.navigate(BrowseRoute(r)) },
-                onCreateTask = dropUnlessResumed { navigator.navigate(TaskEditRoute(0)) },
+                onCreateTask = { remoteName -> navigator.navigate(TaskEditRoute(0, prefillRemote = remoteName)) },
             )
         }
         entry<BrowseRoute> { key ->

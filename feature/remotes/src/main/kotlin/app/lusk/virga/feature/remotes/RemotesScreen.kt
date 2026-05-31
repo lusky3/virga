@@ -58,7 +58,7 @@ import app.lusk.virga.feature.remotes.oauth.launchCustomTab
 @Composable
 fun RemotesScreen(
     onOpenBrowser: (remoteName: String?) -> Unit,
-    onCreateTask: () -> Unit = {},
+    onCreateTask: (String) -> Unit = {},
     viewModel: RemotesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
