@@ -51,7 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.model.Remote
-import app.lusk.virga.core.ui.EmptyState
+import app.lusk.virga.core.designsystem.component.EmptyState
 import app.lusk.virga.feature.remotes.oauth.launchCustomTab
 
 @OptIn(ExperimentalMaterial3Api::class)

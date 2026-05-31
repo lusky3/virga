@@ -12,7 +12,7 @@ android {
 dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:datastore"))
-    implementation(project(":core:ui"))
+    implementation(project(":core:designsystem"))
 
     implementation(libs.bundles.coroutines)
     implementation(libs.lifecycle.viewmodel.compose)

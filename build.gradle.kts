@@ -43,7 +43,7 @@ dependencies {
     listOf(
         ":app",
         ":core:common",
-        ":core:ui",
+        ":core:designsystem",
         ":core:database",
         ":core:datastore",
         ":core:rclone",

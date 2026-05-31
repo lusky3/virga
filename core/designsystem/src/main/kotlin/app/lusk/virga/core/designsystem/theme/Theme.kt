@@ -1,4 +1,4 @@
-package app.lusk.virga.ui.theme
+package app.lusk.virga.core.designsystem.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme

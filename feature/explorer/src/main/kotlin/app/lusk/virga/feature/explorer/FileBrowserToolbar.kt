@@ -32,7 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
-import app.lusk.virga.core.ui.EmptyState
+import app.lusk.virga.core.designsystem.component.EmptyState
 
 /** Title block for the LargeTopAppBar — shows remote/breadcrumb or an inline search field. */
 @Composable

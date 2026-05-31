@@ -36,7 +36,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.util.formatFileSize
 import app.lusk.virga.core.common.model.SyncRun
-import app.lusk.virga.core.ui.EmptyState
+import app.lusk.virga.core.designsystem.component.EmptyState
 import java.text.DateFormat
 import java.util.Date
 import kotlin.time.Duration.Companion.milliseconds

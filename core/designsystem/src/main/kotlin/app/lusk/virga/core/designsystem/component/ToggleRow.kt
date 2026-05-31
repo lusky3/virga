@@ -1,4 +1,4 @@
-package app.lusk.virga.core.ui
+package app.lusk.virga.core.designsystem.component
 
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,8 +19,8 @@ import androidx.compose.ui.unit.dp
  * state. Modifier.toggleable carries the [Role.Switch] semantics and the Switch
  * itself takes `onCheckedChange = null` (the row owns the click).
  *
- * Shared design-system component (lives in core:ui so feature modules don't each
- * redefine it).
+ * Shared design-system component (lives in core:designsystem so feature modules
+ * don't each redefine it).
  */
 @Composable
 fun ToggleRow(

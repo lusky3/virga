@@ -23,7 +23,7 @@ import app.lusk.virga.core.datastore.ThemeMode
 import app.lusk.virga.navigation.VirgaNavHost
 import app.lusk.virga.onboarding.OnboardingScreen
 import app.lusk.virga.onboarding.OnboardingViewModel
-import app.lusk.virga.ui.theme.VirgaTheme
+import app.lusk.virga.core.designsystem.theme.VirgaTheme
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint

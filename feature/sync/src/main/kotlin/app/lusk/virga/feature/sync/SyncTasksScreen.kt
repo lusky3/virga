@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.model.SyncTask
-import app.lusk.virga.core.ui.EmptyState
+import app.lusk.virga.core.designsystem.component.EmptyState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

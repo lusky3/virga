@@ -11,7 +11,7 @@ android {
 
 dependencies {
     implementation(project(":core:common"))
-    implementation(project(":core:ui"))
+    implementation(project(":core:designsystem"))
     implementation(project(":core:data"))
     implementation(project(":core:datastore"))
     // Direct rclone use (OAuth flow types) — explicit now that core:data no

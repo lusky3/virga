@@ -11,7 +11,7 @@ android {
 
 dependencies {
     implementation(project(":core:common"))
-    implementation(project(":core:ui"))
+    implementation(project(":core:designsystem"))
     implementation(project(":core:data"))
     // Direct rclone use (RcloneEngine) — explicit now that core:data no longer
     // re-exports rclone via api().

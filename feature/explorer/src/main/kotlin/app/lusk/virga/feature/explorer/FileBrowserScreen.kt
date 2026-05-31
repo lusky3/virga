@@ -53,7 +53,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.common.util.formatFileSize
-import app.lusk.virga.core.ui.EmptyState
+import app.lusk.virga.core.designsystem.component.EmptyState
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter

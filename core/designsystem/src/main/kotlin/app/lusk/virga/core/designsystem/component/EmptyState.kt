@@ -1,4 +1,4 @@
-package app.lusk.virga.core.ui
+package app.lusk.virga.core.designsystem.component
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column

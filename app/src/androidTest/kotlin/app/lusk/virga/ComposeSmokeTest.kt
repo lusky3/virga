@@ -5,7 +5,7 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import app.lusk.virga.ui.theme.VirgaTheme
+import app.lusk.virga.core.designsystem.theme.VirgaTheme
 import org.junit.Rule
 import org.junit.Test
 

@@ -26,7 +26,7 @@ rootProject.name = "Virga"
 include(":app")
 include(":rclone-build")
 include(":core:common")
-include(":core:ui")
+include(":core:designsystem")
 include(":core:database")
 include(":core:datastore")
 include(":core:rclone")

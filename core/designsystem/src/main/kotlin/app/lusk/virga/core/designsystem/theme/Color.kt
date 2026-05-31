@@ -1,4 +1,4 @@
-package app.lusk.virga.ui.theme
+package app.lusk.virga.core.designsystem.theme
 
 import androidx.compose.ui.graphics.Color
 

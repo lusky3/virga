@@ -46,7 +46,7 @@ import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.datastore.ThemeMode
-import app.lusk.virga.core.ui.ToggleRow
+import app.lusk.virga.core.designsystem.component.ToggleRow
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)

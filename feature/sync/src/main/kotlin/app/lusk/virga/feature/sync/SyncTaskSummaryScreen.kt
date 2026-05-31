@@ -47,8 +47,8 @@ import app.lusk.virga.core.common.model.SyncRun
 import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.common.util.formatFileSize
-import app.lusk.virga.core.ui.EmptyState
-import app.lusk.virga.core.ui.ToggleRow
+import app.lusk.virga.core.designsystem.component.EmptyState
+import app.lusk.virga.core.designsystem.component.ToggleRow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
