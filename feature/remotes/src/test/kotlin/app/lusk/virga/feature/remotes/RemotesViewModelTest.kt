@@ -207,13 +207,34 @@ class RemotesViewModelTest {
 
         vm.startOAuth(OAuthProviders.GoogleDrive, "g")
         advanceUntilIdle()
+        val pendingSlot = slot<OAuthTokenExchanger.PendingAuth>()
+        coVerify { tokenExchanger.authorizeUrl(capture(pendingSlot)) }
 
-        store.emit(OAuthResult.Error(state = null, message = "user_denied"))
+        // An error whose state matches the in-flight auth tears it down + reports.
+        store.emit(OAuthResult.Error(state = pendingSlot.captured.state, message = "user_denied"))
         advanceUntilIdle()
 
         assertThat(vm.uiState.value.message).contains("user_denied")
         assertThat(vm.uiState.value.oauthInProgress).isFalse()
         coVerify(exactly = 0) { repository.addRemote(any(), any(), any()) }
+        collector.cancel()
+    }
+
+    @Test
+    fun oauthError_withForeignState_isIgnored() = runTest(mainDispatcher.dispatcher) {
+        every { tokenExchanger.authorizeUrl(any()) } returns "https://x"
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+
+        vm.startOAuth(OAuthProviders.GoogleDrive, "g")
+        advanceUntilIdle()
+
+        // An error redirect bearing a non-matching state (e.g. injected by another
+        // app) must NOT surface a failure for the unrelated in-flight flow.
+        store.emit(OAuthResult.Error(state = "not-the-pending-state", message = "user_denied"))
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.message ?: "").doesNotContain("user_denied")
         collector.cancel()
     }
 

@@ -83,15 +83,32 @@ class LocalStaging @Inject constructor(
 
     private fun copyTreeToLocal(dir: DocumentFile, dest: File) {
         for (child in dir.listFiles()) {
+            val target = safeChild(dest, child.name) ?: continue
             if (child.isDirectory) {
-                val subDir = File(dest, child.name ?: continue)
-                subDir.mkdirs()
-                copyTreeToLocal(child, subDir)
+                target.mkdirs()
+                copyTreeToLocal(child, target)
             } else {
-                val target = File(dest, child.name ?: continue)
                 copyDocumentToFile(child.uri, target)
             }
         }
+    }
+
+    /**
+     * Resolve [name] as a direct child of [dest], rejecting provider-supplied
+     * names that could escape the staging dir — null/empty, path separators,
+     * '.'/'..', or any name whose canonical path lands outside [dest]. A
+     * malicious or buggy DocumentsProvider can return arbitrary display names,
+     * so this is the boundary that keeps staged copies app-private.
+     */
+    private fun safeChild(dest: File, name: String?): File? {
+        if (name.isNullOrEmpty() || name == "." || name == ".." ||
+            name.contains('/') || name.contains('\\')
+        ) {
+            return null
+        }
+        val child = File(dest, name)
+        val destPrefix = dest.canonicalPath + File.separator
+        return if (child.canonicalPath.startsWith(destPrefix)) child else null
     }
 
     private fun copyDocumentToFile(uri: Uri, dest: File) {

@@ -162,6 +162,9 @@ class FileBrowserViewModel @Inject constructor(
             } catch (e: VirgaError) {
                 _state.update { it.copy(loading = false, error = e.toUserMessage()) }
             } catch (e: Exception) {
+                // Navigating away cancels this load; a CancellationException is
+                // normal flow control, not an error to surface to the user.
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 _state.update { it.copy(loading = false, error = e.toUserMessage()) }
             }
         }

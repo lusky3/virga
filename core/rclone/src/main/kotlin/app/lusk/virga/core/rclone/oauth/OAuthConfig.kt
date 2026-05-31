@@ -10,10 +10,11 @@ package app.lusk.virga.core.rclone.oauth
  *  - **Google Drive (Android client)** requires a reverse-domain URI derived
  *    from the client ID:
  *    `com.googleusercontent.apps.<reversed-client-id>:/oauth2redirect`.
- *    Google's "Web application" client type rejects custom schemes
- *    (`virga://…`) outright because they have no public TLD.
- *  - **Microsoft / Dropbox / pCloud** accept any custom scheme registered on
- *    the device, so we use `virga://oauth/callback` for them.
+ *  - **Microsoft / Dropbox / pCloud** use the verified HTTPS App Link
+ *    `https://lusk.app/virga/oauth/callback` (autoVerify, backed by
+ *    `/.well-known/assetlinks.json`) so the OS routes the redirect straight
+ *    back into the app. (Earlier builds used a `virga://` custom scheme; it has
+ *    been replaced by the App Link.)
  *
  * Use [redirectUri] to fetch the right one for the provider being launched.
  */

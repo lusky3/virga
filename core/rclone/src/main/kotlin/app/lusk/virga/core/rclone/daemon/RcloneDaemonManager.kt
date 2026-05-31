@@ -134,6 +134,11 @@ class RcloneDaemonManager @Inject constructor(
         val hash = BCrypt.withDefaults().hashToString(10, pass.toCharArray())
         val line = "$user:$hash\n"
         val dir = context.noBackupFilesDir.also { it.mkdirs() }
+        // Purge htpasswd files orphaned by an abnormally-terminated prior daemon.
+        // Only one daemon is ever live at a time, so any pre-existing ones are
+        // stale credential hashes that should not linger on disk.
+        dir.listFiles { f -> f.name.startsWith("rc-auth-") && f.name.endsWith(".htpasswd") }
+            ?.forEach { it.delete() }
         val file = File(dir, "rc-auth-${System.nanoTime()}.htpasswd")
         file.writeText(line, Charsets.UTF_8)
         return file

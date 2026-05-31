@@ -9,10 +9,11 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
 /**
- * Receives the `virga://oauth/callback?code=…&state=…` redirect from Custom
- * Tabs, posts the outcome to [OAuthStore], and finishes itself. The activity
- * is `singleTask` with `noHistory=true` and a No-Display theme so it never
- * shows UI.
+ * Receives the OAuth redirect from Custom Tabs — the verified App Link
+ * `https://lusk.app/virga/oauth/callback?code=…&state=…` (or Google's
+ * reverse-client-id scheme) — posts the outcome to [OAuthStore], and finishes
+ * itself. The activity is `singleTask` with `noHistory=true` and a No-Display
+ * theme so it never shows UI.
  */
 @AndroidEntryPoint
 class OAuthRedirectActivity : ComponentActivity() {

@@ -214,11 +214,17 @@ class RemotesViewModel @Inject constructor(
     private suspend fun onOAuthResult(result: OAuthResult) {
         when (result) {
             is OAuthResult.Error -> {
-                oauthStore.clear()
-                transient.value = transient.value.copy(
-                    oauthInProgress = false,
-                    message = context.getString(R.string.remotes_msg_sign_in_failed, result.message),
-                )
+                // Only tear down the in-flight auth for an error whose state matches
+                // the pending one. consume() validates + clears atomically, so an
+                // error redirect injected by another app (missing or non-matching
+                // state) is a no-op against an unrelated pending flow.
+                val state = result.state
+                if (state != null && oauthStore.consume(state) != null) {
+                    transient.value = transient.value.copy(
+                        oauthInProgress = false,
+                        message = context.getString(R.string.remotes_msg_sign_in_failed, result.message),
+                    )
+                }
             }
             is OAuthResult.Success -> {
                 val pending = oauthStore.consume(result.state)
