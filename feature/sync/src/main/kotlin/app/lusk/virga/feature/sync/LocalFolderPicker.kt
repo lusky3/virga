@@ -1,7 +1,9 @@
 package app.lusk.virga.feature.sync
 
 import android.content.Context
+import android.os.Build
 import android.os.Environment
+import android.os.storage.StorageManager
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -116,21 +118,45 @@ internal fun LocalFolderPickerDialog(
 
 /**
  * Accessible storage volume roots. Internal storage is always present; removable
- * volumes (SD card / USB) are derived from [Context.getExternalFilesDirs], whose
- * entries look like `/storage/<vol>/Android/data/<pkg>/files` — the volume root is
- * the prefix before `/Android/`.
+ * volumes (SD card / USB) are found via [StorageManager.getStorageVolumes] +
+ * [android.os.storage.StorageVolume.getDirectory] (API 30+), which lists the SD
+ * card even when [Context.getExternalFilesDirs] doesn't (newer Android often
+ * doesn't expose the card as an app-specific dir). [Context.getExternalFilesDirs]
+ * is used as a fallback for older releases. Keyed by path to de-duplicate.
  */
 private fun discoverStorageRoots(context: Context): List<StorageRoot> {
     val internal = Environment.getExternalStorageDirectory()
-    val roots = mutableListOf(StorageRoot("Internal storage", internal, removable = false))
+    val roots = LinkedHashMap<String, StorageRoot>()
+    roots[internal.absolutePath] = StorageRoot("Internal storage", internal, removable = false)
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        val sm = context.getSystemService(StorageManager::class.java)
+        sm?.storageVolumes?.forEach { vol ->
+            if (vol.state != Environment.MEDIA_MOUNTED) return@forEach
+            val dir = vol.directory ?: return@forEach
+            if (!dir.canRead()) return@forEach
+            val label = when {
+                vol.isPrimary -> "Internal storage"
+                else -> vol.getDescription(context) ?: "SD card"
+            }
+            roots.putIfAbsent(dir.absolutePath, StorageRoot(label, dir, removable = vol.isRemovable))
+        }
+    }
+
+    // Fallback (pre-R, or any volume the above missed): app-specific dirs look
+    // like /storage/<vol>/Android/data/<pkg>/files — the volume root precedes "/Android/".
     context.getExternalFilesDirs(null).forEach { f ->
         f ?: return@forEach
         val idx = f.absolutePath.indexOf("/Android/")
         if (idx <= 0) return@forEach
         val volRoot = File(f.absolutePath.substring(0, idx))
-        if (volRoot.absolutePath != internal.absolutePath && roots.none { it.dir.absolutePath == volRoot.absolutePath }) {
-            roots += StorageRoot("SD card", volRoot, removable = true)
+        if (volRoot.canRead()) {
+            val removable = volRoot.absolutePath != internal.absolutePath
+            roots.putIfAbsent(
+                volRoot.absolutePath,
+                StorageRoot(if (removable) "SD card" else "Internal storage", volRoot, removable),
+            )
         }
     }
-    return roots
+    return roots.values.toList()
 }

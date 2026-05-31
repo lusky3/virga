@@ -184,8 +184,13 @@ fun SyncTaskEditScreen(
                 onBlur = viewModel::touchSourcePath,
                 onClear = viewModel::clearSourcePath,
                 onChooseFolder = {
-                    if (android.os.Environment.isExternalStorageManager()) showLocalPicker = true
-                    else folderLauncher.launch(null)
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R &&
+                        android.os.Environment.isExternalStorageManager()
+                    ) {
+                        showLocalPicker = true
+                    } else {
+                        folderLauncher.launch(null)
+                    }
                 },
             )
 
