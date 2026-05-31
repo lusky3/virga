@@ -478,16 +478,17 @@ class SyncTasksViewModelTest {
     // --- Swipe-to-delete ----------------------------------------------------
 
     @Test
-    fun markPendingSwipeDelete_hidesTaskFromList() = runTest(mainDispatcher.dispatcher) {
+    fun swipeDelete_hidesTaskFromList() = runTest(mainDispatcher.dispatcher) {
         val vm = viewModel()
         val job = backgroundScope.launch { vm.uiState.collect {} }
         tasksFlow.value = listOf(task(id = 1), task(id = 2))
         advanceUntilIdle()
 
-        vm.markPendingSwipeDelete(task(id = 1))
+        vm.swipeDelete(task(id = 1))
         advanceUntilIdle()
 
         assertThat(vm.uiState.value.tasks.map { it.id }).containsExactly(2L)
+        assertThat(vm.uiState.value.pendingDeleteTask?.id).isEqualTo(1L)
         job.cancel()
     }
 
@@ -498,14 +499,15 @@ class SyncTasksViewModelTest {
         tasksFlow.value = listOf(task(id = 1), task(id = 2))
         advanceUntilIdle()
 
-        vm.markPendingSwipeDelete(task(id = 1))
+        vm.swipeDelete(task(id = 1))
         advanceUntilIdle()
         assertThat(vm.uiState.value.tasks.map { it.id }).containsExactly(2L)
 
-        vm.undoSwipeDelete(task(id = 1))
+        vm.undoSwipeDelete()
         advanceUntilIdle()
 
         assertThat(vm.uiState.value.tasks.map { it.id }).containsExactly(1L, 2L).inOrder()
+        assertThat(vm.uiState.value.pendingDeleteTask).isNull()
         job.cancel()
     }
 
@@ -513,9 +515,9 @@ class SyncTasksViewModelTest {
     fun commitSwipeDelete_cancelsAndDeletesTask() = runTest(mainDispatcher.dispatcher) {
         val taskToDelete = task(id = 1)
         val vm = viewModel()
-        vm.markPendingSwipeDelete(taskToDelete)
+        vm.swipeDelete(taskToDelete)
 
-        vm.commitSwipeDelete(taskToDelete)
+        vm.commitSwipeDelete()
         advanceUntilIdle()
 
         coVerifyOrder {

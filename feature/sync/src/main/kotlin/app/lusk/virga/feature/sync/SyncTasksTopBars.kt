@@ -1,8 +1,15 @@
 package app.lusk.virga.feature.sync
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckBox
@@ -26,8 +33,12 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 
@@ -111,31 +122,56 @@ internal fun SelectionTopBar(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SwipeToDeleteCard(onDelete: () -> Unit, content: @Composable () -> Unit) {
+    val haptics = LocalHapticFeedback.current
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value -> value == SwipeToDismissBoxValue.EndToStart },
     )
-    // Fire onDelete once when the row reaches the dismissed position.
-    // onDelete stages a pending-removal in the VM (row is already hidden) and
-    // shows the Undo snackbar. The row never reappears because the VM filters it out.
+    // Fire onDelete once when the row reaches the dismissed position. onDelete
+    // stages a pending-removal in the VM (row hides) and the screen shows the
+    // Undo snackbar.
     LaunchedEffect(dismissState.currentValue) {
-        if (dismissState.currentValue == SwipeToDismissBoxValue.EndToStart) {
-            onDelete()
-        }
+        if (dismissState.currentValue == SwipeToDismissBoxValue.EndToStart) onDelete()
+    }
+    // Will the row delete if released here? Drives the affordance + a haptic tick
+    // the moment the swipe passes the dismiss threshold.
+    val willDelete = dismissState.targetValue == SwipeToDismissBoxValue.EndToStart
+    LaunchedEffect(willDelete) {
+        if (willDelete) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
     }
     SwipeToDismissBox(
         state = dismissState,
         backgroundContent = {
+            // Red intensifies and the icon grows once past the threshold, so it's
+            // clear the swipe will delete (and that releasing commits it).
+            val bg by animateColorAsState(
+                if (willDelete) MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.errorContainer,
+                label = "swipeBg",
+            )
+            val onBg = if (willDelete) MaterialTheme.colorScheme.onError
+            else MaterialTheme.colorScheme.onErrorContainer
+            val iconScale by animateFloatAsState(if (willDelete) 1.3f else 0.9f, label = "swipeIcon")
             Box(
                 Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp),
+                    .background(bg, MaterialTheme.shapes.medium)
+                    .padding(horizontal = 20.dp),
                 contentAlignment = Alignment.CenterEnd,
             ) {
-                Icon(
-                    Icons.Filled.Delete,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        stringResource(R.string.sync_task_swipe_delete),
+                        color = onBg,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Icon(
+                        Icons.Filled.Delete,
+                        contentDescription = null,
+                        tint = onBg,
+                        modifier = Modifier.scale(iconScale),
+                    )
+                }
             }
         },
         enableDismissFromStartToEnd = false,

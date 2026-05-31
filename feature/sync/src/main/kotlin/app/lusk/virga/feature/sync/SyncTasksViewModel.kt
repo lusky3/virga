@@ -38,6 +38,8 @@ data class SyncTasksUiState(
     val sortOrder: TaskSortOrder = TaskSortOrder.LAST_RUN,
     /** Non-empty => multi-select mode is active. */
     val selectedIds: Set<Long> = emptySet(),
+    /** Task just swiped away and awaiting the Undo snackbar (hidden, not yet deleted). */
+    val pendingDeleteTask: SyncTask? = null,
     /** Count of unresolved conflicts across all tasks (drives the top-bar badge). */
     val unresolvedConflictCount: Int = 0,
     /** True when any task has a RUNNING/QUEUED run (drives sync-all → cancel-all). */
@@ -58,8 +60,8 @@ class SyncTasksViewModel @Inject constructor(
         val filter: TaskFilter = TaskFilter.ALL,
         val sort: TaskSortOrder = TaskSortOrder.LAST_RUN,
         val selected: Set<Long> = emptySet(),
-        /** Swiped rows whose Undo snackbar is still visible — hidden but not yet deleted. */
-        val pendingDelete: Set<Long> = emptySet(),
+        /** The single task swiped away and awaiting Undo — hidden but not yet deleted. */
+        val pendingDelete: SyncTask? = null,
     )
 
     private val _controls = MutableStateFlow(Controls())
@@ -78,7 +80,7 @@ class SyncTasksViewModel @Inject constructor(
                 .mapValues { (_, v) -> v.maxBy { it.startedAtEpochMs } }
             val visible = tasks
                 .asSequence()
-                .filterNot { it.id in controls.pendingDelete }
+                .filterNot { it.id == controls.pendingDelete?.id }
                 .filter { matchesFilter(it, controls.filter, latestRuns) }
                 .filter { matchesQuery(it, controls.query) }
                 .sortedWith(comparatorFor(controls.sort, latestRuns))
@@ -92,6 +94,7 @@ class SyncTasksViewModel @Inject constructor(
                 activeFilter = controls.filter,
                 sortOrder = controls.sort,
                 selectedIds = controls.selected,
+                pendingDeleteTask = controls.pendingDelete,
                 unresolvedConflictCount = conflicts.size,
                 anyRunActive = latestRuns.values.any {
                     it.status == SyncStatus.RUNNING || it.status == SyncStatus.QUEUED
@@ -181,15 +184,33 @@ class SyncTasksViewModel @Inject constructor(
     }
 
     // --- Swipe-to-delete (deferred, undoable) ------------------------------------
+    //
+    // A single pending row at a time. The screen drives the Undo snackbar from a
+    // screen-level effect keyed on [SyncTasksUiState.pendingDeleteTask], so the
+    // undo/commit decision is never tied to (and cancelled with) the swiped row's
+    // own composition — the bug that previously left rows hidden-but-not-deleted
+    // and made Undo a no-op.
 
-    fun markPendingSwipeDelete(task: SyncTask) =
-        _controls.update { it.copy(pendingDelete = it.pendingDelete + task.id) }
+    /** Swipe a row away (hide + await Undo). If another row is already pending,
+     *  commit it first so it isn't left stuck hidden. */
+    fun swipeDelete(task: SyncTask) {
+        _controls.value.pendingDelete?.let { previous ->
+            if (previous.id != task.id) deleteNow(previous)
+        }
+        _controls.update { it.copy(pendingDelete = task) }
+    }
 
-    fun undoSwipeDelete(task: SyncTask) =
-        _controls.update { it.copy(pendingDelete = it.pendingDelete - task.id) }
+    /** Undo the pending swipe: just un-hide the row (nothing was deleted). */
+    fun undoSwipeDelete() = _controls.update { it.copy(pendingDelete = null) }
 
-    fun commitSwipeDelete(task: SyncTask) = viewModelScope.launch {
-        _controls.update { it.copy(pendingDelete = it.pendingDelete - task.id) }
+    /** Commit the pending swipe: actually delete it. */
+    fun commitSwipeDelete() {
+        val task = _controls.value.pendingDelete ?: return
+        _controls.update { it.copy(pendingDelete = null) }
+        deleteNow(task)
+    }
+
+    private fun deleteNow(task: SyncTask) = viewModelScope.launch {
         scheduler.cancel(task.id)
         taskRepository.delete(task)
     }

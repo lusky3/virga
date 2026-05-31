@@ -28,7 +28,6 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -37,7 +36,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.ui.EmptyState
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,7 +49,6 @@ fun SyncTasksScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
     // Collapse FAB once the user scrolls down.
@@ -63,6 +60,23 @@ fun SyncTasksScreen(
             snackbar.showSnackbar(it)
             viewModel.clearMessage()
         }
+    }
+
+    // Undo snackbar for swipe-to-delete. Driven from this screen-level effect keyed
+    // on the pending task's id (not the swiped row's own composition, which is
+    // disposed the moment the row hides) so Undo/commit always runs exactly once.
+    val pendingDelete = state.pendingDeleteTask
+    val deletedLabel = pendingDelete?.let { stringResource(R.string.sync_task_deleted_snackbar, it.name) }
+    val undoLabel = stringResource(R.string.sync_task_deleted_snackbar_undo)
+    LaunchedEffect(pendingDelete?.id) {
+        if (pendingDelete == null || deletedLabel == null) return@LaunchedEffect
+        val result = snackbar.showSnackbar(
+            message = deletedLabel,
+            actionLabel = undoLabel,
+            duration = SnackbarDuration.Short,
+        )
+        if (result == SnackbarResult.ActionPerformed) viewModel.undoSwipeDelete()
+        else viewModel.commitSwipeDelete()
     }
 
     // Dialog state for single-task delete confirmation.
@@ -152,24 +166,8 @@ fun SyncTasksScreen(
                     }
                     items(state.tasks, key = { it.id }) { task ->
                         val latestRun = state.latestRuns[task.id]
-                        val deletedLabel = stringResource(R.string.sync_task_deleted_snackbar, task.name)
-                        val undoLabel = stringResource(R.string.sync_task_deleted_snackbar_undo)
                         SwipeToDeleteCard(
-                            onDelete = {
-                                viewModel.markPendingSwipeDelete(task)
-                                scope.launch {
-                                    val result = snackbar.showSnackbar(
-                                        message = deletedLabel,
-                                        actionLabel = undoLabel,
-                                        duration = SnackbarDuration.Short,
-                                    )
-                                    if (result == SnackbarResult.ActionPerformed) {
-                                        viewModel.undoSwipeDelete(task)
-                                    } else {
-                                        viewModel.commitSwipeDelete(task)
-                                    }
-                                }
-                            },
+                            onDelete = { viewModel.swipeDelete(task) },
                         ) {
                             SyncTaskCard(
                                 task = task,

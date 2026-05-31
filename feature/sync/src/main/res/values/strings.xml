@@ -180,5 +180,6 @@
     <string name="sync_edit_bisync_saf_unsupported">Two-way sync isn\'t available for this folder on this device.</string>
     <string name="sync_task_deleted_snackbar">\"%1$s\" deleted</string>
     <string name="sync_task_deleted_snackbar_undo">Undo</string>
+    <string name="sync_task_swipe_delete">Delete</string>
 </resources>
 
