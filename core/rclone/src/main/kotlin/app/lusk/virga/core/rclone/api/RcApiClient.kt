@@ -58,8 +58,21 @@ class RcApiClient(
                         message = rcErrorMessage(text, response.code),
                     )
                 }
-                if (text.isBlank()) JsonObject(emptyMap())
-                else json.parseToJsonElement(text).asObjectOrEmpty()
+                if (text.isBlank()) {
+                    JsonObject(emptyMap())
+                } else {
+                    // A 2xx with a malformed body would otherwise throw a raw
+                    // SerializationException, breaking the "throws only VirgaError"
+                    // contract every caller relies on.
+                    runCatching { json.parseToJsonElement(text).asObjectOrEmpty() }
+                        .getOrElse { e ->
+                            throw VirgaError.Rclone(
+                                exitCode = response.code,
+                                message = "rclone returned malformed JSON",
+                                cause = e,
+                            )
+                        }
+                }
             }
         } catch (e: IOException) {
             throw VirgaError.Network("Could not reach rclone daemon: ${e.message}", e)

@@ -3,6 +3,7 @@ package app.lusk.virga.core.rclone.oauth
 import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import app.lusk.virga.core.common.error.VirgaError
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -100,6 +101,9 @@ class OAuthTokenExchanger @Inject constructor(
             }
         } catch (e: IOException) {
             Result.failure(VirgaError.Network("Token exchange network failure", e))
+        } catch (e: SerializationException) {
+            // parseToJsonElement throws on malformed JSON; keep it inside Result.
+            Result.failure(VirgaError.Auth(p.provider.id, "Token endpoint returned malformed JSON", e))
         }
     }
 
@@ -156,6 +160,8 @@ class OAuthTokenExchanger @Inject constructor(
                 }
             } catch (e: IOException) {
                 Result.failure(VirgaError.Network("Graph /me/drive network failure", e))
+            } catch (e: SerializationException) {
+                Result.failure(VirgaError.Auth("onedrive", "Graph /me/drive returned malformed JSON", e))
             }
         }
 
