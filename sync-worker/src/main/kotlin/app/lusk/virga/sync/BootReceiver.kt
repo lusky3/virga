@@ -10,6 +10,7 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 
 /**
  * Re-registers periodic sync schedules after the device reboots.
@@ -45,7 +46,11 @@ class BootReceiver : BroadcastReceiver() {
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                scheduler.rescheduleAll()
+                // Bound the work to the goAsync() window (~10s) so a hung
+                // rescheduleAll() can't blow past it; reschedule retries next boot.
+                withTimeout(8_000) { scheduler.rescheduleAll() }
+            } catch (_: Exception) {
+                // Timed out or failed — safe to ignore; rescheduled on next boot/launch.
             } finally {
                 pending.finish()
             }
