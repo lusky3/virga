@@ -52,16 +52,7 @@ class SyncWorker @AssistedInject constructor(
         // on both sides, which staging cannot provide symmetrically.
         if (task.sourcePath.startsWith("content://") && task.direction == SyncDirection.BISYNC) {
             val msg = "Two-way sync isn't supported for this folder on this device."
-            historyRepository.finishRun(
-                runId = historyRepository.startRun(taskId),
-                taskId = taskId,
-                startedAtEpochMs = System.currentTimeMillis(),
-                status = SyncStatus.FAILED,
-                filesTransferred = 0,
-                bytesTransferred = 0L,
-                errorCount = 1,
-                errorMessage = msg,
-            )
+            finishFailed(historyRepository.startRun(taskId), taskId, System.currentTimeMillis(), null, msg)
             return Result.failure()
         }
 
@@ -123,28 +114,11 @@ class SyncWorker @AssistedInject constructor(
                 val writeResult = runCatching { staging.writeBack(staged) }
                 if (writeResult.isFailure) {
                     val msg = writeResult.exceptionOrNull()?.message ?: "Failed to write back to folder"
-                    historyRepository.finishRun(
-                        runId = runId,
-                        taskId = taskId,
-                        startedAtEpochMs = startedAt,
-                        status = SyncStatus.FAILED,
-                        filesTransferred = last?.transferredFiles ?: 0,
-                        bytesTransferred = last?.bytesTransferred ?: 0L,
-                        errorCount = (last?.errors ?: 0) + 1,
-                        errorMessage = msg,
-                    )
+                    finishFailed(runId, taskId, startedAt, last, msg)
                     return Result.failure()
                 }
             }
-            historyRepository.finishRun(
-                runId = runId,
-                taskId = taskId,
-                startedAtEpochMs = startedAt,
-                status = SyncStatus.SUCCESS,
-                filesTransferred = last?.transferredFiles ?: 0,
-                bytesTransferred = last?.bytesTransferred ?: 0L,
-                errorCount = last?.errors ?: 0,
-            )
+            finishSucceeded(runId, taskId, startedAt, last)
             // After a bisync, scan the destination for rclone conflict files
             // and queue them for user resolution.
             if (task.direction == SyncDirection.BISYNC) {
@@ -157,21 +131,41 @@ class SyncWorker @AssistedInject constructor(
             }
             Result.success()
         } else {
-            val message = failure.message ?: "Sync failed"
-            historyRepository.finishRun(
-                runId = runId,
-                taskId = taskId,
-                startedAtEpochMs = startedAt,
-                status = SyncStatus.FAILED,
-                filesTransferred = last?.transferredFiles ?: 0,
-                bytesTransferred = last?.bytesTransferred ?: 0L,
-                errorCount = (last?.errors ?: 0) + 1,
-                errorMessage = message,
-            )
+            finishFailed(runId, taskId, startedAt, last, failure.message ?: "Sync failed")
             // Transient transport problems are worth retrying; everything else fails.
             if (failure is VirgaError.Network) Result.retry() else Result.failure()
         }
     }
+
+    /** Record a SUCCESS run from the last observed [progress] snapshot. */
+    private suspend fun finishSucceeded(runId: Long, taskId: Long, startedAt: Long, progress: SyncProgress?) =
+        historyRepository.finishRun(
+            runId = runId,
+            taskId = taskId,
+            startedAtEpochMs = startedAt,
+            status = SyncStatus.SUCCESS,
+            filesTransferred = progress?.transferredFiles ?: 0,
+            bytesTransferred = progress?.bytesTransferred ?: 0L,
+            errorCount = progress?.errors ?: 0,
+        )
+
+    /** Record a FAILED run (+1 error) with [message] from the last [progress] snapshot. */
+    private suspend fun finishFailed(
+        runId: Long,
+        taskId: Long,
+        startedAt: Long,
+        progress: SyncProgress?,
+        message: String,
+    ) = historyRepository.finishRun(
+        runId = runId,
+        taskId = taskId,
+        startedAtEpochMs = startedAt,
+        status = SyncStatus.FAILED,
+        filesTransferred = progress?.transferredFiles ?: 0,
+        bytesTransferred = progress?.bytesTransferred ?: 0L,
+        errorCount = (progress?.errors ?: 0) + 1,
+        errorMessage = message,
+    )
 
     private fun foregroundInfo(notification: android.app.Notification): ForegroundInfo =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
