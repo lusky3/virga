@@ -113,6 +113,8 @@ class SyncWorker @AssistedInject constructor(
                     .distinctUntilChangedBy { p -> (p.fraction * 100).toInt() }
                     .collect { progress ->
                         last = progress
+                        // Publish to the UI (WS1.1) and mirror to the notification.
+                        setProgress(SyncProgressData.encode(progress))
                         setForeground(foregroundInfo(notifications.progress(task.name, progress)))
                     }
                 }

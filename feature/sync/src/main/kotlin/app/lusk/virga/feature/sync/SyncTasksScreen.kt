@@ -34,8 +34,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.lusk.virga.core.common.model.SyncProgress
+import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.designsystem.component.EmptyState
+import kotlinx.coroutines.flow.flowOf
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -166,12 +169,19 @@ fun SyncTasksScreen(
                     }
                     items(state.tasks, key = { it.id }) { task ->
                         val latestRun = state.latestRuns[task.id]
+                        val isRunning = latestRun?.status == SyncStatus.RUNNING ||
+                            latestRun?.status == SyncStatus.QUEUED
+                        // Subscribe to live progress only while a run is active (WS1.1).
+                        val liveProgress by remember(task.id, isRunning) {
+                            if (isRunning) viewModel.progressFor(task.id) else flowOf(null)
+                        }.collectAsStateWithLifecycle(initialValue = null)
                         SwipeToDeleteCard(
                             onDelete = { viewModel.swipeDelete(task) },
                         ) {
                             SyncTaskCard(
                                 task = task,
                                 latestRun = latestRun,
+                                liveProgress = liveProgress,
                                 selected = task.id in state.selectedIds,
                                 inSelectionMode = inSelectionMode,
                                 onSyncNow = { viewModel.syncNow(task.id) },

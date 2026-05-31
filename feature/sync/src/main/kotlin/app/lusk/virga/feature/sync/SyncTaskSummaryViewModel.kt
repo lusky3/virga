@@ -2,10 +2,12 @@ package app.lusk.virga.feature.sync
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.lusk.virga.core.common.model.SyncProgress
 import app.lusk.virga.core.common.model.SyncRun
 import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
+import app.lusk.virga.sync.SyncProgressMonitor
 import app.lusk.virga.sync.SyncScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -22,6 +24,7 @@ import javax.inject.Inject
 data class SyncTaskSummaryUiState(
     val task: SyncTask? = null,
     val runs: List<SyncRun> = emptyList(),
+    val liveProgress: SyncProgress? = null,
     val loading: Boolean = true,
 )
 
@@ -39,6 +42,7 @@ class SyncTaskSummaryViewModel @Inject constructor(
     private val taskRepository: SyncTaskRepository,
     private val historyRepository: SyncHistoryRepository,
     private val scheduler: SyncScheduler,
+    private val progressMonitor: SyncProgressMonitor,
 ) : ViewModel() {
 
     private val taskId = MutableStateFlow<Long?>(null)
@@ -51,8 +55,12 @@ class SyncTaskSummaryViewModel @Inject constructor(
     val uiState: StateFlow<SyncTaskSummaryUiState> =
         taskId.filterNotNull()
             .flatMapLatest { id ->
-                combine(taskRepository.task(id), historyRepository.runsForTask(id)) { task, runs ->
-                    SyncTaskSummaryUiState(task = task, runs = runs, loading = false)
+                combine(
+                    taskRepository.task(id),
+                    historyRepository.runsForTask(id),
+                    progressMonitor.progressFor(id),
+                ) { task, runs, progress ->
+                    SyncTaskSummaryUiState(task = task, runs = runs, liveProgress = progress, loading = false)
                 }
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SyncTaskSummaryUiState())

@@ -8,6 +8,7 @@ import app.lusk.virga.core.data.SyncTaskRepository
 import app.lusk.virga.core.common.model.Conflict
 import app.lusk.virga.core.common.model.SyncRun
 import app.lusk.virga.core.common.model.SyncTask
+import app.lusk.virga.sync.SyncProgressMonitor
 import app.lusk.virga.sync.SyncScheduler
 import com.google.common.truth.Truth.assertThat
 import io.mockk.coEvery
@@ -17,6 +18,7 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -43,9 +45,12 @@ class SyncTasksViewModelTest {
         every { unresolved } returns conflictsFlow
     }
     private val scheduler: SyncScheduler = mockk(relaxed = true)
+    private val progressMonitor: SyncProgressMonitor = mockk(relaxed = true) {
+        every { progressFor(any()) } returns flowOf(null)
+    }
 
     private fun viewModel() =
-        SyncTasksViewModel(taskRepository, historyRepository, conflictRepository, scheduler)
+        SyncTasksViewModel(taskRepository, historyRepository, conflictRepository, scheduler, progressMonitor)
 
     // --- pre-existing tests -------------------------------------------------
 

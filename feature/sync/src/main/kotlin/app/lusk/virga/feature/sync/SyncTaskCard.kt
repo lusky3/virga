@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cancel
@@ -16,6 +17,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -31,12 +33,14 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.lusk.virga.core.common.model.SyncProgress
 import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.common.util.formatFileSize
 import app.lusk.virga.core.common.model.SyncRun
 import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.designsystem.component.VirgaCard
 import app.lusk.virga.core.designsystem.component.VirgaCardState
+import app.lusk.virga.core.designsystem.theme.LocalVirgaColors
 
 @Composable
 internal fun SyncTaskCard(
@@ -44,6 +48,7 @@ internal fun SyncTaskCard(
     latestRun: SyncRun?,
     selected: Boolean,
     inSelectionMode: Boolean,
+    liveProgress: SyncProgress? = null,
     onSyncNow: () -> Unit,
     onCancelSync: () -> Unit,
     onToggleEnabled: (Boolean) -> Unit,
@@ -115,7 +120,9 @@ internal fun SyncTaskCard(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (latestRun != null) {
+                if (liveProgress != null) {
+                    LiveProgressLine(progress = liveProgress)
+                } else if (latestRun != null) {
                     LastRunLine(run = latestRun)
                 }
             }
@@ -171,6 +178,51 @@ internal fun SyncTaskCard(
             }
         }
     }
+}
+
+/**
+ * Live transfer treatment for an active run (BRAND §10/§12): a determinate
+ * progress bar tinted `running` (indeterminate while still listing) plus a
+ * compact metrics line. The wavy "precipitation" indicator is deferred until
+ * the Expressive APIs are public (see Theme.kt); this is the determinate
+ * fallback BRAND §12 calls for.
+ */
+@Composable
+private fun LiveProgressLine(progress: SyncProgress) {
+    val running = LocalVirgaColors.current.running
+    Spacer(Modifier.height(4.dp))
+    if (progress.totalBytes > 0) {
+        LinearProgressIndicator(
+            progress = { progress.fraction },
+            color = running,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    } else {
+        LinearProgressIndicator(
+            color = running,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+    Spacer(Modifier.height(2.dp))
+    val parts = buildList {
+        if (progress.totalBytes > 0) add("${(progress.fraction * 100).toInt()}%")
+        if (progress.totalFiles > 0) add("${progress.transferredFiles}/${progress.totalFiles} files")
+        if (progress.speedBytesPerSec > 0) add("${formatFileSize(progress.speedBytesPerSec.toLong())}/s")
+        progress.etaSeconds?.let { add("ETA ${formatEta(it)}") }
+    }
+    Text(
+        text = if (parts.isEmpty()) "Starting…" else parts.joinToString(" · "),
+        style = MaterialTheme.typography.labelSmall,
+        color = running,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+private fun formatEta(seconds: Long): String = when {
+    seconds >= 3600 -> "${seconds / 3600}h ${(seconds % 3600) / 60}m"
+    seconds >= 60 -> "${seconds / 60}m"
+    else -> "${seconds}s"
 }
 
 @Composable

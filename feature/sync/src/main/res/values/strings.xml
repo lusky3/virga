@@ -5,6 +5,8 @@
     <string name="sync_summary_cd_back">Back</string>
     <string name="sync_summary_missing">This task no longer exists.</string>
     <string name="sync_summary_enabled">Enabled</string>
+    <string name="sync_summary_backing_up">Backing up…</string>
+    <string name="sync_summary_starting">Starting…</string>
     <string name="sync_summary_source">Source</string>
     <string name="sync_summary_destination">Destination</string>
     <string name="sync_summary_direction">Direction</string>

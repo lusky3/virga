@@ -6,13 +6,16 @@ import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.data.ConflictRepository
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
+import app.lusk.virga.core.common.model.SyncProgress
 import app.lusk.virga.core.common.model.SyncRun
 import app.lusk.virga.core.common.model.SyncTask
+import app.lusk.virga.sync.SyncProgressMonitor
 import app.lusk.virga.sync.SyncScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
@@ -52,6 +55,7 @@ class SyncTasksViewModel @Inject constructor(
     private val historyRepository: SyncHistoryRepository,
     private val conflictRepository: ConflictRepository,
     private val scheduler: SyncScheduler,
+    private val progressMonitor: SyncProgressMonitor,
 ) : ViewModel() {
 
     /** UI control state (search/filter/sort/selection/pending-delete) held together. */
@@ -156,6 +160,9 @@ class SyncTasksViewModel @Inject constructor(
     }
 
     fun cancelSync(taskId: Long) = scheduler.cancel(taskId)
+
+    /** Live progress for a running task (WS1.1), or null when idle. */
+    fun progressFor(taskId: Long): Flow<SyncProgress?> = progressMonitor.progressFor(taskId)
 
     fun clearMessage() { _message.value = null }
 

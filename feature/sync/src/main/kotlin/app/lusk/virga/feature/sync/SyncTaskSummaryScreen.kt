@@ -4,6 +4,7 @@ import android.text.format.DateUtils
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,6 +28,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -46,7 +48,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.model.SyncRun
 import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.common.model.SyncTask
+import app.lusk.virga.core.common.model.SyncProgress
 import app.lusk.virga.core.common.util.formatFileSize
+import app.lusk.virga.core.designsystem.theme.LocalVirgaColors
 import app.lusk.virga.core.designsystem.component.EmptyState
 import app.lusk.virga.core.designsystem.component.ToggleRow
 
@@ -92,6 +96,7 @@ fun SyncTaskSummaryScreen(
             else -> SummaryContent(
                 task = task,
                 runs = state.runs,
+                liveProgress = state.liveProgress,
                 modifier = Modifier.padding(padding),
                 onSyncNow = viewModel::syncNow,
                 onCancelSync = viewModel::cancelSync,
@@ -126,6 +131,7 @@ fun SyncTaskSummaryScreen(
 private fun SummaryContent(
     task: SyncTask,
     runs: List<SyncRun>,
+    liveProgress: SyncProgress?,
     modifier: Modifier,
     onSyncNow: () -> Unit,
     onCancelSync: () -> Unit,
@@ -157,6 +163,10 @@ private fun SummaryContent(
                         Text(stringResource(R.string.sync_task_cd_sync_now))
                     }
                 }
+            }
+            if (liveProgress != null) {
+                Spacer(Modifier.height(12.dp))
+                LiveSyncPanel(progress = liveProgress)
             }
             ToggleRow(
                 label = stringResource(R.string.sync_summary_enabled),
@@ -232,6 +242,47 @@ private fun SummaryRow(label: String, value: String) {
             modifier = Modifier.width(120.dp),
         )
         Text(value, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+    }
+}
+
+/**
+ * Rich live-transfer panel for the summary screen (WS1.1, BRAND §10/§12): a
+ * "Backing up…" heading, a `running`-tinted bar (indeterminate while listing),
+ * and a metrics line. Determinate fallback for the deferred Expressive wavy bar.
+ */
+@Composable
+private fun LiveSyncPanel(progress: SyncProgress) {
+    val running = LocalVirgaColors.current.running
+    Column(Modifier.fillMaxWidth()) {
+        Text(
+            text = stringResource(R.string.sync_summary_backing_up),
+            style = MaterialTheme.typography.titleMedium,
+            color = running,
+        )
+        Spacer(Modifier.height(6.dp))
+        if (progress.totalBytes > 0) {
+            LinearProgressIndicator(
+                progress = { progress.fraction },
+                color = running,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
+            LinearProgressIndicator(color = running, modifier = Modifier.fillMaxWidth())
+        }
+        Spacer(Modifier.height(4.dp))
+        val parts = buildList {
+            if (progress.totalBytes > 0) add("${(progress.fraction * 100).toInt()}%")
+            if (progress.totalFiles > 0) add("${progress.transferredFiles}/${progress.totalFiles} files")
+            if (progress.speedBytesPerSec > 0) add("${formatFileSize(progress.speedBytesPerSec.toLong())}/s")
+            progress.etaSeconds?.let {
+                add("ETA " + if (it >= 60) "${it / 60}m" else "${it}s")
+            }
+        }
+        Text(
+            text = if (parts.isEmpty()) stringResource(R.string.sync_summary_starting) else parts.joinToString(" · "),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
