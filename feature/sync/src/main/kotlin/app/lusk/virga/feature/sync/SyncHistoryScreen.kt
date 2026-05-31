@@ -40,7 +40,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.common.util.formatFileSize
-import app.lusk.virga.core.database.entity.SyncRunEntity
+import app.lusk.virga.core.common.model.SyncRun
 import app.lusk.virga.core.ui.EmptyState
 import java.text.DateFormat
 import java.util.Date
@@ -223,7 +223,7 @@ private fun RunCardPreview() {
     Surface {
         RunCard(
             row = SyncRunRow(
-                run = SyncRunEntity(
+                run = SyncRun(
                     id = 1L, taskId = 1L, status = SyncStatus.SUCCESS,
                     startedAtEpochMs = 0L, endedAtEpochMs = 60_000L,
                     filesTransferred = 42, bytesTransferred = 1_234_567L,

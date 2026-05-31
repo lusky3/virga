@@ -3,20 +3,31 @@ package app.lusk.virga.feature.sync
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.lusk.virga.core.common.model.SyncDirection
+import app.lusk.virga.core.common.model.SyncTask
+import app.lusk.virga.core.data.RemoteFolderPickStore
 import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.data.SyncTaskRepository
-import app.lusk.virga.core.database.entity.SyncTaskEntity
 import app.lusk.virga.sync.SyncScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+/** intervalMinutes sentinel meaning "custom interval (minutes typed below)". */
+private const val CUSTOM_INTERVAL_SENTINEL = -1
+/** intervalMinutes sentinel meaning "specific days & time" (calendar schedule). */
+private const val CALENDAR_SENTINEL = -2
+
+/** ISO weekdays (1=Mon … 7=Sun) → bitmask (Mon=bit0 … Sun=bit6), and back. */
+private fun daysToMask(days: Set<Int>): Int = days.fold(0) { acc, d -> acc or (1 shl (d - 1)) }
+private fun maskToDays(mask: Int): Set<Int> = (1..7).filter { mask and (1 shl (it - 1)) != 0 }.toSet()
 
 /** Editable form state for a sync task. */
 data class SyncTaskForm(
@@ -28,6 +39,11 @@ data class SyncTaskForm(
     val direction: SyncDirection = SyncDirection.UPLOAD,
     val intervalMinutes: Int? = null,
     val customIntervalMinutes: Int? = null,
+    /** Calendar schedule (when intervalMinutes == CALENDAR_SENTINEL): ISO weekdays
+     *  selected (1=Mon … 7=Sun) plus the local time-of-day to run at. */
+    val scheduleDays: Set<Int> = emptySet(),
+    val scheduleHour: Int = 9,
+    val scheduleMinute: Int = 0,
     val wifiOnly: Boolean = true,
     val bwLimitWifi: String = "",
     val bwLimitMetered: String = "",
@@ -52,14 +68,27 @@ data class SyncTaskForm(
     val remoteNameError: String? get() =
         if ((remoteNameTouched || submitAttempted) && remoteName.isBlank()) "Required — add a remote first if the list is empty" else null
 
+    // An empty destination resolves to the remote ROOT ("remoteName:"), which is
+    // almost never intended and is dangerous; require an explicit path.
+    val remotePathError: String? get() =
+        if (submitAttempted && remotePath.isBlank()) "Destination is required (e.g. Backups/Photos)" else null
+
+    /** Whether the "specific days & time" calendar schedule mode is selected. */
+    val isCalendarSchedule: Boolean get() = intervalMinutes == CALENDAR_SENTINEL
+
+    val scheduleDaysError: String? get() =
+        if (isCalendarSchedule && scheduleDays.isEmpty()) "Pick at least one day" else null
+
     val isValid: Boolean
         get() = name.isNotBlank() &&
             sourcePath.isNotBlank() &&
             remoteName.isNotBlank() &&
+            remotePath.isNotBlank() &&
             bwLimitWifiError == null &&
             bwLimitMeteredError == null &&
             bufferSizeError == null &&
             customIntervalError == null &&
+            scheduleDaysError == null &&
             directionError == null
 }
 
@@ -68,25 +97,50 @@ class SyncTaskEditViewModel @Inject constructor(
     private val taskRepository: SyncTaskRepository,
     private val remoteRepository: RemoteRepository,
     private val scheduler: SyncScheduler,
+    private val folderPickStore: RemoteFolderPickStore,
 ) : ViewModel() {
 
     private val _form = MutableStateFlow(SyncTaskForm())
     val form: StateFlow<SyncTaskForm> = _form.asStateFlow()
+
+    init {
+        // When the remote file browser (opened via the destination "Browse"
+        // button) returns a chosen folder, fill the destination fields.
+        viewModelScope.launch {
+            folderPickStore.picked.filterNotNull().collect { picked ->
+                _form.update {
+                    it.copy(remoteName = picked.remoteName, remotePath = picked.path)
+                }
+                folderPickStore.consume()
+            }
+        }
+    }
 
     val availableRemotes: StateFlow<List<String>> =
         remoteRepository.remotes
             .map { remotes -> remotes.map { it.name } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** Guards [load] so it initialises the form exactly once. The screen calls it
+     *  from a `LaunchedEffect` that re-fires whenever the editor re-enters
+     *  composition (e.g. returning from the destination browser or the remotes
+     *  screen) — without this guard, re-loading would clobber the destination just
+     *  picked, and any other in-progress edits, with the stored values. */
+    private var initialized = false
+
     /**
      * Loads an existing task, or applies prefill values for a new task.
      * [prefillRemote] and [prefillRemotePath] are only applied when [taskId] <= 0.
+     * One-time: subsequent calls (on recomposition) are no-ops.
      */
     fun load(taskId: Long, prefillRemote: String? = null, prefillRemotePath: String? = null) {
+        if (initialized) return
+        initialized = true
         if (taskId > 0) {
             viewModelScope.launch {
                 taskRepository.getTask(taskId)?.let { task ->
-                    val isCustomInterval = task.intervalMinutes != null &&
+                    val isCalendar = task.scheduleDaysMask != 0
+                    val isCustomInterval = !isCalendar && task.intervalMinutes != null &&
                         task.intervalMinutes !in PRESET_INTERVAL_MINUTES
                     val isSaf = task.sourcePath.startsWith("content://")
                     _form.value = SyncTaskForm(
@@ -96,8 +150,15 @@ class SyncTaskEditViewModel @Inject constructor(
                         remoteName = task.remoteName,
                         remotePath = task.remotePath,
                         direction = task.direction,
-                        intervalMinutes = if (isCustomInterval) CUSTOM_INTERVAL_SENTINEL else task.intervalMinutes,
+                        intervalMinutes = when {
+                            isCalendar -> CALENDAR_SENTINEL
+                            isCustomInterval -> CUSTOM_INTERVAL_SENTINEL
+                            else -> task.intervalMinutes
+                        },
                         customIntervalMinutes = if (isCustomInterval) task.intervalMinutes else null,
+                        scheduleDays = if (isCalendar) maskToDays(task.scheduleDaysMask) else emptySet(),
+                        scheduleHour = task.scheduleHour,
+                        scheduleMinute = task.scheduleMinute,
                         wifiOnly = task.wifiOnly,
                         bwLimitWifi = task.bwLimitWifi.orEmpty(),
                         bwLimitMetered = task.bwLimitMetered.orEmpty(),
@@ -148,39 +209,58 @@ class SyncTaskEditViewModel @Inject constructor(
         )
     }
 
+    /** Switches the schedule to "specific days & time" (calendar) mode. */
+    fun selectCalendarSchedule() = update { it.copy(intervalMinutes = CALENDAR_SENTINEL) }
+
+    /** Toggles an ISO weekday (1=Mon … 7=Sun) in the calendar schedule. */
+    fun toggleScheduleDay(isoDay: Int) = update { f ->
+        val days = if (isoDay in f.scheduleDays) f.scheduleDays - isoDay else f.scheduleDays + isoDay
+        f.copy(scheduleDays = days)
+    }
+
+    fun setScheduleTime(hour: Int, minute: Int) =
+        update { it.copy(scheduleHour = hour.coerceIn(0, 23), scheduleMinute = minute.coerceIn(0, 59)) }
+
     fun save(onSaved: () -> Unit) {
         _form.update { it.copy(submitAttempted = true) }
         val form = _form.value
         if (!form.isValid) return
         viewModelScope.launch {
-            val entity = SyncTaskEntity(
+            val task = SyncTask(
                 id = form.id,
                 name = form.name.trim(),
                 sourcePath = form.sourcePath.trim(),
                 remoteName = form.remoteName.trim(),
                 remotePath = form.remotePath.trim(),
                 direction = form.direction,
-                // Resolve the CUSTOM sentinel to the entered minutes; presets/manual pass
-                // through. Guard the value so a stale/invalid custom entry can never persist
-                // the sentinel or a sub-minimum interval (falls back to manual = null).
-                intervalMinutes = if (form.intervalMinutes == CUSTOM_INTERVAL_SENTINEL) {
-                    form.customIntervalMinutes?.takeIf { it >= 15 }
-                } else {
-                    form.intervalMinutes
+                // Calendar mode persists no interval (schedule columns drive it).
+                // Otherwise resolve the CUSTOM sentinel to the entered minutes;
+                // presets/manual pass through. Guard so a stale/invalid custom entry
+                // can never persist the sentinel or a sub-minimum interval.
+                intervalMinutes = when {
+                    form.isCalendarSchedule -> null
+                    form.intervalMinutes == CUSTOM_INTERVAL_SENTINEL ->
+                        form.customIntervalMinutes?.takeIf { it >= 15 }
+                    else -> form.intervalMinutes
                 },
+                scheduleDaysMask = if (form.isCalendarSchedule) daysToMask(form.scheduleDays) else 0,
+                scheduleHour = form.scheduleHour,
+                scheduleMinute = form.scheduleMinute,
                 wifiOnly = form.wifiOnly,
                 bwLimitWifi = form.bwLimitWifi.trim().ifBlank { null },
                 bwLimitMetered = form.bwLimitMetered.trim().ifBlank { null },
                 bufferSize = form.bufferSize.trim().ifBlank { "16M" },
+                // Stamp creation time here (the Room default used to do this);
+                // set explicitly so the entity mapper preserves it verbatim.
+                createdAtEpochMs = System.currentTimeMillis(),
             )
-            val id = taskRepository.save(entity)
-            scheduler.schedule(entity.copy(id = id))
+            val id = taskRepository.save(task)
+            scheduler.schedule(task.copy(id = id))
             onSaved()
         }
     }
 
     private companion object {
-        const val CUSTOM_INTERVAL_SENTINEL = -1
         const val BISYNC_SAF_ERROR = "Two-way sync isn't available for this folder on this device."
         private val PRESET_INTERVAL_MINUTES = setOf(null, 15, 30, 60, 360, 720, 1440)
         private val BW_LIMIT_REGEX = Regex("""^\d+[KMGTkmgt]?(:\d+[KMGTkmgt]?)?$""")

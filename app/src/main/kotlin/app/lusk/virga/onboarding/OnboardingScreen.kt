@@ -147,16 +147,21 @@ fun OnboardingScreen(
                     }) { Text(stringResource(R.string.onboarding_btn_skip)) }
                 }
 
-                // a11y-05: when the primary action will launch a system settings
-                // intent (first tap on an unsatisfied permission page), override the
-                // semantic onClick label to describe the real action.
+                // Hoist the next-button's derived state to single locals shared by
+                // both the click handler and the a11y label, rather than computing
+                // page/satisfied/willLaunchIntent twice. These read snapshot state
+                // (currentPage, the permission flags, intentLaunchedPages) so the
+                // Button recomposes and the lambda captures fresh values on change.
                 val page = pagerState.currentPage
-                val satisfied = when (page) {
+                val pageSatisfied = when (page) {
                     1 -> storageGranted
                     2 -> batteryExempt
                     else -> true
                 }
-                val willLaunchIntent = !satisfied && page !in intentLaunchedPages && (page == 1 || page == 2)
+                // a11y-05: on the two permission pages, the first tap on an
+                // unsatisfied page launches a system settings intent instead of
+                // advancing — override the semantic onClick label to say so.
+                val willLaunchIntent = !pageSatisfied && page !in intentLaunchedPages && (page == 1 || page == 2)
                 val actionLabel = when {
                     willLaunchIntent && page == 1 -> stringResource(R.string.onboarding_btn_open_storage_settings)
                     willLaunchIntent && page == 2 -> stringResource(R.string.onboarding_btn_open_battery_settings)
@@ -165,32 +170,26 @@ fun OnboardingScreen(
 
                 Button(
                     onClick = {
-                        val currentPage = pagerState.currentPage
-                        val currentSatisfied = when (currentPage) {
-                            1 -> storageGranted
-                            2 -> batteryExempt
-                            else -> true
-                        }
-                        if (!currentSatisfied && currentPage !in intentLaunchedPages && (currentPage == 1 || currentPage == 2)) {
-                            val ok = when (currentPage) {
+                        if (willLaunchIntent) {
+                            val ok = when (page) {
                                 1 -> requestStorageAccess(context, readPermissionLauncher::launch)
                                 else -> openBatterySettings(context)
                             }
                             if (!ok) {
                                 scope.launch {
                                     snackbar.showSnackbar(
-                                        if (currentPage == 1) storageSettingsError else batterySettingsError,
+                                        if (page == 1) storageSettingsError else batterySettingsError,
                                     )
                                 }
                             }
-                            intentLaunchedPages = intentLaunchedPages + currentPage
+                            intentLaunchedPages = intentLaunchedPages + page
                             return@Button
                         }
-                        if (currentPage == pages.lastIndex) {
+                        if (page == pages.lastIndex) {
                             viewModel.completeOnboarding()
                             onFinished()
                         } else {
-                            scope.launch { pagerState.animateScrollToPage(currentPage + 1) }
+                            scope.launch { pagerState.animateScrollToPage(page + 1) }
                         }
                     },
                     modifier = if (actionLabel != null) {
@@ -200,7 +199,7 @@ fun OnboardingScreen(
                     },
                 ) {
                     Text(
-                        if (pagerState.currentPage == pages.lastIndex) {
+                        if (page == pages.lastIndex) {
                             stringResource(R.string.onboarding_btn_get_started)
                         } else {
                             stringResource(R.string.onboarding_btn_next)

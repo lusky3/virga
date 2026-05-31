@@ -7,6 +7,7 @@ import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.common.error.toUserMessage
 import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.data.FileBrowserRepository
+import app.lusk.virga.core.data.RemoteFolderPickStore
 import app.lusk.virga.core.data.RemoteRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -62,7 +63,11 @@ class FileBrowserViewModel @Inject constructor(
     private val fileBrowser: FileBrowserRepository,
     remoteRepository: RemoteRepository,
     private val dispatchers: DispatcherProvider,
+    private val folderPickStore: RemoteFolderPickStore,
 ) : ViewModel() {
+
+    /** Records the current folder as the chosen destination (pick mode). */
+    fun pickFolder(remoteName: String, path: String) = folderPickStore.pick(remoteName, path)
 
     private val _state = MutableStateFlow(FileBrowserUiState())
     val state: StateFlow<FileBrowserUiState> = _state.asStateFlow()

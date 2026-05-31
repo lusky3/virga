@@ -71,6 +71,7 @@ fun SyncTaskEditScreen(
     prefillRemotePath: String? = null,
     onBack: () -> Unit,
     onNavigateToRemotes: () -> Unit = {},
+    onBrowseDestination: (remoteName: String) -> Unit = {},
     viewModel: SyncTaskEditViewModel = hiltViewModel(),
 ) {
     LaunchedEffect(taskId) { viewModel.load(taskId, prefillRemote, prefillRemotePath) }
@@ -188,12 +189,29 @@ fun SyncTaskEditScreen(
                 onValueChange = { viewModel.update { f -> f.copy(remotePath = it) } },
                 label = { Text(stringResource(R.string.sync_edit_field_remote_path)) },
                 singleLine = true,
+                isError = form.remotePathError != null,
+                supportingText = form.remotePathError?.let { { Text(it) } },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                 trailingIcon = if (form.remotePath.isNotEmpty()) {
                     { IconButton(onClick = { viewModel.update { f -> f.copy(remotePath = "") } }) { Icon(Icons.Filled.Clear, null) } }
                 } else null,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().semantics { form.remotePathError?.let { error(it) } },
             )
+            // Browse the selected remote to pick a destination folder (needs a remote first).
+            TextButton(
+                onClick = { onBrowseDestination(form.remoteName) },
+                enabled = form.remoteName.isNotBlank(),
+                modifier = Modifier.padding(top = 4.dp),
+            ) {
+                Icon(Icons.Filled.FolderOpen, contentDescription = null)
+                Text(
+                    text = stringResource(
+                        if (form.remoteName.isBlank()) R.string.sync_edit_browse_dest_needs_remote
+                        else R.string.sync_edit_browse_dest,
+                    ),
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
 
             // Direction
             DirectionSegmentedRow(
@@ -206,9 +224,22 @@ fun SyncTaskEditScreen(
                 selected = form.intervalMinutes,
                 customMinutes = form.customIntervalMinutes,
                 customIntervalError = form.customIntervalError,
+                isCalendar = form.isCalendarSchedule,
                 onSelect = { viewModel.update { f -> f.copy(intervalMinutes = it) } },
                 onCustomMinutes = { viewModel.update { f -> f.copy(customIntervalMinutes = it) } },
+                onSelectCalendar = viewModel::selectCalendarSchedule,
             )
+
+            if (form.isCalendarSchedule) {
+                CalendarScheduleEditor(
+                    days = form.scheduleDays,
+                    hour = form.scheduleHour,
+                    minute = form.scheduleMinute,
+                    daysError = form.scheduleDaysError,
+                    onToggleDay = viewModel::toggleScheduleDay,
+                    onTimeChange = viewModel::setScheduleTime,
+                )
+            }
 
             // Wi-Fi only toggle
             Row(

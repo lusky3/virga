@@ -22,6 +22,75 @@ data class FileItem(
     val mimeType: String? = null,
 )
 
+/**
+ * A user-defined sync job. Domain model surfaced to ViewModels/UI; the Room
+ * `SyncTaskEntity` is the persistence form and never leaves the data layer.
+ * Fields mirror the entity (including [filters] as a newline-joined glob string).
+ */
+data class SyncTask(
+    val id: Long = 0,
+    val name: String,
+    val sourcePath: String,
+    val remoteName: String,
+    val remotePath: String,
+    val direction: SyncDirection,
+    /** Polling interval in minutes; null means manual-only. */
+    val intervalMinutes: Int?,
+    /**
+     * Calendar schedule: bitmask of weekdays (Mon=bit0 … Sun=bit6). 0 = none.
+     * When non-zero, the task runs at [scheduleHour]:[scheduleMinute] local time
+     * on each selected day (takes precedence over [intervalMinutes]).
+     */
+    val scheduleDaysMask: Int = 0,
+    val scheduleHour: Int = 9,
+    val scheduleMinute: Int = 0,
+    /** Newline-joined include/exclude glob patterns. */
+    val filters: String = "",
+    /** rclone --bwlimit on WiFi/metered; null/blank = no limit. e.g. "1M". */
+    val bwLimitWifi: String? = null,
+    val bwLimitMetered: String? = null,
+    val transfers: Int = 4,
+    val checkers: Int = 8,
+    val bufferSize: String = "16M",
+    val wifiOnly: Boolean = true,
+    val requiresCharging: Boolean = false,
+    val enabled: Boolean = true,
+    val createdAtEpochMs: Long = 0,
+)
+
+/** A single execution of a [SyncTask]. Domain model; mirrors `SyncRunEntity`. */
+data class SyncRun(
+    val id: Long = 0,
+    val taskId: Long,
+    val startedAtEpochMs: Long,
+    val endedAtEpochMs: Long? = null,
+    val status: SyncStatus,
+    val filesTransferred: Int = 0,
+    val bytesTransferred: Long = 0,
+    val errorCount: Int = 0,
+    val errorMessage: String? = null,
+    /** Path to the captured rclone verbose log for this run, if any. */
+    val logPath: String? = null,
+)
+
+/**
+ * A bisync conflict: two variants of the same logical file kept by rclone.
+ * Domain model; mirrors `ConflictEntity`.
+ */
+data class Conflict(
+    val id: Long = 0,
+    val taskId: Long,
+    val remoteName: String,
+    /** Base file path without the conflict suffix (e.g. "Docs/report.txt"). */
+    val basePath: String,
+    val variant1Path: String,
+    val variant2Path: String,
+    val variant1Size: Long,
+    val variant2Size: Long,
+    val detectedAtEpochMs: Long = 0,
+    val resolved: Boolean = false,
+)
+
 /** Aggregate progress for a running sync, derived from rclone `core/stats`. */
 data class SyncProgress(
     val bytesTransferred: Long,

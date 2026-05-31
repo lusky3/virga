@@ -50,7 +50,9 @@ interface SyncTaskDao {
     @Query("SELECT * FROM sync_tasks WHERE id = :id")
     suspend fun getById(id: Long): SyncTaskEntity?
 
-    @Query("SELECT * FROM sync_tasks WHERE enabled = 1 AND intervalMinutes IS NOT NULL")
+    /** Enabled tasks with any automatic schedule — a polling interval OR a
+     *  calendar (weekday) schedule. Used to re-register work after a reboot. */
+    @Query("SELECT * FROM sync_tasks WHERE enabled = 1 AND (intervalMinutes IS NOT NULL OR scheduleDaysMask != 0)")
     suspend fun getScheduled(): List<SyncTaskEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -82,6 +84,11 @@ interface SyncRunDao {
 
     @Query("DELETE FROM sync_runs WHERE startedAtEpochMs < :beforeEpochMs")
     suspend fun pruneOlderThan(beforeEpochMs: Long)
+
+    /** Count of prior SUCCESS runs for a task. Used to detect a task's first
+     *  successful sync (e.g. a bisync that still needs a --resync baseline). */
+    @Query("SELECT COUNT(*) FROM sync_runs WHERE taskId = :taskId AND status = 'SUCCESS'")
+    suspend fun countSuccessful(taskId: Long): Int
 
     /**
      * Mark runs still flagged RUNNING as FAILED. A worker killed mid-run (process

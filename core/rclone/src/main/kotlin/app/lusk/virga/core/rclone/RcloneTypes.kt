@@ -28,8 +28,17 @@ data class SyncOptions(
     val bufferSize: String = "16M",
     val filters: List<String> = emptyList(),
     val dryRun: Boolean = false,
-    /** When true, delete extraneous files on the destination (true sync vs copy). */
-    val deleteExtraneous: Boolean = true,
+    /**
+     * When true, delete files on the destination that are absent from the source
+     * (rclone `sync`/mirror); when false, only add and update (rclone `copy`).
+     *
+     * Defaults to **false** (additive copy): a one-way upload/download must never
+     * silently delete files the user didn't touch. A mirror would make the
+     * destination identical to the source — e.g. uploading 2 local files to a
+     * remote folder holding 467 others would delete those 467. Mirroring is a
+     * destructive, explicit opt-in, not a default.
+     */
+    val deleteExtraneous: Boolean = false,
 )
 
 /** Options for a two-way `sync/bisync`. */

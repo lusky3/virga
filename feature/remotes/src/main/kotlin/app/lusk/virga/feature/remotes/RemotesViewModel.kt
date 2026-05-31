@@ -6,8 +6,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import app.lusk.virga.core.common.error.toUserMessage
+import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.data.RemoteRepository
-import app.lusk.virga.core.database.entity.RemoteEntity
+import app.lusk.virga.core.datastore.OAuthKeyStore
 import app.lusk.virga.core.rclone.oauth.OAuthConfig
 import app.lusk.virga.core.rclone.oauth.OAuthProvider
 import app.lusk.virga.core.rclone.oauth.OAuthProviders
@@ -28,10 +29,12 @@ import java.util.UUID
 import javax.inject.Inject
 
 data class RemotesUiState(
-    val remotes: List<RemoteEntity> = emptyList(),
+    val remotes: List<Remote> = emptyList(),
     val refreshing: Boolean = false,
     val oauthInProgress: Boolean = false,
     val message: String? = null,
+    /** providerId → user-supplied client ID, for providers using their own keys. */
+    val customClientIds: Map<String, String> = emptyMap(),
 )
 
 @HiltViewModel
@@ -41,6 +44,7 @@ class RemotesViewModel @Inject constructor(
     private val oauthConfig: OAuthConfig,
     private val oauthStore: OAuthStore,
     private val tokenExchanger: OAuthTokenExchanger,
+    private val oauthKeyStore: OAuthKeyStore,
     private val dispatchers: DispatcherProvider,
 ) : ViewModel() {
 
@@ -172,37 +176,60 @@ class RemotesViewModel @Inject constructor(
     )
 
     private fun combineState(): StateFlow<RemotesUiState> =
-        combine(repository.remotes, transient) { remotes, t ->
+        combine(repository.remotes, transient, oauthKeyStore.clientIds) { remotes, t, customIds ->
             RemotesUiState(
                 remotes = remotes,
                 refreshing = t.refreshing,
                 oauthInProgress = t.oauthInProgress,
                 message = t.message,
+                customClientIds = customIds,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RemotesUiState())
+
+    // --- Bring-your-own OAuth client IDs --------------------------------
+
+    /** Saves (or clears, when blank) the user's own client ID for [providerId]. */
+    fun saveClientId(providerId: String, clientId: String) {
+        viewModelScope.launch { oauthKeyStore.setClientId(providerId, clientId) }
+    }
+
+    fun clearClientId(providerId: String) {
+        viewModelScope.launch { oauthKeyStore.clearClientId(providerId) }
+    }
 
     // --- OAuth ----------------------------------------------------------
 
     /** Starts the OAuth flow for [provider]; observe [launchUrl] to launch Custom Tabs. */
     fun startOAuth(provider: OAuthProvider, remoteName: String) {
-        val clientId = oauthConfig.clientId(provider.id)
-        if (clientId.isBlank()) {
-            transient.value = transient.value.copy(
-                message = context.getString(R.string.remotes_msg_oauth_not_configured, provider.displayName),
+        viewModelScope.launch {
+            // Prefer the user's own client ID over the shared built-in one.
+            val override = oauthKeyStore.clientId(provider.id)
+            val clientId = override ?: oauthConfig.clientId(provider.id)
+            if (clientId.isBlank()) {
+                transient.value = transient.value.copy(
+                    message = context.getString(R.string.remotes_msg_oauth_not_configured, provider.displayName),
+                )
+                return@launch
+            }
+            // Google derives its redirect from the client ID, so a BYO Google client
+            // needs its redirect recomputed from the user's ID (not the built-in).
+            val redirectUri = if (provider.id == OAuthProviders.GoogleDrive.id && override != null) {
+                OAuthConfig.googleAndroidRedirect(clientId, oauthConfig.redirectUri(provider.id))
+            } else {
+                oauthConfig.redirectUri(provider.id)
+            }
+            val pending = OAuthTokenExchanger.PendingAuth(
+                provider = provider,
+                state = UUID.randomUUID().toString(),
+                verifier = Pkce.newVerifier(),
+                clientId = clientId,
+                redirectUri = redirectUri,
+                remoteName = remoteName,
             )
-            return
+            oauthStore.startPending(pending)
+            transient.value = transient.value.copy(oauthInProgress = true, message = null)
+            _launchUrl.value = tokenExchanger.authorizeUrl(pending)
         }
-        val pending = OAuthTokenExchanger.PendingAuth(
-            provider = provider,
-            state = UUID.randomUUID().toString(),
-            verifier = Pkce.newVerifier(),
-            clientId = clientId,
-            redirectUri = oauthConfig.redirectUri(provider.id),
-            remoteName = remoteName,
-        )
-        oauthStore.startPending(pending)
-        transient.value = transient.value.copy(oauthInProgress = true, message = null)
-        _launchUrl.value = tokenExchanger.authorizeUrl(pending)
     }
 
     /** Called by the screen once it has handed [launchUrl] to Custom Tabs. */

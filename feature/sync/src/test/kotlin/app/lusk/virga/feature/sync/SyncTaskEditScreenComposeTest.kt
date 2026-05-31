@@ -6,8 +6,9 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTextInput
 import app.lusk.virga.core.data.RemoteRepository
+import app.lusk.virga.core.data.RemoteFolderPickStore
 import app.lusk.virga.core.data.SyncTaskRepository
-import app.lusk.virga.core.database.entity.RemoteEntity
+import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.sync.SyncScheduler
 import io.mockk.every
 import io.mockk.mockk
@@ -34,13 +35,13 @@ class SyncTaskEditScreenComposeTest {
     private val taskRepository: SyncTaskRepository = mockk(relaxed = true)
     private val remoteRepository: RemoteRepository = mockk {
         every { remotes } returns flowOf(
-            listOf(RemoteEntity(name = "gdrive", type = "drive", displayName = "GDrive")),
+            listOf(Remote(name = "gdrive", type = "drive")),
         )
     }
     private val scheduler: SyncScheduler = mockk(relaxed = true)
 
     private fun setContent(): SyncTaskEditViewModel {
-        val viewModel = SyncTaskEditViewModel(taskRepository, remoteRepository, scheduler)
+        val viewModel = SyncTaskEditViewModel(taskRepository, remoteRepository, scheduler, RemoteFolderPickStore())
         composeRule.setContent {
             SyncTaskEditScreen(taskId = 0L, onBack = {}, viewModel = viewModel)
         }
@@ -70,7 +71,7 @@ class SyncTaskEditScreenComposeTest {
         // RemoteDropdown is a read-only OutlinedTextField; setting the remote
         // through the ViewModel is equivalent and avoids dealing with the
         // ExposedDropdownMenu under Robolectric's view hierarchy.
-        viewModel.update { it.copy(remoteName = "gdrive") }
+        viewModel.update { it.copy(remoteName = "gdrive", remotePath = "Backups") }
 
         composeRule.onNodeWithText("Save").assertIsEnabled()
     }

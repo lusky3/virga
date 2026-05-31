@@ -23,11 +23,14 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): VirgaDatabase =
         Room.databaseBuilder(context, VirgaDatabase::class.java, VirgaDatabase.NAME)
+            .addMigrations(VirgaDatabase.MIGRATION_2_3)
             .apply {
                 // Destructive fallback is a DEBUG-only convenience while the schema
                 // evolves. A release build must NOT silently wipe user data on a
                 // version bump — without a registered migration it fails loudly so
-                // a real Migration gets written before shipping.
+                // a real Migration gets written before shipping. Registered
+                // migrations (above) run in every build, so real schema changes
+                // preserve data instead of hitting the destructive fallback.
                 if (BuildConfig.DEBUG) {
                     fallbackToDestructiveMigration(dropAllTables = true)
                     fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)

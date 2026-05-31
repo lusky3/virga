@@ -1,5 +1,13 @@
 # Ruflo — Claude Code Configuration
 
+## Project Status
+
+- **Pre-production / not released.** There are no real users and no published data.
+- DB schema changes do **not** need clean Room migrations or backward compatibility.
+  It's fine to bump the version and rely on destructive migration (wiping app data
+  between edits is acceptable). Write a real `Migration` only when convenient, not
+  out of necessity.
+
 ## Rules
 
 - Do what has been asked; nothing more, nothing less

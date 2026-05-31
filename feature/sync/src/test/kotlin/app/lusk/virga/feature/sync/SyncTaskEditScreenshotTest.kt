@@ -8,8 +8,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onRoot
 import app.lusk.virga.core.data.RemoteRepository
+import app.lusk.virga.core.data.RemoteFolderPickStore
 import app.lusk.virga.core.data.SyncTaskRepository
-import app.lusk.virga.core.database.entity.RemoteEntity
+import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.sync.SyncScheduler
 import com.github.takahirom.roborazzi.RoborazziRule
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -56,8 +57,8 @@ class SyncTaskEditScreenshotTest {
     private val remoteRepository: RemoteRepository = mockk {
         every { remotes } returns flowOf(
             listOf(
-                RemoteEntity(name = "gdrive", type = "drive", displayName = "Google Drive"),
-                RemoteEntity(name = "box", type = "box", displayName = "Box"),
+                Remote(name = "gdrive", type = "drive"),
+                Remote(name = "box", type = "box"),
             ),
         )
     }
@@ -65,7 +66,7 @@ class SyncTaskEditScreenshotTest {
 
     @Test
     fun syncTaskEditScreen_emptyForm() {
-        val viewModel = SyncTaskEditViewModel(taskRepository, remoteRepository, scheduler)
+        val viewModel = SyncTaskEditViewModel(taskRepository, remoteRepository, scheduler, RemoteFolderPickStore())
         composeRule.setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
@@ -80,7 +81,7 @@ class SyncTaskEditScreenshotTest {
 
     @Test
     fun syncTaskEditScreen_filledForm() {
-        val viewModel = SyncTaskEditViewModel(taskRepository, remoteRepository, scheduler)
+        val viewModel = SyncTaskEditViewModel(taskRepository, remoteRepository, scheduler, RemoteFolderPickStore())
         composeRule.setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {

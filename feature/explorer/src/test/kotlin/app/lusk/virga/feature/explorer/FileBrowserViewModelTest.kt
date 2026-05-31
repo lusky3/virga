@@ -3,8 +3,9 @@ package app.lusk.virga.feature.explorer
 import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.data.FileBrowserRepository
+import app.lusk.virga.core.data.RemoteFolderPickStore
 import app.lusk.virga.core.data.RemoteRepository
-import app.lusk.virga.core.database.entity.RemoteEntity
+import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.rclone.RcloneEngine
 import com.google.common.truth.Truth.assertThat
 import io.mockk.coEvery
@@ -33,7 +34,7 @@ class FileBrowserViewModelTest {
     @RegisterExtension
     val mainDispatcher = MainDispatcherExtension()
 
-    private val remotesFlow = MutableStateFlow<List<RemoteEntity>>(emptyList())
+    private val remotesFlow = MutableStateFlow<List<Remote>>(emptyList())
     private val engine: RcloneEngine = mockk(relaxed = true)
     private val repository: RemoteRepository = mockk(relaxed = true) {
         every { remotes } returns remotesFlow
@@ -50,7 +51,7 @@ class FileBrowserViewModelTest {
     }
 
     private fun viewModel() =
-        FileBrowserViewModel(FileBrowserRepository(engine), repository, testDispatchers)
+        FileBrowserViewModel(FileBrowserRepository(engine), repository, testDispatchers, RemoteFolderPickStore())
 
     private fun file(name: String, size: Long = 0L, modMs: Long? = null) =
         FileItem(name = name, path = name, isDir = false, size = size, modTimeEpochMs = modMs)

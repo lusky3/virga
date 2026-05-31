@@ -2,7 +2,7 @@ package app.lusk.virga.sync
 
 import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.common.model.SyncProgress
-import app.lusk.virga.core.database.entity.SyncTaskEntity
+import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.rclone.BisyncOptions
 import app.lusk.virga.core.rclone.RcloneEngine
 import app.lusk.virga.core.rclone.SyncOptions
@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 
 /**
- * Turns a [SyncTaskEntity] into the right rclone invocation and surfaces its
+ * Turns a [SyncTask] into the right rclone invocation and surfaces its
  * progress. Pure orchestration — no Android dependencies — so it is unit
  * testable against a fake [RcloneEngine].
  */
@@ -23,13 +23,23 @@ class SyncExecutor @Inject constructor(
      * failures propagate as exceptions for the caller to record.
      */
     /**
-     * @param allowDeletes when false, the sync mirrors additions/updates only
-     * (rclone `copy`, not `sync`). The worker sets this false for SAF-staged
-     * downloads, whose write-back into the content tree is additive-only — so a
-     * mirror-with-deletes would be misleading. Network/direct-path syncs keep the
-     * default true (true mirror).
+     * @param allowDeletes when true, the destination is mirrored to match the
+     * source (rclone `sync`, which DELETES extraneous destination files); when
+     * false (the default), the sync only adds/updates (rclone `copy`). One-way
+     * syncs must default to additive — mirroring a few local files onto a
+     * populated remote folder would delete everything else there.
+     *
+     * @param resync requests rclone's bisync `--resync` to establish the baseline
+     * listing. Required on a bisync task's first run — without it rclone aborts
+     * with "cannot find prior listing". The worker passes true until the task has
+     * a prior successful run. Ignored for non-bisync directions.
      */
-    fun run(task: SyncTaskEntity, metered: Boolean, allowDeletes: Boolean = true): Flow<SyncProgress> {
+    fun run(
+        task: SyncTask,
+        metered: Boolean,
+        allowDeletes: Boolean = false,
+        resync: Boolean = false,
+    ): Flow<SyncProgress> {
         val local = task.sourcePath
         val remote = remoteSpec(task)
         val bwLimit = if (metered) task.bwLimitMetered else task.bwLimitWifi
@@ -44,6 +54,7 @@ class SyncExecutor @Inject constructor(
                     transfers = task.transfers,
                     checkers = task.checkers,
                     filters = filters,
+                    resync = resync,
                 ),
             )
             else -> engine.sync(
@@ -63,7 +74,7 @@ class SyncExecutor @Inject constructor(
     }
 
     /** Builds the rclone "remote:path" destination spec. */
-    private fun remoteSpec(task: SyncTaskEntity): String {
+    private fun remoteSpec(task: SyncTask): String {
         val path = task.remotePath.removePrefix("/")
         return "${task.remoteName}:$path"
     }

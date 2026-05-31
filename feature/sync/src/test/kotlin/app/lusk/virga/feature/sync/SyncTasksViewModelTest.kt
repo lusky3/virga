@@ -5,9 +5,9 @@ import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.data.ConflictRepository
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
-import app.lusk.virga.core.database.entity.ConflictEntity
-import app.lusk.virga.core.database.entity.SyncRunEntity
-import app.lusk.virga.core.database.entity.SyncTaskEntity
+import app.lusk.virga.core.common.model.Conflict
+import app.lusk.virga.core.common.model.SyncRun
+import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.sync.SyncScheduler
 import com.google.common.truth.Truth.assertThat
 import io.mockk.coEvery
@@ -30,15 +30,15 @@ class SyncTasksViewModelTest {
     @RegisterExtension
     val mainDispatcher = MainDispatcherExtension()
 
-    private val tasksFlow = MutableStateFlow<List<SyncTaskEntity>>(emptyList())
-    private val runsFlow = MutableStateFlow<List<SyncRunEntity>>(emptyList())
+    private val tasksFlow = MutableStateFlow<List<SyncTask>>(emptyList())
+    private val runsFlow = MutableStateFlow<List<SyncRun>>(emptyList())
     private val taskRepository: SyncTaskRepository = mockk(relaxed = true) {
         every { tasks } returns tasksFlow
     }
     private val historyRepository: SyncHistoryRepository = mockk(relaxed = true) {
         every { recentRuns } returns runsFlow
     }
-    private val conflictsFlow = MutableStateFlow<List<ConflictEntity>>(emptyList())
+    private val conflictsFlow = MutableStateFlow<List<Conflict>>(emptyList())
     private val conflictRepository: ConflictRepository = mockk(relaxed = true) {
         every { unresolved } returns conflictsFlow
     }
@@ -64,8 +64,8 @@ class SyncTasksViewModelTest {
         advanceUntilIdle()
 
         coVerifyOrder {
-            taskRepository.save(match<SyncTaskEntity> { it.id == 1L && !it.enabled })
-            scheduler.schedule(match<SyncTaskEntity> { it.id == 1L && !it.enabled })
+            taskRepository.save(match<SyncTask> { it.id == 1L && !it.enabled })
+            scheduler.schedule(match<SyncTask> { it.id == 1L && !it.enabled })
         }
     }
 
@@ -387,12 +387,12 @@ class SyncTasksViewModelTest {
         advanceUntilIdle()
 
         coVerifyOrder {
-            taskRepository.save(match<SyncTaskEntity> { it.id == 1L && it.enabled })
-            scheduler.schedule(match<SyncTaskEntity> { it.id == 1L && it.enabled })
+            taskRepository.save(match<SyncTask> { it.id == 1L && it.enabled })
+            scheduler.schedule(match<SyncTask> { it.id == 1L && it.enabled })
         }
         coVerifyOrder {
-            taskRepository.save(match<SyncTaskEntity> { it.id == 2L && it.enabled })
-            scheduler.schedule(match<SyncTaskEntity> { it.id == 2L && it.enabled })
+            taskRepository.save(match<SyncTask> { it.id == 2L && it.enabled })
+            scheduler.schedule(match<SyncTask> { it.id == 2L && it.enabled })
         }
         assertThat(vm.uiState.value.selectedIds).isEmpty()
         job.cancel()
@@ -429,7 +429,7 @@ class SyncTasksViewModelTest {
         advanceUntilIdle()
 
         coVerifyOrder {
-            taskRepository.save(match<SyncTaskEntity> { it.id == 0L && it.name == "Photos copy" })
+            taskRepository.save(match<SyncTask> { it.id == 0L && it.name == "Photos copy" })
         }
     }
 
@@ -604,7 +604,7 @@ class SyncTasksViewModelTest {
         remoteName: String = "gdrive",
         sourcePath: String = "/src",
         intervalMinutes: Int? = 60,
-    ) = SyncTaskEntity(
+    ) = SyncTask(
         id = id,
         name = name,
         sourcePath = sourcePath,
@@ -620,14 +620,14 @@ class SyncTasksViewModelTest {
         taskId: Long,
         status: SyncStatus = SyncStatus.SUCCESS,
         startedAt: Long = 1_000L,
-    ) = SyncRunEntity(
+    ) = SyncRun(
         id = id,
         taskId = taskId,
         startedAtEpochMs = startedAt,
         status = status,
     )
 
-    private fun conflict(id: Long) = ConflictEntity(
+    private fun conflict(id: Long) = Conflict(
         id = id,
         taskId = 1,
         remoteName = "gdrive",

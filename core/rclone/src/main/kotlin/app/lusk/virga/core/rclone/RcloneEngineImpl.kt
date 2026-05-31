@@ -98,7 +98,7 @@ class RcloneEngineImpl @Inject constructor(
         name: String,
         type: String,
         params: Map<String, String>,
-    ): Result<Unit> = runCatchingRclone {
+    ) {
         mutatingConfig {
             val d = ensureDaemon()
             rc(d, "config/create", buildJsonObject {
@@ -114,14 +114,14 @@ class RcloneEngineImpl @Inject constructor(
         }
     }
 
-    override suspend fun deleteRemote(name: String): Result<Unit> = runCatchingRclone {
+    override suspend fun deleteRemote(name: String) {
         mutatingConfig {
             val d = ensureDaemon()
             rc(d, "config/delete", buildJsonObject { put("name", name) })
         }
     }
 
-    override suspend fun importConfig(confContent: String): Result<Unit> = runCatchingRclone {
+    override suspend fun importConfig(confContent: String) {
         stopDaemon()
         configManager.import(confContent)
     }
@@ -173,6 +173,20 @@ class RcloneEngineImpl @Inject constructor(
 
     override fun bisync(path1: String, path2: String, options: BisyncOptions): Flow<SyncProgress> =
         runJobWithProgress { d ->
+            // rclone bisync requires BOTH endpoints to already exist — even a
+            // first run with --resync aborts with "directory not found" if the
+            // remote (path2) dir is missing. The local path1 is a user-picked
+            // folder that exists; ensure the remote path2 dir exists too before a
+            // resync so a first bisync can bootstrap. mkdir is idempotent.
+            if (options.resync) {
+                val (fs, remote) = splitFs(path2)
+                if (remote.isNotEmpty()) {
+                    rc(d, "operations/mkdir", buildJsonObject {
+                        put("fs", fs)
+                        put("remote", remote)
+                    })
+                }
+            }
             rc(d, "sync/bisync", buildJsonObject {
                 put("path1", path1)
                 put("path2", path2)
@@ -183,7 +197,7 @@ class RcloneEngineImpl @Inject constructor(
             })
         }
 
-    override suspend fun deleteFile(remote: String, path: String): Result<Unit> = runCatchingRclone {
+    override suspend fun deleteFile(remote: String, path: String) {
         val d = ensureDaemon()
         rc(d, "operations/deletefile", buildJsonObject {
             put("fs", remote)
@@ -191,7 +205,7 @@ class RcloneEngineImpl @Inject constructor(
         })
     }
 
-    override suspend fun moveFile(source: String, dest: String): Result<Unit> = runCatchingRclone {
+    override suspend fun moveFile(source: String, dest: String) {
         val d = ensureDaemon()
         val (srcFs, srcRemote) = splitFs(source)
         val (dstFs, dstRemote) = splitFs(dest)
@@ -288,13 +302,6 @@ class RcloneEngineImpl @Inject constructor(
 
     private suspend fun rc(d: RcloneDaemon, command: String, params: JsonObject = JsonObject(emptyMap())): JsonObject =
         apiClient.call(d.baseUrl, d.user, d.pass, command, params)
-
-    private inline fun runCatchingRclone(block: () -> Unit): Result<Unit> =
-        try {
-            block(); Result.success(Unit)
-        } catch (e: VirgaError) {
-            Result.failure(e)
-        }
 
     /** Splits "remote:path/to/file" into ("remote:", "path/to/file"). */
     private fun splitFs(spec: String): Pair<String, String> {

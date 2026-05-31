@@ -4,8 +4,8 @@ import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
-import app.lusk.virga.core.database.entity.SyncRunEntity
-import app.lusk.virga.core.database.entity.SyncTaskEntity
+import app.lusk.virga.core.common.model.SyncRun
+import app.lusk.virga.core.common.model.SyncTask
 import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
@@ -24,8 +24,8 @@ class RunDetailViewModelTest {
     @RegisterExtension
     val mainDispatcher = MainDispatcherExtension()
 
-    private val runFlow = MutableStateFlow<SyncRunEntity?>(null)
-    private val taskFlow = MutableStateFlow<SyncTaskEntity?>(null)
+    private val runFlow = MutableStateFlow<SyncRun?>(null)
+    private val taskFlow = MutableStateFlow<SyncTask?>(null)
 
     private val historyRepository: SyncHistoryRepository = mockk(relaxed = true) {
         every { observeRun(any()) } returns runFlow
@@ -142,14 +142,14 @@ class RunDetailViewModelTest {
         id: Long,
         taskId: Long,
         status: SyncStatus = SyncStatus.SUCCESS,
-    ) = SyncRunEntity(
+    ) = SyncRun(
         id = id,
         taskId = taskId,
         startedAtEpochMs = 1_000L,
         status = status,
     )
 
-    private fun task(id: Long, name: String) = SyncTaskEntity(
+    private fun task(id: Long, name: String) = SyncTask(
         id = id,
         name = name,
         sourcePath = "/src",

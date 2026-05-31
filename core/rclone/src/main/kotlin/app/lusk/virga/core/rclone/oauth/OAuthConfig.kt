@@ -27,4 +27,22 @@ data class OAuthConfig(
     fun clientId(providerId: String): String = clientIds[providerId].orEmpty()
     fun redirectUri(providerId: String): String =
         redirectUris[providerId] ?: defaultRedirectUri
+
+    companion object {
+        /**
+         * Google's Android OAuth clients accept exactly one redirect URI, derived
+         * from the client ID by reversing the host portion. For client
+         * `123-abc.apps.googleusercontent.com` the URI is
+         * `com.googleusercontent.apps.123-abc:/oauth2redirect`.
+         *
+         * Shared by the built-in config and by the bring-your-own-keys path (which
+         * must derive the redirect from the *user's* client ID, not the built-in).
+         * Returns [fallback] for a blank client ID.
+         */
+        fun googleAndroidRedirect(clientId: String, fallback: String): String {
+            if (clientId.isBlank()) return fallback
+            val core = clientId.removeSuffix(".apps.googleusercontent.com")
+            return "com.googleusercontent.apps.$core:/oauth2redirect"
+        }
+    }
 }

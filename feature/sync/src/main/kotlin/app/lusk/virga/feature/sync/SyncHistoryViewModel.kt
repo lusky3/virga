@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
-import app.lusk.virga.core.database.entity.SyncRunEntity
+import app.lusk.virga.core.common.model.SyncRun
 import app.lusk.virga.sync.SyncScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,7 +19,7 @@ import javax.inject.Inject
 
 /** A run row joined with its task's display name for the history list. */
 data class SyncRunRow(
-    val run: SyncRunEntity,
+    val run: SyncRun,
     val taskName: String,
 )
 
@@ -81,7 +81,7 @@ class SyncHistoryViewModel @Inject constructor(
         historyRepository.clearAll()
     }
 
-    fun retryRun(run: SyncRunEntity) {
+    fun retryRun(run: SyncRun) {
         scheduler.syncNow(run.taskId)
     }
 

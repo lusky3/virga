@@ -32,6 +32,13 @@
     <string name="remotes_add_field_name">Name</string>
     <string name="remotes_add_sign_in_with">Sign in with</string>
     <string name="remotes_add_or_manual">Or configure manually</string>
+    <!-- Bring-your-own OAuth keys -->
+    <string name="remotes_byo_chip_custom">%1$s (your key)</string>
+    <string name="remotes_byo_toggle">Use your own keys (recommended for regular use)</string>
+    <string name="remotes_byo_explainer">The built-in sign-in keys are shared by all Virga users, so they share one app\'s rate limits (and Google\'s 100-user cap on unverified apps). For regular use, register your own OAuth client and paste its Client ID below. Virga signs in with PKCE, so no client secret is needed — create an \"Android\"/installed-app client.</string>
+    <string name="remotes_byo_client_id">Your client ID</string>
+    <string name="remotes_byo_save">Save key</string>
+    <string name="remotes_byo_clear">Clear</string>
     <string name="remotes_add_field_type">Backend type</string>
     <string name="remotes_add_field_params">Parameters (key=value per line)</string>
     <string name="remotes_add_params_placeholder">client_id = abc123\nroot_folder_id = xyz</string>

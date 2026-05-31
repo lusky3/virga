@@ -11,6 +11,7 @@ import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.data.SyncTaskRepository
 import app.lusk.virga.core.database.dao.SyncTaskDao
 import app.lusk.virga.core.database.entity.SyncTaskEntity
+import app.lusk.virga.core.common.model.SyncTask
 import com.google.common.truth.Truth.assertThat
 import io.mockk.coEvery
 import io.mockk.mockk
@@ -102,9 +103,11 @@ class SyncSchedulerTest {
 
     @Test
     fun rescheduleAll_registersEveryScheduledTask() = runBlocking {
+        // dao.getScheduled() returns Room entities; the repository maps them to
+        // domain SyncTask before the scheduler sees them.
         coEvery { dao.getScheduled() } returns listOf(
-            task(id = 1, intervalMinutes = 60),
-            task(id = 2, intervalMinutes = 30),
+            scheduledEntity(id = 1, intervalMinutes = 60),
+            scheduledEntity(id = 2, intervalMinutes = 30),
         )
 
         scheduler.rescheduleAll()
@@ -118,7 +121,7 @@ class SyncSchedulerTest {
         intervalMinutes: Int?,
         wifiOnly: Boolean = true,
         enabled: Boolean = true,
-    ) = SyncTaskEntity(
+    ) = SyncTask(
         id = id,
         name = "task-$id",
         sourcePath = "/storage/emulated/0/DCIM",
@@ -128,5 +131,16 @@ class SyncSchedulerTest {
         intervalMinutes = intervalMinutes,
         wifiOnly = wifiOnly,
         enabled = enabled,
+    )
+
+    /** Room-entity form for stubbing the DAO (the repository maps it to domain). */
+    private fun scheduledEntity(id: Long, intervalMinutes: Int?) = SyncTaskEntity(
+        id = id,
+        name = "task-$id",
+        sourcePath = "/storage/emulated/0/DCIM",
+        remoteName = "gdrive",
+        remotePath = "/Backup",
+        direction = SyncDirection.UPLOAD,
+        intervalMinutes = intervalMinutes,
     )
 }

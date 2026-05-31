@@ -52,7 +52,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.util.formatFileSize
 import app.lusk.virga.core.data.ConflictChoice
-import app.lusk.virga.core.database.entity.ConflictEntity
+import app.lusk.virga.core.common.model.Conflict
 import app.lusk.virga.core.ui.EmptyState
 import java.text.DateFormat
 import java.util.Date
@@ -66,7 +66,7 @@ fun ConflictsScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val inSelectionMode = state.selectedIds.isNotEmpty()
-    var pendingChoice by remember { mutableStateOf<Pair<ConflictEntity, ConflictChoice>?>(null) }
+    var pendingChoice by remember { mutableStateOf<Pair<Conflict, ConflictChoice>?>(null) }
 
     LaunchedEffect(state.error) {
         state.error?.let {
@@ -204,7 +204,7 @@ private fun BulkActionRow(
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 private fun ConflictCard(
-    conflict: ConflictEntity,
+    conflict: Conflict,
     resolving: Boolean,
     isSelected: Boolean,
     inSelectionMode: Boolean,
@@ -297,7 +297,7 @@ private fun VariantRow(label: String, path: String, size: Long) {
 private fun ConflictCardPreview() {
     Surface {
         ConflictCard(
-            conflict = ConflictEntity(
+            conflict = Conflict(
                 id = 1L, taskId = 1L, remoteName = "gdrive",
                 basePath = "DCIM/Camera/IMG_20240101.jpg",
                 variant1Path = "DCIM/Camera/IMG_20240101.jpg",

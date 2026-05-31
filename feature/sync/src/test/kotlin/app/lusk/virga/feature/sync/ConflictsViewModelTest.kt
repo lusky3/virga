@@ -2,7 +2,7 @@ package app.lusk.virga.feature.sync
 
 import app.lusk.virga.core.data.ConflictChoice
 import app.lusk.virga.core.data.ConflictRepository
-import app.lusk.virga.core.database.entity.ConflictEntity
+import app.lusk.virga.core.common.model.Conflict
 import com.google.common.truth.Truth.assertThat
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -23,7 +23,7 @@ class ConflictsViewModelTest {
     @RegisterExtension
     val mainDispatcher = MainDispatcherExtension()
 
-    private val unresolvedFlow = MutableStateFlow<List<ConflictEntity>>(emptyList())
+    private val unresolvedFlow = MutableStateFlow<List<Conflict>>(emptyList())
     private val repository: ConflictRepository = mockk(relaxed = true) {
         every { unresolved } returns unresolvedFlow
     }
@@ -234,7 +234,7 @@ class ConflictsViewModelTest {
 
     // --- helpers ------------------------------------------------------------
 
-    private fun conflict(id: Long) = ConflictEntity(
+    private fun conflict(id: Long) = Conflict(
         id = id,
         taskId = 1,
         remoteName = "gdrive",

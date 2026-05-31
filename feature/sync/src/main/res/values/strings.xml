@@ -1,5 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- SyncTaskSummaryScreen -->
+    <string name="sync_summary_title">Sync task</string>
+    <string name="sync_summary_cd_back">Back</string>
+    <string name="sync_summary_missing">This task no longer exists.</string>
+    <string name="sync_summary_enabled">Enabled</string>
+    <string name="sync_summary_source">Source</string>
+    <string name="sync_summary_destination">Destination</string>
+    <string name="sync_summary_direction">Direction</string>
+    <string name="sync_summary_schedule">Schedule</string>
+    <string name="sync_summary_filters">Filters</string>
+    <string name="sync_summary_bandwidth">Bandwidth</string>
+    <string name="sync_summary_manual">Manual only</string>
+    <string name="sync_summary_every_minutes">Every %1$d min</string>
+    <string name="sync_summary_recent_runs">Recent runs</string>
+    <string name="sync_summary_no_runs">No runs yet.</string>
+
     <!-- SyncTasksScreen -->
     <string name="sync_tasks_title">Sync tasks</string>
     <string name="sync_tasks_empty_title">No sync tasks yet</string>
@@ -89,6 +105,8 @@
     <string name="sync_edit_field_remote_placeholder">Select a remote</string>
     <string name="sync_edit_field_remote_required">Required — add a remote first if the list is empty</string>
     <string name="sync_edit_field_remote_path">Remote path (e.g. /Backup)</string>
+    <string name="sync_edit_browse_dest">Browse destination folder</string>
+    <string name="sync_edit_browse_dest_needs_remote">Select a remote first to browse</string>
     <string name="sync_edit_field_direction">Direction</string>
     <string name="sync_edit_field_wifi_only">Wi-Fi only</string>
     <string name="sync_edit_field_bw_wifi">Upload limit (Wi-Fi)</string>
@@ -126,6 +144,12 @@
     <string name="sync_interval_custom_option">Custom…</string>
     <string name="sync_interval_custom">Every %1$d min (custom)</string>
     <string name="sync_interval_custom_label">Interval (minutes)</string>
+    <!-- Calendar (specific days &amp; time) schedule -->
+    <string name="sync_interval_calendar_option">Specific days &amp; time</string>
+    <string name="sync_schedule_time_label">Time</string>
+    <string name="sync_schedule_cron_preview">Cron: %1$s</string>
+    <string name="sync_schedule_decrement">Decrease</string>
+    <string name="sync_schedule_increment">Increase</string>
 
     <!-- ConflictsScreen -->
     <string name="conflicts_title">Conflicts</string>

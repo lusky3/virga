@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.util.formatFileSize
-import app.lusk.virga.core.database.entity.SyncRunEntity
+import app.lusk.virga.core.common.model.SyncRun
 import app.lusk.virga.core.ui.EmptyState
 import java.text.DateFormat
 import java.util.Date
@@ -88,7 +88,7 @@ fun RunDetailScreen(
 
 @Composable
 private fun RunDetailContent(
-    run: SyncRunEntity,
+    run: SyncRun,
     taskName: String,
     modifier: Modifier = Modifier,
 ) {

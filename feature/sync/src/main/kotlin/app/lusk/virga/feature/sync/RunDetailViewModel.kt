@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
-import app.lusk.virga.core.database.entity.SyncRunEntity
+import app.lusk.virga.core.common.model.SyncRun
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,13 +18,13 @@ import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
 data class RunDetailUiState(
-    val run: SyncRunEntity? = null,
+    val run: SyncRun? = null,
     val taskName: String = "",
     val loading: Boolean = true,
 )
 
 /**
- * Loads a single [SyncRunEntity] for the run-detail screen. The run id is
+ * Loads a single [SyncRun] for the run-detail screen. The run id is
  * supplied by the screen via [load] (Navigation 3 passes it as a composable
  * argument, not through `SavedStateHandle`). The task name is resolved by
  * observing the single owning task row rather than scanning the whole table.

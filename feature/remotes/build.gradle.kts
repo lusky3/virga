@@ -13,6 +13,7 @@ dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:ui"))
     implementation(project(":core:data"))
+    implementation(project(":core:datastore"))
     // Direct rclone use (OAuth flow types) — explicit now that core:data no
     // longer re-exports rclone via api().
     implementation(project(":core:rclone"))

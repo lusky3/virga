@@ -39,6 +39,7 @@ class SyncWorker @AssistedInject constructor(
     private val historyRepository: SyncHistoryRepository,
     private val conflictRepository: ConflictRepository,
     private val staging: LocalStaging,
+    private val scheduler: SyncScheduler,
 ) : CoroutineWorker(appContext, params) {
 
     private val notifications = SyncNotifications(appContext)
@@ -69,9 +70,14 @@ class SyncWorker @AssistedInject constructor(
         var last: SyncProgress? = null
         var failure: Throwable? = null
 
-        // Staged SAF downloads are copy-only: write-back into the content tree is
-        // additive, so a mirror-with-deletes would be misleading. Other syncs mirror.
-        val allowDeletes = !(staged.isStaged && task.direction == SyncDirection.DOWNLOAD)
+        // One-way syncs are ADDITIVE (rclone `copy`): they never delete files on
+        // the destination. Mirroring (rclone `sync`, delete-extraneous) would make
+        // the destination identical to the source — e.g. uploading a couple of
+        // local files to a remote folder that already holds hundreds would delete
+        // all the others. That is catastrophic and must be an explicit opt-in, not
+        // the default, so deletes are off for every one-way run here. (BISYNC
+        // reconciles deletions through its own two-way logic, not this flag.)
+        val allowDeletes = false
 
         try {
             // Guard: the SAF source folder couldn't be read (its persisted access
@@ -95,7 +101,13 @@ class SyncWorker @AssistedInject constructor(
                         message = "Local-disk remotes need all-files access, which isn't granted on this build. Use a cloud remote.",
                     )
                 } else {
-                executor.run(effectiveTask, metered, allowDeletes)
+                // A bisync task's first run needs rclone's --resync to establish
+                // the baseline listing (otherwise rclone aborts). Request it until
+                // the task has a prior successful run. The current run is still
+                // RUNNING here, so it doesn't count itself.
+                val resync = task.direction == SyncDirection.BISYNC &&
+                    !historyRepository.hasSucceeded(taskId)
+                executor.run(effectiveTask, metered, allowDeletes, resync = resync)
                     .catch { failure = it }
                     // Only update the foreground notification when the integer percent changes.
                     .distinctUntilChangedBy { p -> (p.fraction * 100).toInt() }
@@ -119,6 +131,13 @@ class SyncWorker @AssistedInject constructor(
 
         // Bound the unbounded sync_runs table: drop runs older than the retention window.
         runCatching { historyRepository.pruneOlderThan(System.currentTimeMillis() - RUN_RETENTION_MS) }
+
+        // A calendar schedule runs as a one-shot, so queue the NEXT occurrence now
+        // that this run is finished (regardless of outcome). Interval/periodic
+        // tasks repeat on their own, so they don't need re-enqueuing here.
+        if (task.scheduleDaysMask != 0 && task.enabled) {
+            runCatching { scheduler.schedule(task) }
+        }
 
         return if (failure == null) {
             // For staged downloads, copy rclone's output back into the SAF tree.

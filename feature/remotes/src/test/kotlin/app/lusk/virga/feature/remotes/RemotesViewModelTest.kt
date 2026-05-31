@@ -4,7 +4,8 @@ import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
 import app.lusk.virga.core.data.RemoteRepository
-import app.lusk.virga.core.database.entity.RemoteEntity
+import app.lusk.virga.core.datastore.OAuthKeyStore
+import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.rclone.oauth.OAuthConfig
 import app.lusk.virga.core.rclone.oauth.OAuthProvider
 import app.lusk.virga.core.rclone.oauth.OAuthProviders
@@ -33,12 +34,19 @@ class RemotesViewModelTest {
     @RegisterExtension
     val mainDispatcher = MainDispatcherExtension()
 
-    private val remotesFlow = MutableStateFlow<List<RemoteEntity>>(emptyList())
+    private val remotesFlow = MutableStateFlow<List<Remote>>(emptyList())
     private val repository: RemoteRepository = mockk(relaxed = true) {
         every { remotes } returns remotesFlow
     }
     private val tokenExchanger: OAuthTokenExchanger = mockk(relaxed = true)
     private val store = OAuthStore()  // real instance — simple data holder
+
+    // No bring-your-own overrides by default: clientIds is empty, clientId() returns null
+    // so startOAuth falls back to the built-in config.
+    private val keyStore: OAuthKeyStore = mockk(relaxed = true) {
+        every { clientIds } returns MutableStateFlow(emptyMap())
+        coEvery { clientId(any()) } returns null
+    }
 
     /**
      * Mock Context that resolves getString calls to predictable values matching
@@ -89,7 +97,7 @@ class RemotesViewModelTest {
     }
 
     private fun viewModel(cfg: OAuthConfig = config()) =
-        RemotesViewModel(context, repository, cfg, store, tokenExchanger, testDispatchers)
+        RemotesViewModel(context, repository, cfg, store, tokenExchanger, keyStore, testDispatchers)
 
     // --- Provider list -----------------------------------------------------------
 

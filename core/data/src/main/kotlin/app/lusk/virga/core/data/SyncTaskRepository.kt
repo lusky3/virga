@@ -1,8 +1,9 @@
 package app.lusk.virga.core.data
 
+import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.database.dao.SyncTaskDao
-import app.lusk.virga.core.database.entity.SyncTaskEntity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -10,22 +11,24 @@ import javax.inject.Singleton
 class SyncTaskRepository @Inject constructor(
     private val taskDao: SyncTaskDao,
 ) {
-    val tasks: Flow<List<SyncTaskEntity>> = taskDao.observeAll()
+    val tasks: Flow<List<SyncTask>> = taskDao.observeAll().map { rows -> rows.map { it.toDomain() } }
 
-    fun task(id: Long): Flow<SyncTaskEntity?> = taskDao.observeById(id)
+    fun task(id: Long): Flow<SyncTask?> = taskDao.observeById(id).map { it?.toDomain() }
 
-    suspend fun getTask(id: Long): SyncTaskEntity? = taskDao.getById(id)
+    suspend fun getTask(id: Long): SyncTask? = taskDao.getById(id)?.toDomain()
 
-    suspend fun scheduledTasks(): List<SyncTaskEntity> = taskDao.getScheduled()
+    suspend fun scheduledTasks(): List<SyncTask> = taskDao.getScheduled().map { it.toDomain() }
 
     /** Inserts a new task or updates an existing one. Returns the row id. */
-    suspend fun save(task: SyncTaskEntity): Long =
-        if (task.id == 0L) {
-            taskDao.insert(task)
+    suspend fun save(task: SyncTask): Long {
+        val entity = task.toEntity()
+        return if (entity.id == 0L) {
+            taskDao.insert(entity)
         } else {
-            taskDao.update(task)
-            task.id
+            taskDao.update(entity)
+            entity.id
         }
+    }
 
-    suspend fun delete(task: SyncTaskEntity) = taskDao.delete(task)
+    suspend fun delete(task: SyncTask) = taskDao.delete(task.toEntity())
 }

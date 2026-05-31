@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -26,7 +25,6 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -42,7 +40,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
@@ -51,6 +48,7 @@ import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.datastore.ThemeMode
+import app.lusk.virga.core.ui.ToggleRow
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -297,25 +295,6 @@ private fun SectionTitle(text: String) {
         style = MaterialTheme.typography.titleMedium,
         modifier = Modifier.semantics { heading() },
     )
-}
-
-/**
- * A full-row toggle: the label Text and Switch are merged into a single
- * toggleable node so TalkBack announces the label together with the state.
- * Task #24: apply Modifier.toggleable on the Row; pass onCheckedChange = null to Switch.
- */
-@Composable
-private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .toggleable(value = checked, role = Role.Switch, onValueChange = onChange)
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-        Switch(checked = checked, onCheckedChange = null)
-    }
 }
 
 @Composable

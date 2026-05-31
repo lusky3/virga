@@ -35,7 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.lusk.virga.core.database.entity.SyncTaskEntity
+import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.ui.EmptyState
 import kotlinx.coroutines.launch
 
@@ -43,6 +43,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun SyncTasksScreen(
     onAddTask: () -> Unit,
+    onOpenTask: (Long) -> Unit,
     onEditTask: (Long) -> Unit,
     onOpenHistory: () -> Unit,
     onOpenConflicts: () -> Unit,
@@ -65,7 +66,7 @@ fun SyncTasksScreen(
     }
 
     // Dialog state for single-task delete confirmation.
-    var taskToDelete by remember { mutableStateOf<SyncTaskEntity?>(null) }
+    var taskToDelete by remember { mutableStateOf<SyncTask?>(null) }
     // Dialog state for bulk-delete confirmation.
     var showBulkDeleteDialog by remember { mutableStateOf(false) }
 
@@ -180,7 +181,7 @@ fun SyncTasksScreen(
                                 onToggleEnabled = { viewModel.setEnabled(task, it) },
                                 onClick = {
                                     if (inSelectionMode) viewModel.toggleSelection(task.id)
-                                    else onEditTask(task.id)
+                                    else onOpenTask(task.id)
                                 },
                                 onLongClick = { viewModel.toggleSelection(task.id) },
                                 onDuplicate = { viewModel.duplicate(task) },

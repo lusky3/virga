@@ -162,15 +162,14 @@ class RcloneEngineImplTest {
         // mutatingConfig tears down the daemon (releasing the plaintext config) before persisting.
         coEvery { daemonManager.stop(fakeDaemon) } returns Unit
 
-        val result = engine.createRemote("newdrive", "drive", mapOf("client_id" to "abc"))
+        engine.createRemote("newdrive", "drive", mapOf("client_id" to "abc"))
 
-        assertThat(result.isSuccess).isTrue()
         coVerify { apiClient.call(any(), any(), any(), "config/create", any()) }
         coVerify { daemonManager.stop(fakeDaemon) }
         coVerify { configManager.persistAndCleanup() }
     }
 
-    @Test fun `createRemote returns failure when api throws VirgaError`() = runTest(testDispatcher) {
+    @Test fun `createRemote throws VirgaError when api throws and discards plaintext config`() = runTest(testDispatcher) {
         coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
         coEvery { daemonManager.start(any()) } returns fakeDaemon
         every { daemonManager.isAlive(fakeDaemon) } returns true
@@ -180,10 +179,11 @@ class RcloneEngineImplTest {
         coEvery { daemonManager.stop(fakeDaemon) } returns Unit
         coEvery { configManager.cleanup() } returns Unit
 
-        val result = engine.createRemote("dupe", "drive", emptyMap())
+        val error = assertThrows<VirgaError.Rclone> {
+            engine.createRemote("dupe", "drive", emptyMap())
+        }
 
-        assertThat(result.isFailure).isTrue()
-        assertThat(result.exceptionOrNull()).isInstanceOf(VirgaError.Rclone::class.java)
+        assertThat(error.message).contains("already exists")
         coVerify { configManager.cleanup() }
     }
 
@@ -240,7 +240,7 @@ class RcloneEngineImplTest {
         coEvery { daemonManager.start(any()) } returns fakeDaemon
         every { daemonManager.isAlive(fakeDaemon) } returns true
 
-        coEvery { apiClient.call(any(), any(), any(), "sync/sync", any()) } returns
+        coEvery { apiClient.call(any(), any(), any(), "sync/copy", any()) } returns
             buildJsonObject { put("jobid", 42) }
 
         val statsResponse = buildJsonObject {
@@ -272,7 +272,7 @@ class RcloneEngineImplTest {
         coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
         coEvery { daemonManager.start(any()) } returns fakeDaemon
         every { daemonManager.isAlive(fakeDaemon) } returns true
-        coEvery { apiClient.call(any(), any(), any(), "sync/sync", any()) } returns
+        coEvery { apiClient.call(any(), any(), any(), "sync/copy", any()) } returns
             buildJsonObject { put("jobid", 7) }
         coEvery { apiClient.call(any(), any(), any(), "core/stats", any()) } returns buildJsonObject {}
         coEvery { apiClient.call(any(), any(), any(), "job/status", any()) } returns
@@ -292,13 +292,33 @@ class RcloneEngineImplTest {
         coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
         coEvery { daemonManager.start(any()) } returns fakeDaemon
         every { daemonManager.isAlive(fakeDaemon) } returns true
-        coEvery { apiClient.call(any(), any(), any(), "sync/sync", any()) } returns buildJsonObject {}
+        coEvery { apiClient.call(any(), any(), any(), "sync/copy", any()) } returns buildJsonObject {}
 
         engine.startDaemon()
 
         engine.sync("local:/", "gdrive:", SyncOptions(SyncDirection.UPLOAD)).test {
             awaitError().also { assertThat(it).isInstanceOf(VirgaError.Rclone::class.java) }
         }
+    }
+
+    @Test fun `sync uses sync_copy (additive) by default and sync_sync only when deleteExtraneous`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "core/stats", any()) } returns buildJsonObject {}
+        coEvery { apiClient.call(any(), any(), any(), "job/status", any()) } returns
+            buildJsonObject { put("finished", true); put("success", true) }
+        // Default options -> additive copy (must NOT mirror-delete).
+        coEvery { apiClient.call(any(), any(), any(), "sync/copy", any()) } returns buildJsonObject { put("jobid", 1) }
+        // Explicit deleteExtraneous -> destructive mirror.
+        coEvery { apiClient.call(any(), any(), any(), "sync/sync", any()) } returns buildJsonObject { put("jobid", 2) }
+
+        engine.startDaemon()
+        engine.sync("local:/x", "gdrive:x", SyncOptions(SyncDirection.UPLOAD)).test { awaitItem(); awaitComplete() }
+        engine.sync("local:/x", "gdrive:x", SyncOptions(SyncDirection.UPLOAD, deleteExtraneous = true)).test { awaitItem(); awaitComplete() }
+
+        coVerify { apiClient.call(any(), any(), any(), "sync/copy", any()) }
+        coVerify { apiClient.call(any(), any(), any(), "sync/sync", any()) }
     }
 
     // --- importConfig ---
@@ -308,9 +328,8 @@ class RcloneEngineImplTest {
         coEvery { configManager.persistAndCleanup() } returns Unit
         coEvery { configManager.import(any()) } returns Unit
 
-        val result = engine.importConfig("[gdrive]\ntype=drive\n")
+        engine.importConfig("[gdrive]\ntype=drive\n")
 
-        assertThat(result.isSuccess).isTrue()
         coVerify { configManager.import("[gdrive]\ntype=drive\n") }
     }
 }

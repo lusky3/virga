@@ -1,9 +1,11 @@
 package app.lusk.virga.core.data
 
+import app.lusk.virga.core.common.model.SyncRun
 import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.database.dao.SyncRunDao
 import app.lusk.virga.core.database.entity.SyncRunEntity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -11,11 +13,12 @@ import javax.inject.Singleton
 class SyncHistoryRepository @Inject constructor(
     private val runDao: SyncRunDao,
 ) {
-    val recentRuns: Flow<List<SyncRunEntity>> = runDao.observeRecent()
+    val recentRuns: Flow<List<SyncRun>> = runDao.observeRecent().map { rows -> rows.map { it.toDomain() } }
 
-    fun observeRun(id: Long): Flow<SyncRunEntity?> = runDao.observeById(id)
+    fun observeRun(id: Long): Flow<SyncRun?> = runDao.observeById(id).map { it?.toDomain() }
 
-    fun runsForTask(taskId: Long): Flow<List<SyncRunEntity>> = runDao.observeForTask(taskId)
+    fun runsForTask(taskId: Long): Flow<List<SyncRun>> =
+        runDao.observeForTask(taskId).map { rows -> rows.map { it.toDomain() } }
 
     /** Records the start of a run and returns its id for later [finishRun]. */
     suspend fun startRun(taskId: Long): Long = runDao.insert(
@@ -52,6 +55,13 @@ class SyncHistoryRepository @Inject constructor(
     )
 
     suspend fun pruneOlderThan(beforeEpochMs: Long) = runDao.pruneOlderThan(beforeEpochMs)
+
+    /**
+     * True once [taskId] has at least one SUCCESS run. A bisync task that has
+     * never succeeded still needs rclone's `--resync` to establish its baseline;
+     * the worker uses this to decide whether to request a resync.
+     */
+    suspend fun hasSucceeded(taskId: Long): Boolean = runDao.countSuccessful(taskId) > 0
 
     /**
      * Reconcile runs left RUNNING by a worker that died mid-run (process death /

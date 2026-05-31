@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import app.lusk.virga.core.common.error.toUserMessage
 import app.lusk.virga.core.data.ConflictChoice
 import app.lusk.virga.core.data.ConflictRepository
-import app.lusk.virga.core.database.entity.ConflictEntity
+import app.lusk.virga.core.common.model.Conflict
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class ConflictsUiState(
-    val conflicts: List<ConflictEntity> = emptyList(),
+    val conflicts: List<Conflict> = emptyList(),
     val resolvingId: Long? = null,
     val error: String? = null,
     val selectedIds: Set<Long> = emptySet(),
@@ -49,7 +49,7 @@ class ConflictsViewModel @Inject constructor(
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ConflictsUiState())
 
-    fun resolve(conflict: ConflictEntity, choice: ConflictChoice) = viewModelScope.launch {
+    fun resolve(conflict: Conflict, choice: ConflictChoice) = viewModelScope.launch {
         transient.value = conflict.id to null
         val result = repository.resolve(conflict, choice)
         transient.value = null to result.exceptionOrNull()?.toUserMessage()

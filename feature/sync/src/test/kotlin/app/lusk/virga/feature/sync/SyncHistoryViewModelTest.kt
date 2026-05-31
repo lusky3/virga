@@ -4,8 +4,8 @@ import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
-import app.lusk.virga.core.database.entity.SyncRunEntity
-import app.lusk.virga.core.database.entity.SyncTaskEntity
+import app.lusk.virga.core.common.model.SyncRun
+import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.sync.SyncScheduler
 import com.google.common.truth.Truth.assertThat
 import io.mockk.coVerify
@@ -27,8 +27,8 @@ class SyncHistoryViewModelTest {
     @RegisterExtension
     val mainDispatcher = MainDispatcherExtension()
 
-    private val runsFlow = MutableStateFlow<List<SyncRunEntity>>(emptyList())
-    private val tasksFlow = MutableStateFlow<List<SyncTaskEntity>>(emptyList())
+    private val runsFlow = MutableStateFlow<List<SyncRun>>(emptyList())
+    private val tasksFlow = MutableStateFlow<List<SyncTask>>(emptyList())
     private val historyRepository: SyncHistoryRepository = mockk(relaxed = true) {
         every { recentRuns } returns runsFlow
     }
@@ -226,7 +226,7 @@ class SyncHistoryViewModelTest {
 
     // --- helpers ------------------------------------------------------------
 
-    private fun task(id: Long, name: String) = SyncTaskEntity(
+    private fun task(id: Long, name: String) = SyncTask(
         id = id,
         name = name,
         sourcePath = "/src",
@@ -240,7 +240,7 @@ class SyncHistoryViewModelTest {
         id: Long,
         taskId: Long,
         status: SyncStatus = SyncStatus.SUCCESS,
-    ) = SyncRunEntity(
+    ) = SyncRun(
         id = id,
         taskId = taskId,
         startedAtEpochMs = 1_000L,

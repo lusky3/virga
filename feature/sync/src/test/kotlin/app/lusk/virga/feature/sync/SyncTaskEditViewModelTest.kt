@@ -2,9 +2,10 @@ package app.lusk.virga.feature.sync
 
 import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.data.RemoteRepository
+import app.lusk.virga.core.data.RemoteFolderPickStore
 import app.lusk.virga.core.data.SyncTaskRepository
-import app.lusk.virga.core.database.entity.RemoteEntity
-import app.lusk.virga.core.database.entity.SyncTaskEntity
+import app.lusk.virga.core.common.model.Remote
+import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.sync.SyncScheduler
 import com.google.common.truth.Truth.assertThat
 import io.mockk.coEvery
@@ -28,14 +29,14 @@ class SyncTaskEditViewModelTest {
     private val remoteRepository: RemoteRepository = mockk {
         every { remotes } returns flowOf(
             listOf(
-                RemoteEntity(name = "gdrive", type = "drive", displayName = "GDrive"),
-                RemoteEntity(name = "box", type = "box", displayName = "Box"),
+                Remote(name = "gdrive", type = "drive"),
+                Remote(name = "box", type = "box"),
             ),
         )
     }
     private val scheduler: SyncScheduler = mockk(relaxed = true)
 
-    private fun viewModel() = SyncTaskEditViewModel(taskRepository, remoteRepository, scheduler)
+    private fun viewModel() = SyncTaskEditViewModel(taskRepository, remoteRepository, scheduler, RemoteFolderPickStore())
 
     // --- pre-existing tests -------------------------------------------------
 
@@ -51,6 +52,9 @@ class SyncTaskEditViewModelTest {
         assertThat(vm.form.value.isValid).isFalse()
 
         vm.update { it.copy(remoteName = "gdrive") }
+        assertThat(vm.form.value.isValid).isFalse() // destination still required
+
+        vm.update { it.copy(remotePath = "Backups/DCIM") }
         assertThat(vm.form.value.isValid).isTrue()
     }
 
@@ -88,7 +92,7 @@ class SyncTaskEditViewModelTest {
         assertThat(onSavedCalled).isTrue()
         coVerifyOrder {
             taskRepository.save(
-                match<SyncTaskEntity> {
+                match<SyncTask> {
                     it.name == "Photos" &&
                         it.sourcePath == "/storage/emulated/0/DCIM" &&
                         it.remoteName == "gdrive" &&
@@ -98,7 +102,7 @@ class SyncTaskEditViewModelTest {
                         !it.wifiOnly
                 },
             )
-            scheduler.schedule(match<SyncTaskEntity> { it.id == 99L })
+            scheduler.schedule(match<SyncTask> { it.id == 99L })
         }
     }
 
@@ -114,7 +118,7 @@ class SyncTaskEditViewModelTest {
 
     @Test
     fun load_existingTaskHydratesForm() = runTest(mainDispatcher.dispatcher) {
-        val entity = SyncTaskEntity(
+        val entity = SyncTask(
             id = 7,
             name = "Music",
             sourcePath = "/storage/emulated/0/Music",
@@ -369,6 +373,7 @@ class SyncTaskEditViewModelTest {
                 name = "Backup",
                 sourcePath = "/sdcard",
                 remoteName = "gdrive",
+                remotePath = "Backups",
                 intervalMinutes = -1,
                 customIntervalMinutes = 20,
             )
@@ -378,7 +383,7 @@ class SyncTaskEditViewModelTest {
         advanceUntilIdle()
 
         coVerify {
-            taskRepository.save(match<SyncTaskEntity> { it.intervalMinutes == 20 })
+            taskRepository.save(match<SyncTask> { it.intervalMinutes == 20 })
         }
     }
 
@@ -391,6 +396,7 @@ class SyncTaskEditViewModelTest {
                 name = "Backup",
                 sourcePath = "/sdcard",
                 remoteName = "gdrive",
+                remotePath = "Backups",
                 intervalMinutes = 360,
             )
         }
@@ -399,7 +405,7 @@ class SyncTaskEditViewModelTest {
         advanceUntilIdle()
 
         coVerify {
-            taskRepository.save(match<SyncTaskEntity> { it.intervalMinutes == 360 })
+            taskRepository.save(match<SyncTask> { it.intervalMinutes == 360 })
         }
     }
 
@@ -407,14 +413,14 @@ class SyncTaskEditViewModelTest {
     fun save_callsOnSavedAndSchedules() = runTest(mainDispatcher.dispatcher) {
         coEvery { taskRepository.save(any()) } returns 55L
         val vm = viewModel()
-        vm.update { it.copy(name = "T", sourcePath = "/s", remoteName = "r") }
+        vm.update { it.copy(name = "T", sourcePath = "/s", remoteName = "r", remotePath = "dst") }
         var saved = false
 
         vm.save { saved = true }
         advanceUntilIdle()
 
         assertThat(saved).isTrue()
-        coVerify(exactly = 1) { scheduler.schedule(match<SyncTaskEntity> { it.id == 55L }) }
+        coVerify(exactly = 1) { scheduler.schedule(match<SyncTask> { it.id == 55L }) }
     }
 
     // --- helpers ------------------------------------------------------------
@@ -423,7 +429,7 @@ class SyncTaskEditViewModelTest {
         id: Long,
         remoteName: String = "gdrive",
         intervalMinutes: Int? = null,
-    ) = SyncTaskEntity(
+    ) = SyncTask(
         id = id,
         name = "task-$id",
         sourcePath = "/src",

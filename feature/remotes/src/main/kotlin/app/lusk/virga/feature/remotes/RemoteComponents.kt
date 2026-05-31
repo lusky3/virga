@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
@@ -39,7 +40,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import app.lusk.virga.core.database.entity.RemoteEntity
+import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.rclone.oauth.OAuthProvider
 
 /** Curated list of common rclone backend types with friendly display names. */
@@ -62,7 +63,7 @@ internal val RcloneBackendTypes: List<Pair<String, String>> = listOf(
 
 @Composable
 internal fun RemoteCard(
-    remote: RemoteEntity,
+    remote: Remote,
     onOpenBrowser: () -> Unit,
     onCreateTask: () -> Unit,
     onDelete: () -> Unit,
@@ -80,7 +81,7 @@ internal fun RemoteCard(
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    remote.displayName,
+                    remote.name,
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -124,9 +125,12 @@ internal fun RemoteCard(
 internal fun AddRemoteDialog(
     providers: List<OAuthProvider>,
     error: String?,
+    customClientIds: Map<String, String>,
     onDismiss: () -> Unit,
     onManualConfirm: (name: String, type: String, params: String) -> Unit,
     onOAuth: (provider: OAuthProvider, name: String) -> Unit,
+    onSaveClientId: (providerId: String, clientId: String) -> Unit,
+    onClearClientId: (providerId: String) -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
     var type by remember { mutableStateOf("") }
@@ -163,13 +167,26 @@ internal fun AddRemoteDialog(
                 )
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     providers.forEach { provider ->
+                        val custom = provider.id in customClientIds
                         AssistChip(
                             onClick = { onOAuth(provider, name) },
                             enabled = name.isNotBlank(),
-                            label = { Text(provider.displayName) },
+                            label = {
+                                Text(
+                                    if (custom) stringResource(R.string.remotes_byo_chip_custom, provider.displayName)
+                                    else provider.displayName,
+                                )
+                            },
                         )
                     }
                 }
+
+                ByoKeysSection(
+                    providers = providers,
+                    customClientIds = customClientIds,
+                    onSaveClientId = onSaveClientId,
+                    onClearClientId = onClearClientId,
+                )
 
                 HorizontalDivider()
                 Text(
@@ -254,4 +271,67 @@ internal fun AddRemoteDialog(
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.remotes_add_cancel)) }
         },
     )
+}
+
+/**
+ * Expandable "bring your own OAuth keys" section. The built-in client IDs are
+ * shared across all installs and share one app's rate limits; power users paste
+ * their own client ID here (Virga uses PKCE, so no client secret is needed).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ByoKeysSection(
+    providers: List<OAuthProvider>,
+    customClientIds: Map<String, String>,
+    onSaveClientId: (providerId: String, clientId: String) -> Unit,
+    onClearClientId: (providerId: String) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var selectedId by remember { mutableStateOf(providers.firstOrNull()?.id.orEmpty()) }
+    // Field text tracks the selected provider's stored value; editing overrides it.
+    var clientIdText by remember(selectedId) { mutableStateOf(customClientIds[selectedId].orEmpty()) }
+
+    TextButton(onClick = { expanded = !expanded }) {
+        Text(stringResource(R.string.remotes_byo_toggle))
+    }
+    if (expanded) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                stringResource(R.string.remotes_byo_explainer),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                providers.forEach { provider ->
+                    FilterChip(
+                        selected = provider.id == selectedId,
+                        onClick = { selectedId = provider.id },
+                        label = { Text(provider.displayName) },
+                    )
+                }
+            }
+            OutlinedTextField(
+                value = clientIdText,
+                onValueChange = { clientIdText = it },
+                label = { Text(stringResource(R.string.remotes_byo_client_id)) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.None,
+                    autoCorrectEnabled = false,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(
+                    onClick = { onSaveClientId(selectedId, clientIdText) },
+                    enabled = selectedId.isNotBlank(),
+                ) { Text(stringResource(R.string.remotes_byo_save)) }
+                if (selectedId in customClientIds) {
+                    TextButton(onClick = { onClearClientId(selectedId); clientIdText = "" }) {
+                        Text(stringResource(R.string.remotes_byo_clear))
+                    }
+                }
+            }
+        }
+    }
 }

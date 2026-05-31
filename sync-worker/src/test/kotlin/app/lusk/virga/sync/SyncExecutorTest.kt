@@ -4,7 +4,7 @@ import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.common.model.SyncProgress
-import app.lusk.virga.core.database.entity.SyncTaskEntity
+import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.rclone.BisyncOptions
 import app.lusk.virga.core.rclone.RcloneConfig
 import app.lusk.virga.core.rclone.RcloneDaemon
@@ -38,19 +38,19 @@ class SyncExecutorTest {
         override suspend fun stopDaemon() = Unit
         override suspend fun isDaemonHealthy() = true
         override suspend fun listRemotes(): List<Remote> = emptyList()
-        override suspend fun createRemote(name: String, type: String, params: Map<String, String>) = Result.success(Unit)
-        override suspend fun deleteRemote(name: String) = Result.success(Unit)
+        override suspend fun createRemote(name: String, type: String, params: Map<String, String>) = Unit
+        override suspend fun deleteRemote(name: String) = Unit
         override suspend fun getConfig() = RcloneConfig(emptyMap())
-        override suspend fun importConfig(confContent: String) = Result.success(Unit)
+        override suspend fun importConfig(confContent: String) = Unit
         override suspend fun listDir(remote: String, path: String, recurse: Boolean, filters: List<String>): List<FileItem> = emptyList()
-        override suspend fun deleteFile(remote: String, path: String) = Result.success(Unit)
-        override suspend fun moveFile(source: String, dest: String) = Result.success(Unit)
+        override suspend fun deleteFile(remote: String, path: String) = Unit
+        override suspend fun moveFile(source: String, dest: String) = Unit
     }
 
     private fun task(
         direction: SyncDirection,
         wifiOnly: Boolean = true,
-    ) = SyncTaskEntity(
+    ) = SyncTask(
         id = 1,
         name = "Photos",
         sourcePath = "/storage/emulated/0/DCIM",
@@ -96,5 +96,19 @@ class SyncExecutorTest {
         assertThat(engine.bisyncArgs).isNotNull()
         assertThat(engine.bisyncArgs!!.first).isEqualTo("/storage/emulated/0/DCIM")
         assertThat(engine.bisyncArgs!!.second).isEqualTo("gdrive:Backup/DCIM")
+    }
+
+    @Test
+    fun `bisync forwards resync flag for first-run baseline`() = runTest {
+        val engine = RecordingEngine()
+        SyncExecutor(engine).run(task(SyncDirection.BISYNC), metered = false, resync = true).collect {}
+        assertThat(engine.bisyncArgs!!.third.resync).isTrue()
+    }
+
+    @Test
+    fun `bisync defaults to no resync once a baseline exists`() = runTest {
+        val engine = RecordingEngine()
+        SyncExecutor(engine).run(task(SyncDirection.BISYNC), metered = false).collect {}
+        assertThat(engine.bisyncArgs!!.third.resync).isFalse()
     }
 }

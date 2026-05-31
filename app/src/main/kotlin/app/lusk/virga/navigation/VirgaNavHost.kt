@@ -30,6 +30,7 @@ import app.lusk.virga.feature.sync.ConflictsScreen
 import app.lusk.virga.feature.sync.RunDetailScreen
 import app.lusk.virga.feature.sync.SyncHistoryScreen
 import app.lusk.virga.feature.sync.SyncTaskEditScreen
+import app.lusk.virga.feature.sync.SyncTaskSummaryScreen
 import app.lusk.virga.feature.sync.SyncTasksScreen
 import kotlinx.serialization.Serializable
 
@@ -50,8 +51,15 @@ import kotlinx.serialization.Serializable
 ) : NavKey
 
 @Serializable object HistoryRoute : NavKey
-@Serializable data class BrowseRoute(val remoteName: String? = null) : NavKey
+@Serializable data class BrowseRoute(
+    val remoteName: String? = null,
+    /** Opened as a destination-folder picker for the task editor (vs. plain browsing). */
+    val pick: Boolean = false,
+) : NavKey
 @Serializable object ConflictsRoute : NavKey
+
+/** Read-only overview of a task (tapping a task row lands here, not in the editor). */
+@Serializable data class TaskSummaryRoute(val taskId: Long) : NavKey
 
 /** Detail view for a completed sync run. */
 @Serializable data class RunDetailRoute(val runId: Long) : NavKey
@@ -90,9 +98,18 @@ fun VirgaNavHost() {
         entry<SyncRoute> {
             SyncTasksScreen(
                 onAddTask = dropUnlessResumed { navigator.navigate(TaskEditRoute(0)) },
+                onOpenTask = { id -> navigator.navigate(TaskSummaryRoute(id)) },
                 onEditTask = { id -> navigator.navigate(TaskEditRoute(id)) },
                 onOpenHistory = dropUnlessResumed { navigator.navigate(HistoryRoute) },
                 onOpenConflicts = dropUnlessResumed { navigator.navigate(ConflictsRoute) },
+            )
+        }
+        entry<TaskSummaryRoute> { key ->
+            SyncTaskSummaryScreen(
+                taskId = key.taskId,
+                onBack = dropUnlessResumed { navigator.goBack() },
+                onEdit = { id -> navigator.navigate(TaskEditRoute(id)) },
+                onOpenRun = { id -> navigator.navigate(RunDetailRoute(id)) },
             )
         }
         entry<TaskEditRoute> { key ->
@@ -102,6 +119,9 @@ fun VirgaNavHost() {
                 prefillRemotePath = key.prefillRemotePath,
                 onBack = dropUnlessResumed { navigator.goBack() },
                 onNavigateToRemotes = dropUnlessResumed { navigator.navigate(RemotesRoute) },
+                onBrowseDestination = { remoteName ->
+                    navigator.navigate(BrowseRoute(remoteName = remoteName, pick = true))
+                },
             )
         }
         entry<HistoryRoute> {
@@ -128,6 +148,7 @@ fun VirgaNavHost() {
         entry<BrowseRoute> { key ->
             FileBrowserScreen(
                 initialRemote = key.remoteName,
+                pickMode = key.pick,
                 onBack = dropUnlessResumed { navigator.goBack() },
                 onNavigateToRemotes = dropUnlessResumed { navigator.navigate(RemotesRoute) },
                 onSyncFolder = { remote, path ->

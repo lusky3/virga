@@ -52,7 +52,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.lusk.virga.core.database.entity.RemoteEntity
+import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.ui.EmptyState
 import app.lusk.virga.feature.remotes.oauth.launchCustomTab
 
@@ -68,7 +68,7 @@ fun RemotesScreen(
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
     var showAdd by remember { mutableStateOf(false) }
-    var remoteToDelete by remember { mutableStateOf<RemoteEntity?>(null) }
+    var remoteToDelete by remember { mutableStateOf<Remote?>(null) }
     var manualError by remember { mutableStateOf<String?>(null) }
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -200,7 +200,7 @@ fun RemotesScreen(
             onDismissRequest = { remoteToDelete = null },
             title = { Text(stringResource(R.string.remotes_delete_dialog_title)) },
             text = {
-                Text(stringResource(R.string.remotes_delete_dialog_body, remote.displayName))
+                Text(stringResource(R.string.remotes_delete_dialog_body, remote.name))
             },
             confirmButton = {
                 TextButton(onClick = {
@@ -220,6 +220,7 @@ fun RemotesScreen(
         AddRemoteDialog(
             providers = viewModel.oauthProviders,
             error = manualError,
+            customClientIds = state.customClientIds,
             onDismiss = { showAdd = false; manualError = null },
             onManualConfirm = { name, type, params ->
                 manualError = null
@@ -228,6 +229,8 @@ fun RemotesScreen(
                 }
             },
             onOAuth = { provider, name -> viewModel.startOAuth(provider, name) },
+            onSaveClientId = viewModel::saveClientId,
+            onClearClientId = viewModel::clearClientId,
         )
     }
 }
@@ -242,7 +245,7 @@ fun RemotesScreen(
 private fun RemoteCardPreview() {
     Surface {
         RemoteCard(
-            remote = RemoteEntity(name = "gdrive", type = "drive", displayName = "Google Drive"),
+            remote = Remote(name = "gdrive", type = "drive"),
             onOpenBrowser = { },
             onCreateTask = {},
             onDelete = {},

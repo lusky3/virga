@@ -15,6 +15,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
@@ -69,6 +70,10 @@ fun FileBrowserScreen(
     onBack: () -> Unit,
     onNavigateToRemotes: () -> Unit = {},
     onSyncFolder: (remote: String, path: String) -> Unit = { _, _ -> },
+    /** When true, the browser acts as a destination-folder picker: the action
+     *  records the current folder (via the ViewModel) and returns instead of
+     *  creating a sync task. */
+    pickMode: Boolean = false,
     initialRemote: String? = null,
     viewModel: FileBrowserViewModel = hiltViewModel(),
 ) {
@@ -103,14 +108,21 @@ fun FileBrowserScreen(
         floatingActionButton = {
             val remote = state.remoteName
             if (remote != null && !state.loading && state.error == null) {
-                val syncLabel = stringResource(R.string.explorer_sync_folder)
-                ExtendedFloatingActionButton(
-                    onClick = { onSyncFolder(remote, state.path) },
-                    icon = {
-                        Icon(Icons.Filled.CloudSync, contentDescription = null)
-                    },
-                    text = { Text(syncLabel) },
-                )
+                if (pickMode) {
+                    val pickLabel = stringResource(R.string.explorer_select_folder)
+                    ExtendedFloatingActionButton(
+                        onClick = { viewModel.pickFolder(remote, state.path); onBack() },
+                        icon = { Icon(Icons.Filled.CheckCircle, contentDescription = null) },
+                        text = { Text(pickLabel) },
+                    )
+                } else {
+                    val syncLabel = stringResource(R.string.explorer_sync_folder)
+                    ExtendedFloatingActionButton(
+                        onClick = { onSyncFolder(remote, state.path) },
+                        icon = { Icon(Icons.Filled.CloudSync, contentDescription = null) },
+                        text = { Text(syncLabel) },
+                    )
+                }
             }
         },
     ) { padding ->

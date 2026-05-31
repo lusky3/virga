@@ -6,8 +6,8 @@ import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.data.ConflictRepository
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
-import app.lusk.virga.core.database.entity.SyncRunEntity
-import app.lusk.virga.core.database.entity.SyncTaskEntity
+import app.lusk.virga.core.common.model.SyncRun
+import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.sync.SyncScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,9 +27,9 @@ enum class TaskFilter { ALL, ENABLED, FAILING, SCHEDULED }
 enum class TaskSortOrder { NAME, LAST_RUN, STATUS }
 
 data class SyncTasksUiState(
-    val tasks: List<SyncTaskEntity> = emptyList(),
+    val tasks: List<SyncTask> = emptyList(),
     /** Map of taskId → most-recent run, for status badges and the at-a-glance line. */
-    val latestRuns: Map<Long, SyncRunEntity> = emptyMap(),
+    val latestRuns: Map<Long, SyncRun> = emptyMap(),
     val loading: Boolean = true,
     /** One-shot snackbar message to display (null = none pending). */
     val message: String? = null,
@@ -104,9 +104,9 @@ class SyncTasksViewModel @Inject constructor(
         )
 
     private fun matchesFilter(
-        task: SyncTaskEntity,
+        task: SyncTask,
         filter: TaskFilter,
-        latestRuns: Map<Long, SyncRunEntity>,
+        latestRuns: Map<Long, SyncRun>,
     ): Boolean = when (filter) {
         TaskFilter.ALL -> true
         TaskFilter.ENABLED -> task.enabled
@@ -114,7 +114,7 @@ class SyncTasksViewModel @Inject constructor(
         TaskFilter.SCHEDULED -> task.intervalMinutes != null
     }
 
-    private fun matchesQuery(task: SyncTaskEntity, query: String): Boolean {
+    private fun matchesQuery(task: SyncTask, query: String): Boolean {
         if (query.isBlank()) return true
         val q = query.trim().lowercase()
         return task.name.lowercase().contains(q) ||
@@ -124,8 +124,8 @@ class SyncTasksViewModel @Inject constructor(
 
     private fun comparatorFor(
         sort: TaskSortOrder,
-        latestRuns: Map<Long, SyncRunEntity>,
-    ): Comparator<SyncTaskEntity> = when (sort) {
+        latestRuns: Map<Long, SyncRun>,
+    ): Comparator<SyncTask> = when (sort) {
         TaskSortOrder.NAME -> compareBy { it.name.lowercase() }
         // Most-recent run first; tasks with no run sort last.
         TaskSortOrder.LAST_RUN -> compareByDescending { latestRuns[it.id]?.startedAtEpochMs ?: Long.MIN_VALUE }
@@ -156,19 +156,19 @@ class SyncTasksViewModel @Inject constructor(
 
     fun clearMessage() { _message.value = null }
 
-    fun setEnabled(task: SyncTaskEntity, enabled: Boolean) = viewModelScope.launch {
+    fun setEnabled(task: SyncTask, enabled: Boolean) = viewModelScope.launch {
         val updated = task.copy(enabled = enabled)
         taskRepository.save(updated)
         scheduler.schedule(updated)
     }
 
-    fun delete(task: SyncTaskEntity) = viewModelScope.launch {
+    fun delete(task: SyncTask) = viewModelScope.launch {
         scheduler.cancel(task.id)
         taskRepository.delete(task)
     }
 
     /** Duplicate a task as a new disabled-id copy and open nothing (list refreshes). */
-    fun duplicate(task: SyncTaskEntity) = viewModelScope.launch {
+    fun duplicate(task: SyncTask) = viewModelScope.launch {
         taskRepository.save(task.copy(id = 0, name = "${task.name} copy"))
         _message.value = "Task duplicated"
     }
@@ -182,13 +182,13 @@ class SyncTasksViewModel @Inject constructor(
 
     // --- Swipe-to-delete (deferred, undoable) ------------------------------------
 
-    fun markPendingSwipeDelete(task: SyncTaskEntity) =
+    fun markPendingSwipeDelete(task: SyncTask) =
         _controls.update { it.copy(pendingDelete = it.pendingDelete + task.id) }
 
-    fun undoSwipeDelete(task: SyncTaskEntity) =
+    fun undoSwipeDelete(task: SyncTask) =
         _controls.update { it.copy(pendingDelete = it.pendingDelete - task.id) }
 
-    fun commitSwipeDelete(task: SyncTaskEntity) = viewModelScope.launch {
+    fun commitSwipeDelete(task: SyncTask) = viewModelScope.launch {
         _controls.update { it.copy(pendingDelete = it.pendingDelete - task.id) }
         scheduler.cancel(task.id)
         taskRepository.delete(task)

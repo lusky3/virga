@@ -34,7 +34,8 @@ object OAuthConfigModule {
             OAuthProviders.Dropbox.id to BuildConfig.OAUTH_CLIENT_ID_DROPBOX,
         ),
         redirectUris = mapOf(
-            OAuthProviders.GoogleDrive.id to googleAndroidRedirect(BuildConfig.OAUTH_CLIENT_ID_GDRIVE),
+            OAuthProviders.GoogleDrive.id to
+                OAuthConfig.googleAndroidRedirect(BuildConfig.OAUTH_CLIENT_ID_GDRIVE, REDIRECT_URI),
         ),
     )
 
@@ -43,16 +44,4 @@ object OAuthConfigModule {
      * `OAuthRedirectActivity` and the hosted assetlinks.json host.
      */
     const val REDIRECT_URI = "https://lusk.app/virga/oauth/callback"
-
-    /**
-     * Google's Android OAuth clients accept exactly one redirect URI, derived
-     * from the client ID by reversing the host portion. For client
-     * `123-abc.apps.googleusercontent.com` the URI is
-     * `com.googleusercontent.apps.123-abc:/oauth2redirect`.
-     */
-    private fun googleAndroidRedirect(clientId: String): String {
-        if (clientId.isBlank()) return REDIRECT_URI
-        val core = clientId.removeSuffix(".apps.googleusercontent.com")
-        return "com.googleusercontent.apps.$core:/oauth2redirect"
-    }
 }

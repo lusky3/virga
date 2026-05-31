@@ -1,11 +1,13 @@
 package app.lusk.virga.core.data
 
 import app.lusk.virga.core.common.error.VirgaError
+import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.database.dao.RemoteDao
 import app.lusk.virga.core.database.entity.RemoteEntity
 import app.lusk.virga.core.rclone.RcloneEngine
 import app.lusk.virga.core.rclone.config.RcloneConfigManager
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -19,7 +21,10 @@ class RemoteRepository @Inject constructor(
     private val engine: RcloneEngine,
     private val configManager: RcloneConfigManager,
 ) {
-    val remotes: Flow<List<RemoteEntity>> = remoteDao.observeAll()
+    /** Configured remotes as domain models (the Room entity stays in this layer). */
+    val remotes: Flow<List<Remote>> = remoteDao.observeAll().map { rows ->
+        rows.map { Remote(name = it.name, type = it.type) }
+    }
 
     /** Pulls the live remote list from rclone and replaces the cached rows atomically. */
     suspend fun refresh(): Result<Unit> = runCatching {
@@ -29,26 +34,22 @@ class RemoteRepository @Inject constructor(
         )
     }
 
-    suspend fun addRemote(name: String, type: String, params: Map<String, String>): Result<Unit> {
-        val created = engine.createRemote(name, type, params)
-        if (created.isFailure) return created
-        return refresh()
-    }
+    suspend fun addRemote(name: String, type: String, params: Map<String, String>): Result<Unit> =
+        runCatching { engine.createRemote(name, type, params) }
+            .mapCatching { refresh().getOrThrow() }
 
-    suspend fun deleteRemote(name: String): Result<Unit> {
-        val deleted = engine.deleteRemote(name)
-        if (deleted.isFailure) return deleted
-        remoteDao.deleteByName(name)
-        return Result.success(Unit)
-    }
+    suspend fun deleteRemote(name: String): Result<Unit> =
+        runCatching {
+            engine.deleteRemote(name)
+            remoteDao.deleteByName(name)
+        }
 
     suspend fun importConfig(confContent: String): Result<Unit> {
         if (confContent.isBlank()) {
             return Result.failure(VirgaError.Rclone(message = "Empty config"))
         }
-        val imported = engine.importConfig(confContent)
-        if (imported.isFailure) return imported
-        return refresh()
+        return runCatching { engine.importConfig(confContent) }
+            .mapCatching { refresh().getOrThrow() }
     }
 
     suspend fun exportConfig(): String = configManager.exportPlaintext()

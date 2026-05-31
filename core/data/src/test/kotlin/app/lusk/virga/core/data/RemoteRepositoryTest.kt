@@ -52,7 +52,7 @@ class RemoteRepositoryTest {
     // --- addRemote ---
 
     @Test fun `addRemote calls engine_createRemote and then refresh on success`() = runTest {
-        coEvery { engine.createRemote("new", "drive", any()) } returns Result.success(Unit)
+        coEvery { engine.createRemote("new", "drive", any()) } returns Unit
         coEvery { engine.listRemotes() } returns listOf(Remote("new", "drive"))
 
         val result = repo.addRemote("new", "drive", mapOf("client_id" to "abc"))
@@ -63,8 +63,8 @@ class RemoteRepositoryTest {
     }
 
     @Test fun `addRemote returns failure and skips refresh when engine fails`() = runTest {
-        coEvery { engine.createRemote(any(), any(), any()) } returns
-            Result.failure(VirgaError.Rclone(message = "duplicate"))
+        coEvery { engine.createRemote(any(), any(), any()) } throws
+            VirgaError.Rclone(message = "duplicate")
 
         val result = repo.addRemote("dup", "drive", emptyMap())
 
@@ -75,7 +75,7 @@ class RemoteRepositoryTest {
     // --- deleteRemote ---
 
     @Test fun `deleteRemote calls engine then removes from dao`() = runTest {
-        coEvery { engine.deleteRemote("old") } returns Result.success(Unit)
+        coEvery { engine.deleteRemote("old") } returns Unit
 
         val result = repo.deleteRemote("old")
 
@@ -85,8 +85,8 @@ class RemoteRepositoryTest {
     }
 
     @Test fun `deleteRemote returns failure and skips dao when engine fails`() = runTest {
-        coEvery { engine.deleteRemote(any()) } returns
-            Result.failure(VirgaError.Rclone(message = "not found"))
+        coEvery { engine.deleteRemote(any()) } throws
+            VirgaError.Rclone(message = "not found")
 
         val result = repo.deleteRemote("ghost")
 
@@ -105,7 +105,7 @@ class RemoteRepositoryTest {
     }
 
     @Test fun `importConfig calls engine and then refresh on success`() = runTest {
-        coEvery { engine.importConfig(any()) } returns Result.success(Unit)
+        coEvery { engine.importConfig(any()) } returns Unit
         coEvery { engine.listRemotes() } returns listOf(Remote("imported", "drive"))
 
         val result = repo.importConfig("[imported]\ntype=drive\n")

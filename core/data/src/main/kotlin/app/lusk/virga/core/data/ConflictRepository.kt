@@ -1,15 +1,16 @@
 package app.lusk.virga.core.data
 
-import app.lusk.virga.core.common.error.VirgaError
+import app.lusk.virga.core.common.model.Conflict
+import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.database.dao.ConflictDao
 import app.lusk.virga.core.database.entity.ConflictEntity
-import app.lusk.virga.core.database.entity.SyncTaskEntity
 import app.lusk.virga.core.rclone.RcloneEngine
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Choices the user makes for resolving a [ConflictEntity]. */
+/** Choices the user makes for resolving a [Conflict]. */
 enum class ConflictChoice { KEEP_VARIANT_1, KEEP_VARIANT_2, KEEP_BOTH }
 
 /**
@@ -26,10 +27,11 @@ class ConflictRepository @Inject constructor(
     private val conflictDao: ConflictDao,
     private val engine: RcloneEngine,
 ) {
-    val unresolved: Flow<List<ConflictEntity>> = conflictDao.observeUnresolved()
+    val unresolved: Flow<List<Conflict>> =
+        conflictDao.observeUnresolved().map { rows -> rows.map { it.toDomain() } }
 
     /** Walks the destination of [task] for conflict-suffixed files and records them. */
-    suspend fun detectFor(task: SyncTaskEntity): Result<Int> = runCatching {
+    suspend fun detectFor(task: SyncTask): Result<Int> = runCatching {
         // Use a filter so rclone returns only conflict-suffixed files instead of
         // materialising the entire subtree.
         val entries = engine.listDir(
@@ -81,7 +83,7 @@ class ConflictRepository @Inject constructor(
      * - KEEP_BOTH: leaves the `.conflictN` files in place and just marks the
      *   conflict resolved.
      */
-    suspend fun resolve(conflict: ConflictEntity, choice: ConflictChoice): Result<Unit> {
+    suspend fun resolve(conflict: Conflict, choice: ConflictChoice): Result<Unit> {
         val remoteFs = "${conflict.remoteName}:"
         return runCatching {
             when (choice) {
@@ -100,11 +102,11 @@ class ConflictRepository @Inject constructor(
     }
 
     private suspend fun promote(remoteFs: String, winnerPath: String, basePath: String, loserPath: String) {
-        engine.moveFile("$remoteFs$winnerPath", "$remoteFs$basePath").orThrow()
-        engine.deleteFile(remoteFs, loserPath).orThrow()
+        // engine.moveFile / deleteFile throw VirgaError on failure; the enclosing
+        // runCatching in resolve() turns that into a Result.failure for the UI.
+        engine.moveFile("$remoteFs$winnerPath", "$remoteFs$basePath")
+        engine.deleteFile(remoteFs, loserPath)
     }
-
-    private fun Result<Unit>.orThrow() = onFailure { throw it as? VirgaError ?: VirgaError.Unknown(it.message ?: "rclone op failed", it) }
 
     private companion object {
         // e.g. "report.txt.conflict1" -> base "report.txt", number 1

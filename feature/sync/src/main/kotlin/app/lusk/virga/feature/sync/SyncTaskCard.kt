@@ -36,13 +36,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.common.util.formatFileSize
-import app.lusk.virga.core.database.entity.SyncRunEntity
-import app.lusk.virga.core.database.entity.SyncTaskEntity
+import app.lusk.virga.core.common.model.SyncRun
+import app.lusk.virga.core.common.model.SyncTask
 
 @Composable
 internal fun SyncTaskCard(
-    task: SyncTaskEntity,
-    latestRun: SyncRunEntity?,
+    task: SyncTask,
+    latestRun: SyncRun?,
     selected: Boolean,
     inSelectionMode: Boolean,
     onSyncNow: () -> Unit,
@@ -74,7 +74,7 @@ internal fun SyncTaskCard(
                 onClick = onClick,
                 onLongClick = onLongClick,
             )
-            .semantics { onClick(label = "Edit task") { false } },
+            .semantics { onClick(label = "Open task") { false } },
     ) {
         Row(
             modifier = Modifier
@@ -116,7 +116,9 @@ internal fun SyncTaskCard(
                     text = stringResource(
                         R.string.sync_task_schedule_summary,
                         task.direction.name.lowercase(),
-                        task.intervalMinutes?.let { "every ${it}m" } ?: "manual",
+                        app.lusk.virga.sync.SyncSchedule.describe(
+                            task.scheduleDaysMask, task.scheduleHour, task.scheduleMinute,
+                        ) ?: task.intervalMinutes?.let { "every ${it}m" } ?: "manual",
                     ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -180,7 +182,7 @@ internal fun SyncTaskCard(
 }
 
 @Composable
-private fun LastRunLine(run: SyncRunEntity) {
+private fun LastRunLine(run: SyncRun) {
     val relTime = remember(run.startedAtEpochMs) {
         DateUtils.getRelativeTimeSpanString(
             run.startedAtEpochMs,

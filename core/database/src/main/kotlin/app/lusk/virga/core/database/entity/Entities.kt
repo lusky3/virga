@@ -28,8 +28,20 @@ data class SyncTaskEntity(
     val remoteName: String,
     val remotePath: String,
     val direction: SyncDirection,
-    /** Polling interval in minutes; null means manual-only. Minimum enforced at 15. */
+    /**
+     * Polling interval in minutes; null means manual-only. Minimum enforced at 15.
+     * Mutually exclusive with the calendar schedule ([scheduleDaysMask] != 0).
+     */
     val intervalMinutes: Int?,
+    /**
+     * Calendar schedule: bitmask of weekdays to run on, where bit (DayOfWeek.value
+     * - 1) is set (Mon=bit0 … Sun=bit6). 0 means no calendar schedule (use
+     * [intervalMinutes] or manual). When non-zero, the task runs at
+     * [scheduleHour]:[scheduleMinute] local time on each selected day.
+     */
+    val scheduleDaysMask: Int = 0,
+    val scheduleHour: Int = 9,
+    val scheduleMinute: Int = 0,
     /** Newline-joined include/exclude glob patterns. */
     val filters: String = "",
     /** rclone --bwlimit on WiFi/metered; null/blank = no limit. e.g. "1M". */
