@@ -5,6 +5,7 @@ import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.os.Build
 import android.os.Environment
+import android.util.Log
 import androidx.core.content.getSystemService
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
@@ -101,10 +102,20 @@ class SyncWorker @AssistedInject constructor(
                         setForeground(foregroundInfo(notifications.progress(task.name, progress)))
                     }
             }
+        } catch (t: Throwable) {
+            // A direct throw in the orchestration body — e.g. listRemotes() in the
+            // local-remote guard — must be recorded as a failure, not escape past
+            // the finally and leave the run stuck in RUNNING forever. Cancellation
+            // must still propagate so WorkManager can stop the worker cleanly.
+            if (t is kotlinx.coroutines.CancellationException) throw t
+            failure = t
         } finally {
             runCatching { engine.stopDaemon() }
             runCatching { staging.cleanup(staged) }
         }
+
+        // Bound the unbounded sync_runs table: drop runs older than the retention window.
+        runCatching { historyRepository.pruneOlderThan(System.currentTimeMillis() - RUN_RETENTION_MS) }
 
         return if (failure == null) {
             // For staged downloads, copy rclone's output back into the SAF tree.
@@ -137,7 +148,12 @@ class SyncWorker @AssistedInject constructor(
             // After a bisync, scan the destination for rclone conflict files
             // and queue them for user resolution.
             if (task.direction == SyncDirection.BISYNC) {
+                // detectFor returns Result<Int>; surface both a thrown error and a
+                // returned failure instead of silently reporting a clean sync.
                 runCatching { conflictRepository.detectFor(task) }
+                    .onFailure { Log.w(TAG, "conflict detection threw", it) }
+                    .getOrNull()
+                    ?.onFailure { Log.w(TAG, "conflict detection failed", it) }
             }
             Result.success()
         } else {
@@ -171,5 +187,8 @@ class SyncWorker @AssistedInject constructor(
     companion object {
         const val KEY_TASK_ID = "task_id"
         const val UNIQUE_PREFIX = "sync_task_"
+        private const val TAG = "SyncWorker"
+        // Retain ~30 days of sync history; older runs are pruned each invocation.
+        private const val RUN_RETENTION_MS = 30L * 24 * 60 * 60 * 1000
     }
 }
