@@ -99,6 +99,11 @@
     <string name="sync_edit_field_name">Task name *</string>
     <string name="sync_edit_field_source_path">Local path *</string>
     <string name="sync_edit_field_source_placeholder">/storage/emulated/0/DCIM</string>
+    <string name="sync_edit_cancel">Cancel</string>
+    <!-- Local (all-files-access) folder picker -->
+    <string name="sync_localpick_choose_storage">Choose storage</string>
+    <string name="sync_localpick_up">Up</string>
+    <string name="sync_localpick_select">Select this folder</string>
     <string name="sync_edit_source_choose_folder">Choose folder</string>
     <string name="sync_edit_field_required">Required</string>
     <string name="sync_edit_field_remote">Remote *</string>

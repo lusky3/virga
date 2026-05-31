@@ -106,6 +106,17 @@ fun SyncTaskEditScreen(
         }
     }
 
+    // With all-files access (foss build), use a real-path folder browser so the
+    // user can pick the SD-card / storage root — paths SAF's OpenDocumentTree
+    // blocks with a "privacy" restriction. Scoped-storage builds fall back to SAF.
+    var showLocalPicker by remember { mutableStateOf(false) }
+    if (showLocalPicker) {
+        LocalFolderPickerDialog(
+            onDismiss = { showLocalPicker = false },
+            onSelect = { path -> viewModel.applySourcePath(path) },
+        )
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -172,7 +183,10 @@ fun SyncTaskEditScreen(
                 onValueChange = { viewModel.update { f -> f.copy(sourcePath = it) } },
                 onBlur = viewModel::touchSourcePath,
                 onClear = viewModel::clearSourcePath,
-                onChooseFolder = { folderLauncher.launch(null) },
+                onChooseFolder = {
+                    if (android.os.Environment.isExternalStorageManager()) showLocalPicker = true
+                    else folderLauncher.launch(null)
+                },
             )
 
             // Remote
