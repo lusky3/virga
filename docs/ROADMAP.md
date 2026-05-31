@@ -88,7 +88,7 @@ Definition of Done.
 | 1 | Guided first-sync wizard + returnable add-remote | ☐ todo | |
 | 1 | Unify task-creation entry points | ✅ done | 2026-05-31 |
 | 1 | Nav transitions + predictive-back | ✅ done | 2026-05-31 |
-| 1 | Teach the mental model in empty states | ☐ todo | |
+| 1 | Teach the mental model in empty states + vocabulary | ✅ done | 2026-05-31 |
 | 2 | Tier-1: Filters editor | ☐ todo | |
 | 2 | Tier-1: Mirror toggle (safety-railed) | ☐ todo | |
 | 2 | Tier-1: Dry-run / preview changes | ☐ todo | |

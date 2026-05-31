@@ -179,7 +179,7 @@ private fun SummaryContent(
         item {
             SummaryRow(stringResource(R.string.sync_summary_source), task.sourcePath)
             SummaryRow(stringResource(R.string.sync_summary_destination), "${task.remoteName}:${task.remotePath}")
-            SummaryRow(stringResource(R.string.sync_summary_direction), task.direction.name.lowercase())
+            SummaryRow(stringResource(R.string.sync_summary_direction), stringResource(directionLabelRes(task.direction)))
             SummaryRow(
                 stringResource(R.string.sync_summary_schedule),
                 app.lusk.virga.sync.SyncSchedule.describe(task.scheduleDaysMask, task.scheduleHour, task.scheduleMinute)

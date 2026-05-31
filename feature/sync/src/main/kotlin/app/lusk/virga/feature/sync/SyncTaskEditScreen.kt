@@ -406,7 +406,7 @@ private fun DirectionSegmentedRow(
     }
 }
 
-private fun directionLabelRes(dir: SyncDirection): Int = when (dir) {
+internal fun directionLabelRes(dir: SyncDirection): Int = when (dir) {
     SyncDirection.UPLOAD -> R.string.sync_direction_upload
     SyncDirection.DOWNLOAD -> R.string.sync_direction_download
     SyncDirection.BISYNC -> R.string.sync_direction_bisync

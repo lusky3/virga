@@ -11,7 +11,7 @@
 
     <!-- Empty state -->
     <string name="remotes_empty_title">No cloud accounts yet</string>
-    <string name="remotes_empty_body">Add an account to start syncing files.</string>
+    <string name="remotes_empty_body">A remote is a cloud account — Google Drive, Dropbox, S3 and more — that your sync tasks read from and write to. Add one to begin.</string>
     <string name="remotes_empty_action_add">Add a cloud account</string>
     <string name="remotes_empty_action_import">Import rclone.conf</string>
 

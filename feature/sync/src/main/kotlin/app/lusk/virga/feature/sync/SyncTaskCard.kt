@@ -112,7 +112,7 @@ internal fun SyncTaskCard(
                 Text(
                     text = stringResource(
                         R.string.sync_task_schedule_summary,
-                        task.direction.name.lowercase(),
+                        stringResource(directionLabelRes(task.direction)),
                         app.lusk.virga.sync.SyncSchedule.describe(
                             task.scheduleDaysMask, task.scheduleHour, task.scheduleMinute,
                         ) ?: task.intervalMinutes?.let { "every ${it}m" } ?: "manual",

@@ -21,7 +21,7 @@
     <!-- SyncTasksScreen -->
     <string name="sync_tasks_title">Sync tasks</string>
     <string name="sync_tasks_empty_title">No sync tasks yet</string>
-    <string name="sync_tasks_empty_body">Create your first sync task to back up files automatically.</string>
+    <string name="sync_tasks_empty_body">A sync task keeps a folder on your phone backed up to a cloud account — on a schedule or on demand. Create one to get started.</string>
     <string name="sync_tasks_empty_action">Create sync task</string>
     <string name="sync_tasks_empty">No sync tasks yet.\nTap + to create one.</string>
     <string name="sync_task_cd_conflicts">Conflicts</string>
