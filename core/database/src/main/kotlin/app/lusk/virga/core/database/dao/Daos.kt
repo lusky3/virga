@@ -95,11 +95,57 @@ interface ConflictDao {
     @Query("SELECT * FROM conflicts WHERE id = :id")
     suspend fun getById(id: Long): ConflictEntity?
 
-    @Upsert
-    suspend fun upsert(conflict: ConflictEntity)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIgnore(conflict: ConflictEntity): Long
 
-    @Upsert
-    suspend fun upsertAll(conflicts: List<ConflictEntity>)
+    @Query(
+        """
+        UPDATE conflicts SET
+            taskId = :taskId,
+            variant1Path = :v1Path, variant2Path = :v2Path,
+            variant1Size = :v1Size, variant2Size = :v2Size,
+            detectedAtEpochMs = :detectedAt, resolved = 0
+        WHERE remoteName = :remoteName AND basePath = :basePath
+        """,
+    )
+    suspend fun updateByNaturalKey(
+        remoteName: String,
+        basePath: String,
+        taskId: Long,
+        v1Path: String,
+        v2Path: String,
+        v1Size: Long,
+        v2Size: Long,
+        detectedAt: Long,
+    )
+
+    /**
+     * Idempotent on the (remoteName, basePath) natural key. @Upsert updates by
+     * PRIMARY KEY, but a re-detected conflict carries id=0, so @Upsert silently
+     * no-ops the UPDATE against the existing row (its real id is non-zero).
+     * Insert-or-ignore then update-by-natural-key makes re-detection actually
+     * refresh the stored variant paths/sizes.
+     */
+    @Transaction
+    suspend fun upsertByNaturalKey(conflict: ConflictEntity) {
+        if (insertIgnore(conflict) == -1L) {
+            updateByNaturalKey(
+                remoteName = conflict.remoteName,
+                basePath = conflict.basePath,
+                taskId = conflict.taskId,
+                v1Path = conflict.variant1Path,
+                v2Path = conflict.variant2Path,
+                v1Size = conflict.variant1Size,
+                v2Size = conflict.variant2Size,
+                detectedAt = conflict.detectedAtEpochMs,
+            )
+        }
+    }
+
+    @Transaction
+    suspend fun upsertAllByNaturalKey(conflicts: List<ConflictEntity>) {
+        conflicts.forEach { upsertByNaturalKey(it) }
+    }
 
     @Query("UPDATE conflicts SET resolved = 1 WHERE id = :id")
     suspend fun markResolved(id: Long)

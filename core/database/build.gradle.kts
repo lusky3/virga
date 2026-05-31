@@ -10,6 +10,8 @@ android {
     defaultConfig {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+    // BuildConfig.DEBUG gates the destructive-migration fallback (debug only).
+    buildFeatures { buildConfig = true }
 }
 
 room {
@@ -26,4 +28,9 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.room.testing)
     testImplementation(libs.androidx.junit)
+    testImplementation(libs.androidx.test.core)
+    // Robolectric is a JUnit4 runner; run it under the JUnit Platform via the
+    // vintage engine alongside the project's JUnit5 setup.
+    testImplementation(libs.junit4)
+    testRuntimeOnly(libs.junit5.vintage)
 }

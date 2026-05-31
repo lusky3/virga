@@ -2,6 +2,7 @@ package app.lusk.virga.core.database.di
 
 import android.content.Context
 import androidx.room.Room
+import app.lusk.virga.core.database.BuildConfig
 import app.lusk.virga.core.database.VirgaDatabase
 import app.lusk.virga.core.database.dao.ConflictDao
 import app.lusk.virga.core.database.dao.RemoteDao
@@ -22,10 +23,16 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): VirgaDatabase =
         Room.databaseBuilder(context, VirgaDatabase::class.java, VirgaDatabase.NAME)
-            // Pre-release: schema is still evolving. Drop and recreate on
-            // version mismatch instead of writing per-version migrations.
-            .fallbackToDestructiveMigration(dropAllTables = true)
-            .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
+            .apply {
+                // Destructive fallback is a DEBUG-only convenience while the schema
+                // evolves. A release build must NOT silently wipe user data on a
+                // version bump — without a registered migration it fails loudly so
+                // a real Migration gets written before shipping.
+                if (BuildConfig.DEBUG) {
+                    fallbackToDestructiveMigration(dropAllTables = true)
+                    fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
+                }
+            }
             .build()
 
     @Provides fun provideRemoteDao(db: VirgaDatabase): RemoteDao = db.remoteDao()

@@ -64,7 +64,12 @@ class ConflictRepository @Inject constructor(
                 variant2Size = v2.size,
             )
         }
-        if (conflicts.isNotEmpty()) conflictDao.upsertAll(conflicts)
+        // Drop previously-resolved conflicts for this task before recording the
+        // current set (pruneResolved was otherwise dead code).
+        conflictDao.pruneResolved(task.id)
+        // Natural-key upsert so a re-detected conflict with changed sizes updates
+        // the existing row instead of silently no-opping (@Upsert keys on the id).
+        if (conflicts.isNotEmpty()) conflictDao.upsertAllByNaturalKey(conflicts)
         conflicts.size
     }
 
