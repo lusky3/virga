@@ -14,7 +14,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Replay
-import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -42,6 +41,7 @@ import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.common.util.formatFileSize
 import app.lusk.virga.core.common.model.SyncRun
 import app.lusk.virga.core.designsystem.component.EmptyState
+import app.lusk.virga.core.designsystem.component.VirgaCard
 import java.text.DateFormat
 import java.util.Date
 import kotlin.time.Duration.Companion.milliseconds
@@ -165,8 +165,8 @@ internal fun RunCard(
     onRetry: (() -> Unit)? = null,
 ) {
     val run = row.run
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+    VirgaCard(onClick = onClick) {
+        Column(Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     row.taskName,

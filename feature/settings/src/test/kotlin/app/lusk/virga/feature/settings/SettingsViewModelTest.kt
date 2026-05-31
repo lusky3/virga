@@ -118,7 +118,8 @@ class SettingsViewModelTest {
         advanceUntilIdle()
 
         assertThat(vm.state.value.themeMode).isEqualTo(ThemeMode.SYSTEM)
-        assertThat(vm.state.value.dynamicColor).isTrue()
+        // Brand-first (BRAND §4.3): dynamic color defaults off.
+        assertThat(vm.state.value.dynamicColor).isFalse()
         assertThat(vm.state.value.wifiOnlyByDefault).isTrue()
         assertThat(vm.state.value.requireChargingByDefault).isFalse()
         assertThat(vm.state.value.defaultBwLimitWifi).isNull()

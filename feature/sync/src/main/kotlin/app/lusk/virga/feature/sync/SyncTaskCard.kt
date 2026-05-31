@@ -1,13 +1,11 @@
 package app.lusk.virga.feature.sync
 
 import android.text.format.DateUtils
-import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cancel
@@ -19,7 +17,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,6 +35,8 @@ import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.common.util.formatFileSize
 import app.lusk.virga.core.common.model.SyncRun
 import app.lusk.virga.core.common.model.SyncTask
+import app.lusk.virga.core.designsystem.component.VirgaCard
+import app.lusk.virga.core.designsystem.component.VirgaCardState
 
 @Composable
 internal fun SyncTaskCard(
@@ -58,28 +57,21 @@ internal fun SyncTaskCard(
     val isActiveRun = latestRun?.status == SyncStatus.RUNNING ||
         latestRun?.status == SyncStatus.QUEUED
     var overflowExpanded by remember { mutableStateOf(false) }
-    val selectedBg = if (selected) {
-        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-    } else {
-        MaterialTheme.colorScheme.surface
+    val cardState = when {
+        isActiveRun -> VirgaCardState.Active
+        selected -> VirgaCardState.Selected
+        else -> VirgaCardState.Default
     }
 
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        tonalElevation = if (selected) 4.dp else 1.dp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(selectedBg, MaterialTheme.shapes.medium)
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick,
-            )
-            .semantics { onClick(label = "Open task") { false } },
+    VirgaCard(
+        state = cardState,
+        onClick = onClick,
+        onLongClick = onLongClick,
+        contentPadding = PaddingValues(start = 8.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
+        modifier = Modifier.semantics { onClick(label = "Open task") { false } },
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 8.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (inSelectionMode) {

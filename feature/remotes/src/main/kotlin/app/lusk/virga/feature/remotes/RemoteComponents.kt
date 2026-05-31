@@ -1,6 +1,5 @@
 package app.lusk.virga.feature.remotes
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -17,7 +16,7 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ElevatedCard
+import app.lusk.virga.core.designsystem.component.VirgaCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -70,13 +69,9 @@ internal fun RemoteCard(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
-    ElevatedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onOpenBrowser),
-    ) {
+    VirgaCard(onClick = onOpenBrowser) {
         Row(
-            Modifier.fillMaxWidth().padding(16.dp),
+            Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {

@@ -19,7 +19,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -54,6 +53,8 @@ import app.lusk.virga.core.common.util.formatFileSize
 import app.lusk.virga.core.data.ConflictChoice
 import app.lusk.virga.core.common.model.Conflict
 import app.lusk.virga.core.designsystem.component.EmptyState
+import app.lusk.virga.core.designsystem.component.VirgaCard
+import app.lusk.virga.core.designsystem.component.VirgaCardState
 import java.text.DateFormat
 import java.util.Date
 
@@ -212,12 +213,12 @@ private fun ConflictCard(
     onLongClick: () -> Unit,
     onCheckChange: () -> Unit,
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(onLongClick = onLongClick, onClick = { if (inSelectionMode) onCheckChange() }),
+    VirgaCard(
+        state = if (isSelected) VirgaCardState.Selected else VirgaCardState.Default,
+        onClick = { if (inSelectionMode) onCheckChange() },
+        onLongClick = onLongClick,
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (inSelectionMode) {
                     Checkbox(checked = isSelected, onCheckedChange = { onCheckChange() }, modifier = Modifier.padding(end = 8.dp))
