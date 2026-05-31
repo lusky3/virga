@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-build override of the launcher label. The debug build installs alongside
+  release (applicationIdSuffix ".debug"), so a distinct name avoids confusing the
+  two on-device. Merged over app/src/main for any debug variant (foss/play).
+-->
+<resources>
+    <string name="app_name">Virga (Debug)</string>
+</resources>
