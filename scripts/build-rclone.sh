@@ -7,6 +7,10 @@
 set -euo pipefail
 
 RCLONE_VERSION="${RCLONE_VERSION:-v1.74.2}"
+# Expected commit the tag must resolve to — a tag is mutable (can be re-pointed),
+# so we verify the checked-out HEAD against this pinned commit before building.
+# Update alongside RCLONE_VERSION (git ls-remote …/rclone refs/tags/<ver>^{}).
+RCLONE_COMMIT="${RCLONE_COMMIT:-b22fe9811c672e4d226ae2c054d7c965d8783805}"
 NDK_VERSION="${NDK_VERSION:-27.2.12479018}"
 MIN_SDK="${MIN_SDK:-26}"
 
@@ -41,6 +45,14 @@ if [[ ! -d "$BUILD_DIR/rclone" ]]; then
 fi
 
 cd "$BUILD_DIR/rclone"
+# Integrity gate: the checked-out commit (fresh clone OR reused/cached one) must
+# match the pinned commit. Stops a moved tag or a tampered cache from building.
+ACTUAL_COMMIT="$(git rev-parse HEAD)"
+if [[ "$ACTUAL_COMMIT" != "$RCLONE_COMMIT" ]]; then
+  echo "ERROR: rclone HEAD $ACTUAL_COMMIT != pinned $RCLONE_COMMIT for $RCLONE_VERSION" >&2
+  echo "       The tag may have moved, or the cached clone is stale/tampered." >&2
+  exit 1
+fi
 VERSION_TAG="$(git describe --tags 2>/dev/null || echo "$RCLONE_VERSION")"
 
 for abi in $ABIS; do

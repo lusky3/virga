@@ -33,7 +33,7 @@ jobs:
     if: needs.check-secrets.outputs.has-discord == 'true'
     permissions:
       actions: read
-    uses: LUSKTECH/.github/.github/workflows/discord-notify.yml@main
+    uses: LUSKTECH/.github/.github/workflows/discord-notify.yml@ef5af9abeb60535244aeae074bd88b9bf1ac2719 # main
     with:
       status: ${{ github.event.workflow_run.conclusion }}
       title: '${{ github.event.workflow_run.name }} — ${{ github.event.workflow_run.conclusion }}'

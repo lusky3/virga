@@ -52,7 +52,11 @@ jobs:
       - name: Cache rclone build
         uses: actions/cache@v4
         with:
-          path: .rclone-build
+          # Cache the compiled binaries too, not just the clone: with jniLibs
+          # present the Gradle onlyIf skips the ~5-min cross-compile on a hit.
+          path: |
+            .rclone-build
+            core/rclone/src/main/jniLibs
           key: rclone-${{ env.RCLONE_VERSION }}-ndk${{ env.NDK_VERSION }}
 
       - name: Build rclone binaries
@@ -101,7 +105,7 @@ jobs:
         if: ${{ env.HAS_CODECOV == 'true' }}
         env:
           HAS_CODECOV: ${{ secrets.CODECOV_TOKEN != '' }}
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: build/reports/kover/report.xml
@@ -150,7 +154,7 @@ jobs:
         # ggshield auto-detects the push/PR commit range from the GitHub context;
         # it only needs the API key. Skipped when the repo-level token is absent.
         if: ${{ env.HAS_GG == 'true' }}
-        uses: GitGuardian/ggshield-action@v1
+        uses: GitGuardian/ggshield-action@e42ae2d40419f1b8a1e57445ff756d5fd2db5913 # v1
         env:
           HAS_GG: ${{ secrets.GIT_GUARDIAN_TOKEN != '' }}
           GITGUARDIAN_API_KEY: ${{ secrets.GIT_GUARDIAN_TOKEN }}

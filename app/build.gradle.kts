@@ -55,8 +55,10 @@ android {
 
     defaultConfig {
         applicationId = "app.lusk.virga"
-        versionCode = 1
-        versionName = "0.1.0"
+        // Injectable from CI (release.yml derives these from the git tag) so the
+        // published build carries the real version, not a hardcoded 1 / 0.1.0.
+        versionCode = System.getenv("VIRGA_VERSION_CODE")?.toIntOrNull() ?: 1
+        versionName = System.getenv("VIRGA_VERSION_NAME") ?: "0.1.0"
         testInstrumentationRunner = "app.lusk.virga.HiltTestRunner"
         vectorDrawables { useSupportLibrary = true }
 

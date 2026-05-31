@@ -43,6 +43,11 @@ jobs:
           fi
           echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
           echo "version=${INPUT_TAG#v}" >> "$GITHUB_OUTPUT"
+          # Derive a monotonic integer versionCode from MAJOR.MINOR.PATCH
+          # (suffix stripped): MAJOR*10000 + MINOR*100 + PATCH.
+          core="${INPUT_TAG#v}"; core="${core%%-*}"
+          IFS='.' read -r MA MI PA <<<"$core"
+          echo "code=$(( ${MA:-0} * 10000 + ${MI:-0} * 100 + ${PA:-0} ))" >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -69,7 +74,9 @@ jobs:
       - name: Cache rclone build
         uses: actions/cache@v4
         with:
-          path: .rclone-build
+          path: |
+            .rclone-build
+            core/rclone/src/main/jniLibs
           key: rclone-${{ env.RCLONE_VERSION }}-ndk${{ env.NDK_VERSION }}
 
       - name: Build rclone binaries
@@ -110,7 +117,20 @@ jobs:
           VIRGA_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           VIRGA_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           VIRGA_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          VIRGA_VERSION_NAME: ${{ steps.version.outputs.version }}
+          VIRGA_VERSION_CODE: ${{ steps.version.outputs.code }}
         run: ./gradlew assembleFossRelease
+
+      - name: Verify release APKs are signed
+        # A tag-triggered release must never publish unsigned APKs. If the
+        # signingConfig didn't run (missing keystore secrets), AGP emits
+        # *-unsigned.apk — fail loudly instead of shipping them.
+        run: |
+          set -euo pipefail
+          if ls app/build/outputs/apk/foss/release/*-unsigned.apk >/dev/null 2>&1; then
+            echo "::error::Unsigned release APKs present — refusing to publish. Configure RELEASE_KEYSTORE_* secrets." >&2
+            exit 1
+          fi
 
       - name: Generate SHA-256 checksums
         run: |
