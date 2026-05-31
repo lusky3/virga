@@ -45,7 +45,7 @@ class PreferencesRepository @Inject constructor(
     private fun Preferences.toAppPreferences(): AppPreferences = AppPreferences(
         themeMode = this[Keys.THEME_MODE]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() }
             ?: ThemeMode.SYSTEM,
-        dynamicColor = this[Keys.DYNAMIC_COLOR] ?: true,
+        dynamicColor = this[Keys.DYNAMIC_COLOR] ?: false,
         wifiOnlyByDefault = this[Keys.WIFI_ONLY] ?: true,
         requireChargingByDefault = this[Keys.REQUIRE_CHARGING] ?: false,
         defaultBwLimitWifi = this[Keys.BW_WIFI],

@@ -1,66 +1,97 @@
 package app.lusk.virga.feature.sync
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.PauseCircle
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.lusk.virga.core.common.model.SyncStatus
+import app.lusk.virga.core.designsystem.theme.LocalVirgaColors
 
 /**
- * Non-interactive Material 3 status pill showing a [SyncStatus] with
- * container/on-container color pairs. Replaces both the plain-text
- * RunStatusBadge in SyncTasksScreen and the AssistChip StatusChip in
- * SyncHistoryScreen so all status surfaces are consistent.
+ * The single canonical status renderer for the whole app (BRAND §10): every
+ * task/run state has exactly one representation = container color + glyph +
+ * label text — never color alone. Semantic colors come from
+ * [LocalVirgaColors] (success/running/info), with M3 error roles for failures
+ * and surfaceVariant for idle/cancelled. This replaces the previous
+ * tertiaryContainer-shoehorned success mapping.
  */
 @Composable
 fun SyncStatusBadge(status: SyncStatus, modifier: Modifier = Modifier) {
-    val (labelRes, containerColor, contentColor) = when (status) {
-        SyncStatus.SUCCESS -> Triple(
+    val virga = LocalVirgaColors.current
+    val scheme = MaterialTheme.colorScheme
+
+    data class BadgeStyle(
+        val labelRes: Int,
+        val container: Color,
+        val content: Color,
+        val glyph: ImageVector?,
+    )
+
+    val style = when (status) {
+        SyncStatus.SUCCESS -> BadgeStyle(
             R.string.sync_history_status_success,
-            MaterialTheme.colorScheme.tertiaryContainer,
-            MaterialTheme.colorScheme.onTertiaryContainer,
+            virga.successContainer, virga.onSuccessContainer, Icons.Filled.CheckCircle,
         )
-        SyncStatus.FAILED -> Triple(
+        SyncStatus.FAILED -> BadgeStyle(
             R.string.sync_history_status_failed,
-            MaterialTheme.colorScheme.errorContainer,
-            MaterialTheme.colorScheme.onErrorContainer,
+            scheme.errorContainer, scheme.onErrorContainer, Icons.Filled.Error,
         )
-        SyncStatus.RUNNING -> Triple(
+        SyncStatus.RUNNING -> BadgeStyle(
             R.string.sync_history_status_running,
-            MaterialTheme.colorScheme.primaryContainer,
-            MaterialTheme.colorScheme.onPrimaryContainer,
+            virga.runningContainer, virga.onRunningContainer, Icons.Filled.Sync,
         )
-        SyncStatus.QUEUED -> Triple(
+        SyncStatus.QUEUED -> BadgeStyle(
             R.string.sync_history_status_queued,
-            MaterialTheme.colorScheme.secondaryContainer,
-            MaterialTheme.colorScheme.onSecondaryContainer,
+            virga.infoContainer, virga.onInfoContainer, Icons.Filled.Schedule,
         )
-        SyncStatus.CANCELLED -> Triple(
+        SyncStatus.CANCELLED -> BadgeStyle(
             R.string.sync_history_status_cancelled,
-            MaterialTheme.colorScheme.surfaceVariant,
-            MaterialTheme.colorScheme.onSurfaceVariant,
+            scheme.surfaceVariant, scheme.onSurfaceVariant, Icons.Filled.PauseCircle,
         )
-        SyncStatus.IDLE -> Triple(
+        SyncStatus.IDLE -> BadgeStyle(
             R.string.sync_history_status_idle,
-            MaterialTheme.colorScheme.surfaceVariant,
-            MaterialTheme.colorScheme.onSurfaceVariant,
+            scheme.surfaceVariant, scheme.onSurfaceVariant, null,
         )
     }
-    val label = stringResource(labelRes)
-    Text(
-        text = label,
-        style = MaterialTheme.typography.labelSmall,
-        color = contentColor,
+    val label = stringResource(style.labelRes)
+    Row(
         modifier = modifier
-            .background(containerColor, RoundedCornerShape(50))
+            .background(style.container, RoundedCornerShape(50))
             .padding(horizontal = 8.dp, vertical = 2.dp)
             .semantics { contentDescription = "Status: $label" },
-    )
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (style.glyph != null) {
+            Icon(
+                style.glyph,
+                contentDescription = null,
+                tint = style.content,
+                modifier = Modifier.size(14.dp).padding(end = 2.dp),
+            )
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = style.content,
+        )
+    }
 }

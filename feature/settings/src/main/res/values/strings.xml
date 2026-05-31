@@ -7,7 +7,7 @@
     <string name="settings_theme_system">System</string>
     <string name="settings_theme_light">Light</string>
     <string name="settings_theme_dark">Dark</string>
-    <string name="settings_toggle_dynamic_color">Dynamic color (Android 12+)</string>
+    <string name="settings_toggle_dynamic_color">Match my wallpaper colors</string>
     <string name="settings_section_sync_defaults">Sync defaults</string>
     <string name="settings_toggle_wifi_only">Wi-Fi only by default</string>
     <string name="settings_toggle_require_charging">Require charging by default</string>

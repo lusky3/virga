@@ -6,7 +6,7 @@ enum class ThemeMode { SYSTEM, LIGHT, DARK }
 /** Snapshot of all app preferences, exposed as a Flow by [PreferencesRepository]. */
 data class AppPreferences(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
-    val dynamicColor: Boolean = true,
+    val dynamicColor: Boolean = false,
     /** Global default; individual sync tasks may override. */
     val wifiOnlyByDefault: Boolean = true,
     val requireChargingByDefault: Boolean = false,

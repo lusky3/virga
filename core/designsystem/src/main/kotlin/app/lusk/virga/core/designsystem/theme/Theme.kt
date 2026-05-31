@@ -2,58 +2,76 @@ package app.lusk.virga.core.designsystem.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalContext
 
-private val LightColors = lightColorScheme(
-    primary = VirgaBlue,
-    secondary = VirgaTeal,
-    error = VirgaError,
-)
-
-private val DarkColors = darkColorScheme(
-    primary = VirgaBlueDarkPrimary,
-    onPrimary = VirgaBlueDarkOnPrimary,
-    primaryContainer = VirgaBlueDarkContainer,
-    onPrimaryContainer = VirgaBlueDarkOnContainer,
-    secondary = VirgaTealDark,
-    error = VirgaError,
-)
-
 /**
- * App theme. Uses Material You dynamic color on Android 12+ when [dynamicColor]
- * is enabled; otherwise the brand palette.
+ * Virga's root theme (BRAND §4, §5, §7, §12).
  *
- * Success color (ui-10): M3's color system has no first-class "success" role.
- * [VirgaSuccess] / [VirgaSuccessDark] in Color.kt are preserved as named
- * constants for any future custom component that needs them. The feature/sync
- * StatusChip currently maps SUCCESS → MaterialTheme.colorScheme.tertiary
- * (tertiaryContainer tint), which is the closest semantic slot available in
- * the shared M3 scheme without a custom ColorScheme extension. If a more
- * prominent semantic mapping is needed project-wide, introduce a
- * CompositionLocal<Color> named LocalSuccessColor in a future ADR.
+ * **Brand-first, not brand-erasing (BRAND §4.3).** The complete branded
+ * blue/teal schemes ([VirgaLightColorScheme]/[VirgaDarkColorScheme]) are the
+ * default. [dynamicColor] now defaults **off** — a user who never opens Settings
+ * always sees Virga's identity. The Settings "Match my wallpaper colors" toggle
+ * opts into dynamic color.
+ *
+ * **Dynamic-color-as-tint policy.** When [dynamicColor] is on (Android 12+), we
+ * do *not* hand the whole wallpaper palette to the app. We take the dynamic
+ * scheme but **keep the brand primary family** (primary/onPrimary/
+ * primaryContainer/onPrimaryContainer) so Virga's blue persists; wallpaper
+ * accents flow into secondary/tertiary/surfaces. This harmonizes with the
+ * device theme without replacing the brand.
+ *
+ * **Shape + type (BRAND §5, §7).** [VirgaShapes] supplies the brand corner
+ * scale; [VirgaTypography] the type voice.
+ *
+ * **Motion (BRAND §12).** Named motion tokens live in [VirgaMotion]; reduce-
+ * motion is honored via [rememberReduceMotion]. NOTE: `MaterialExpressiveTheme`
+ * + `MotionScheme.expressive()` are still `internal` in the pinned material3
+ * (1.4.0 via compose-bom 2026.05.01) and cannot be referenced yet. We therefore
+ * use the standard [MaterialTheme] and drive motion through the [VirgaMotion]
+ * token layer. Adopt `MaterialExpressiveTheme` (and the wavy progress indicator)
+ * once material3 promotes those APIs to public — tracked in BRAND §12.
+ *
+ * **Semantic colors (BRAND §4.4, §10).** [LocalVirgaColors] (success/warning/
+ * running/info) is provided here; [SyncStatusBadge] and any status surface read
+ * it. M3 has no such roles, so this CompositionLocal is the only source.
  */
 @Composable
 fun VirgaTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        darkTheme -> DarkColors
-        else -> LightColors
+    val brandScheme = if (darkTheme) VirgaDarkColorScheme else VirgaLightColorScheme
+    val colorScheme: ColorScheme = when {
+        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+            val dynamic =
+                if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            // Tint, don't replace: keep the brand primary family, let the
+            // wallpaper drive everything else.
+            dynamic.copy(
+                primary = brandScheme.primary,
+                onPrimary = brandScheme.onPrimary,
+                primaryContainer = brandScheme.primaryContainer,
+                onPrimaryContainer = brandScheme.onPrimaryContainer,
+            )
+        }
+        else -> brandScheme
     }
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = VirgaTypography,
-        content = content,
-    )
+    val semanticColors = if (darkTheme) VirgaDarkSemanticColors else VirgaLightSemanticColors
+
+    CompositionLocalProvider(LocalVirgaColors provides semanticColors) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = VirgaTypography,
+            shapes = VirgaShapes,
+            content = content,
+        )
+    }
 }

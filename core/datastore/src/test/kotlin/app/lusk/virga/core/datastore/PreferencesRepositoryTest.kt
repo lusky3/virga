@@ -40,7 +40,7 @@ class PreferencesRepositoryTest {
         repo.preferences.test {
             val prefs = awaitItem()
             assertThat(prefs.themeMode).isEqualTo(ThemeMode.SYSTEM)
-            assertThat(prefs.dynamicColor).isTrue()
+            assertThat(prefs.dynamicColor).isFalse()
             assertThat(prefs.wifiOnlyByDefault).isTrue()
             assertThat(prefs.requireChargingByDefault).isFalse()
             assertThat(prefs.onboardingComplete).isFalse()

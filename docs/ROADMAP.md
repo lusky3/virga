@@ -79,10 +79,10 @@ Definition of Done.
 | Phase | Workstream | Status | Landed (commit) |
 |---|---|---|---|
 | 0 | Create `core:designsystem` module | ✅ done | 2026-05-31 |
-| 0 | Full branded color schemes + dynamic-as-tint | ☐ todo | |
-| 0 | `LocalVirgaColors` semantic colors + status glyphs | ☐ todo | |
-| 0 | `VirgaSpacing` / `VirgaShapes` / `VirgaGradients` tokens | ☐ todo | |
-| 0 | `MaterialExpressiveTheme` + `VirgaMotionScheme` + display font | ☐ todo | |
+| 0 | Full branded color schemes + dynamic-as-tint | ✅ done | 2026-05-31 |
+| 0 | `LocalVirgaColors` semantic colors + status glyphs | ✅ done | 2026-05-31 |
+| 0 | `VirgaSpacing` / `VirgaShapes` / `VirgaGradients` tokens | ✅ done | 2026-05-31 |
+| 0 | `VirgaMotionScheme` tokens + shapes (Expressive wrap + font deferred) | ◐ partial | 2026-05-31 |
 | 0 | `VirgaCard` + migrate existing cards | ☐ todo | |
 | 1 | Live sync visualization (card strip + summary panel) | ☐ todo | |
 | 1 | Guided first-sync wizard + returnable add-remote | ☐ todo | |
