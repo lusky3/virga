@@ -48,6 +48,10 @@
     <string name="remotes_add_params_supporting">One key = value per line, e.g. client_id = abc123</string>
     <string name="remotes_add_create">Create</string>
     <string name="remotes_add_cancel">Cancel</string>
+    <!-- Typed option fields (schema-driven manual config) -->
+    <string name="remotes_add_show_advanced">Show advanced options</string>
+    <string name="remotes_add_hide_advanced">Hide advanced options</string>
+    <string name="remotes_add_required_hint"> (required)</string>
 
     <!-- ViewModel user-facing messages -->
     <string name="remotes_msg_oauth_not_configured">%1$s OAuth client ID isn\'t configured yet.</string>

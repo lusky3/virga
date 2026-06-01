@@ -2,6 +2,7 @@ package app.lusk.virga.core.data
 
 import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.common.model.Remote
+import app.lusk.virga.core.common.model.RemoteProvider
 import app.lusk.virga.core.common.model.RemoteQuota
 import app.lusk.virga.core.database.dao.RemoteDao
 import app.lusk.virga.core.database.entity.RemoteEntity
@@ -58,4 +59,11 @@ class RemoteRepository @Inject constructor(
     /** Fetches storage quota for [remoteName]. Returns [Result.failure] when offline or unsupported. */
     suspend fun about(remoteName: String): Result<RemoteQuota> =
         runCatching { engine.about(remoteName) }
+
+    /**
+     * Returns the rclone provider schema (backend types + per-backend option list).
+     * Never throws: returns an empty list when the daemon is unavailable or the call
+     * fails — callers should fall back to freeform input in that case.
+     */
+    suspend fun providers(): List<RemoteProvider> = engine.providers()
 }

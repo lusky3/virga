@@ -4,6 +4,8 @@ import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.common.model.Remote
+import app.lusk.virga.core.common.model.RemoteOption
+import app.lusk.virga.core.common.model.RemoteProvider
 import app.lusk.virga.core.common.model.RemoteQuota
 import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.common.model.SyncProgress
@@ -81,6 +83,45 @@ class RcloneEngineImpl @Inject constructor(
         if (!daemonManager.isAlive(d)) return false
         return runCatching { rc(d, "rc/noop") }.isSuccess
     }
+
+    /**
+     * Calls `config/providers` and maps the JSON into [RemoteProvider] / [RemoteOption]
+     * domain models. Every field is parsed defensively; missing keys use safe defaults
+     * so a future rclone schema change does not break the UI, it just shows less info.
+     *
+     * Returns an empty list on any failure — the UI falls back to the freeform textarea.
+     */
+    override suspend fun providers(): List<RemoteProvider> = runCatching {
+        val d = ensureDaemon()
+        val root = rc(d, "config/providers")
+        val providerArray = root["providers"]?.jsonArray ?: return@runCatching emptyList()
+        providerArray.map { elem ->
+            val obj = elem.jsonObject
+            val name = obj["Name"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val desc = obj["Description"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val opts = obj["Options"]?.jsonArray?.map { optElem ->
+                val o = optElem.jsonObject
+                val examples = o["Examples"]?.jsonArray?.mapNotNull { ex ->
+                    val exObj = ex.jsonObject
+                    val v = exObj["Value"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                    val h = exObj["Help"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                    v to h
+                } ?: emptyList()
+                RemoteOption(
+                    name = o["Name"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                    help = o["Help"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                    type = o["Type"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                    required = o["Required"]?.jsonPrimitive?.booleanOrNull ?: false,
+                    isPassword = o["IsPassword"]?.jsonPrimitive?.booleanOrNull ?: false,
+                    default = o["DefaultStr"]?.jsonPrimitive?.contentOrNull
+                        ?: o["Default"]?.jsonPrimitive?.contentOrNull,
+                    examples = examples,
+                    advanced = o["Advanced"]?.jsonPrimitive?.booleanOrNull ?: false,
+                )
+            } ?: emptyList()
+            RemoteProvider(name = name, description = desc, options = opts)
+        }
+    }.getOrElse { emptyList() }
 
     override suspend fun listRemotes(): List<Remote> {
         val config = getConfig()

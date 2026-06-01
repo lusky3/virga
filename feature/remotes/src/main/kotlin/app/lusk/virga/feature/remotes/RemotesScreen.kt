@@ -63,6 +63,7 @@ fun RemotesScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val launchUrl by viewModel.launchUrl.collectAsStateWithLifecycle()
+    val providersLoaded by viewModel.providers.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
     var showAdd by remember { mutableStateOf(false) }
@@ -217,9 +218,12 @@ fun RemotesScreen(
 
     if (showAdd) {
         AddRemoteDialog(
-            providers = viewModel.oauthProviders,
+            oauthProviders = viewModel.oauthProviders,
             error = manualError,
             customClientIds = state.customClientIds,
+            onEnsureProviders = viewModel::ensureProvidersLoaded,
+            optionsForBackend = viewModel::optionsForBackend,
+            providersLoaded = providersLoaded,
             onDismiss = { showAdd = false; manualError = null },
             onManualConfirm = { name, type, params ->
                 manualError = null

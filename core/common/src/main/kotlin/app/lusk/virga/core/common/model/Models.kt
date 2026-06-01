@@ -105,6 +105,32 @@ data class Conflict(
 )
 
 /**
+ * A single configurable option for an rclone backend, as returned by the
+ * `config/providers` RC endpoint.
+ *
+ * [type] is the rclone type string: "string", "bool", "int", "SizeSuffix",
+ * "Duration", etc.  [examples] are (value, help) pairs rclone suggests;
+ * the list may be empty.
+ */
+data class RemoteOption(
+    val name: String,
+    val help: String,
+    val type: String,
+    val required: Boolean,
+    val isPassword: Boolean,
+    val default: String?,
+    val examples: List<Pair<String, String>>,
+    val advanced: Boolean,
+)
+
+/** Metadata for one rclone backend provider, as returned by `config/providers`. */
+data class RemoteProvider(
+    val name: String,
+    val description: String,
+    val options: List<RemoteOption>,
+)
+
+/**
  * Storage quota for a remote, fetched from rclone `operations/about`.
  * Any field may be null — backends that don't support about return partial data.
  */

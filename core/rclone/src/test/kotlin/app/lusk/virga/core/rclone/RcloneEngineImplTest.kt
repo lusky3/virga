@@ -321,6 +321,116 @@ class RcloneEngineImplTest {
         coVerify { apiClient.call(any(), any(), any(), "sync/sync", any()) }
     }
 
+    // --- providers ---
+
+    @Test fun `providers returns parsed RemoteProvider list`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "config/providers", any()) } returns buildJsonObject {
+            put("providers", kotlinx.serialization.json.buildJsonArray {
+                add(buildJsonObject {
+                    put("Name", "drive")
+                    put("Description", "Google Drive")
+                    put("Options", kotlinx.serialization.json.buildJsonArray {
+                        add(buildJsonObject {
+                            put("Name", "client_id")
+                            put("Help", "OAuth Client ID")
+                            put("Type", "string")
+                            put("Required", false)
+                            put("IsPassword", false)
+                            put("Advanced", false)
+                            put("Examples", kotlinx.serialization.json.buildJsonArray {})
+                        })
+                        add(buildJsonObject {
+                            put("Name", "client_secret")
+                            put("Help", "OAuth Client Secret")
+                            put("Type", "string")
+                            put("Required", false)
+                            put("IsPassword", true)
+                            put("Advanced", false)
+                            put("Examples", kotlinx.serialization.json.buildJsonArray {})
+                        })
+                    })
+                })
+            })
+        }
+
+        engine.startDaemon()
+        val result = engine.providers()
+
+        assertThat(result).hasSize(1)
+        val drive = result[0]
+        assertThat(drive.name).isEqualTo("drive")
+        assertThat(drive.description).isEqualTo("Google Drive")
+        assertThat(drive.options).hasSize(2)
+        assertThat(drive.options[0].name).isEqualTo("client_id")
+        assertThat(drive.options[0].isPassword).isFalse()
+        assertThat(drive.options[1].name).isEqualTo("client_secret")
+        assertThat(drive.options[1].isPassword).isTrue()
+    }
+
+    @Test fun `providers returns empty list when api call fails`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "config/providers", any()) } throws
+            VirgaError.Rclone(message = "not supported")
+
+        engine.startDaemon()
+        val result = engine.providers()
+
+        assertThat(result).isEmpty()
+    }
+
+    @Test fun `providers returns empty list when providers key is absent`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "config/providers", any()) } returns buildJsonObject {}
+
+        engine.startDaemon()
+        val result = engine.providers()
+
+        assertThat(result).isEmpty()
+    }
+
+    @Test fun `providers parses Examples into pairs`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "config/providers", any()) } returns buildJsonObject {
+            put("providers", kotlinx.serialization.json.buildJsonArray {
+                add(buildJsonObject {
+                    put("Name", "s3")
+                    put("Description", "Amazon S3")
+                    put("Options", kotlinx.serialization.json.buildJsonArray {
+                        add(buildJsonObject {
+                            put("Name", "provider")
+                            put("Help", "S3 provider")
+                            put("Type", "string")
+                            put("Required", false)
+                            put("IsPassword", false)
+                            put("Advanced", false)
+                            put("Examples", kotlinx.serialization.json.buildJsonArray {
+                                add(buildJsonObject { put("Value", "AWS"); put("Help", "Amazon Web Services") })
+                                add(buildJsonObject { put("Value", "Minio"); put("Help", "Minio object storage") })
+                            })
+                        })
+                    })
+                })
+            })
+        }
+
+        engine.startDaemon()
+        val result = engine.providers()
+
+        val providerOpt = result[0].options[0]
+        assertThat(providerOpt.examples).hasSize(2)
+        assertThat(providerOpt.examples[0].first).isEqualTo("AWS")
+        assertThat(providerOpt.examples[0].second).isEqualTo("Amazon Web Services")
+    }
+
     // --- importConfig ---
 
     @Test fun `importConfig stops daemon and delegates to configManager`() = runTest(testDispatcher) {

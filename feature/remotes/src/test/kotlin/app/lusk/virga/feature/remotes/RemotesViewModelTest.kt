@@ -7,6 +7,8 @@ import app.lusk.virga.core.data.PendingRemoteResult
 import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.datastore.OAuthKeyStore
 import app.lusk.virga.core.common.model.Remote
+import app.lusk.virga.core.common.model.RemoteOption
+import app.lusk.virga.core.common.model.RemoteProvider
 import app.lusk.virga.core.rclone.oauth.OAuthConfig
 import app.lusk.virga.core.rclone.oauth.OAuthProvider
 import app.lusk.virga.core.rclone.oauth.OAuthProviders
@@ -508,6 +510,83 @@ class RemotesViewModelTest {
 
         assertThat(resultSuccess).isFalse()
         assertThat(resultError).isEqualTo("conflict")
+    }
+
+    // --- providers / optionsForBackend ------------------------------------------
+
+    @Test
+    fun `ensureProvidersLoaded stores result and optionsForBackend returns filtered options`() = runTest(mainDispatcher.dispatcher) {
+        val clientIdOpt = RemoteOption(
+            name = "client_id", help = "Your client ID", type = "string",
+            required = false, isPassword = false, default = null,
+            examples = emptyList(), advanced = false,
+        )
+        val secretOpt = RemoteOption(
+            name = "client_secret", help = "Your client secret", type = "string",
+            required = false, isPassword = true, default = null,
+            examples = emptyList(), advanced = false,
+        )
+        val advancedOpt = RemoteOption(
+            name = "root_folder_id", help = "Root folder ID", type = "string",
+            required = false, isPassword = false, default = null,
+            examples = emptyList(), advanced = true,
+        )
+        val driveProvider = RemoteProvider(
+            name = "drive",
+            description = "Google Drive",
+            options = listOf(clientIdOpt, secretOpt, advancedOpt),
+        )
+        coEvery { repository.providers() } returns listOf(driveProvider)
+        val vm = viewModel()
+
+        // Before loading, optionsForBackend returns null (schema not yet loaded).
+        assertThat(vm.optionsForBackend("drive")).isNull()
+
+        vm.ensureProvidersLoaded()
+        advanceUntilIdle()
+
+        // After loading, non-advanced options are returned.
+        val opts = vm.optionsForBackend("drive")
+        assertThat(opts).isNotNull()
+        assertThat(opts!!).hasSize(2)
+        assertThat(opts.map { it.name }).containsExactly("client_id", "client_secret")
+        // Advanced option is excluded from the non-advanced list.
+        assertThat(opts.any { it.advanced }).isFalse()
+    }
+
+    @Test
+    fun `optionsForBackend returns null for unknown backend type`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.providers() } returns listOf(
+            RemoteProvider("drive", "Google Drive", emptyList()),
+        )
+        val vm = viewModel()
+        vm.ensureProvidersLoaded()
+        advanceUntilIdle()
+
+        assertThat(vm.optionsForBackend("ftp")).isNull()
+    }
+
+    @Test
+    fun `ensureProvidersLoaded is idempotent - does not re-fetch if already loaded`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.providers() } returns emptyList()
+        val vm = viewModel()
+        vm.ensureProvidersLoaded()
+        advanceUntilIdle()
+        vm.ensureProvidersLoaded()
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { repository.providers() }
+    }
+
+    @Test
+    fun `optionsForBackend returns null when providers call returned empty list (failure)`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.providers() } returns emptyList()
+        val vm = viewModel()
+        vm.ensureProvidersLoaded()
+        advanceUntilIdle()
+
+        // Empty list signals a failure — fall back to freeform.
+        assertThat(vm.optionsForBackend("drive")).isNull()
     }
 
     private fun OAuthProvider.unused() = Unit  // silence unused-import warning for OAuthProvider import

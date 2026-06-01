@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import app.lusk.virga.core.common.error.toUserMessage
 import app.lusk.virga.core.common.model.Remote
+import app.lusk.virga.core.common.model.RemoteOption
+import app.lusk.virga.core.common.model.RemoteProvider
 import app.lusk.virga.core.common.model.RemoteQuota
 import app.lusk.virga.core.data.PendingRemoteResult
 import app.lusk.virga.core.data.RemoteRepository
@@ -60,6 +62,42 @@ class RemotesViewModel @Inject constructor(
 
     /** The OAuth providers Virga supports out of the box. */
     val oauthProviders: List<OAuthProvider> = OAuthProviders.All
+
+    /**
+     * Provider schema loaded lazily once on first access. Null means not yet
+     * loaded; an empty list means the load failed or returned nothing. The UI
+     * uses this to decide whether to render typed fields or fall back to the
+     * freeform textarea.
+     */
+    private val _providers = MutableStateFlow<List<RemoteProvider>?>(null)
+
+    /** Public read-only view of the provider schema for the UI to collect. */
+    val providers: StateFlow<List<RemoteProvider>?> = _providers
+
+    /**
+     * Lazily fetches the `config/providers` schema. Safe to call repeatedly —
+     * subsequent calls are no-ops once the value is set. Failures leave the
+     * value as an empty list so the UI can detect them and fall back gracefully.
+     */
+    fun ensureProvidersLoaded() {
+        if (_providers.value != null) return
+        viewModelScope.launch {
+            _providers.value = repository.providers()
+        }
+    }
+
+    /**
+     * Returns the non-advanced [RemoteOption] list for [backendType], or null when the
+     * provider schema has not been loaded or the type is not found. A null return
+     * signals the UI to keep the freeform textarea visible.
+     */
+    fun optionsForBackend(backendType: String): List<RemoteOption>? {
+        val loaded = _providers.value ?: return null
+        if (loaded.isEmpty()) return null
+        return loaded.firstOrNull { it.name.equals(backendType, ignoreCase = true) }
+            ?.options
+            ?.filter { !it.advanced }
+    }
 
     init {
         // Observe the redirect activity's results for the lifetime of the VM.

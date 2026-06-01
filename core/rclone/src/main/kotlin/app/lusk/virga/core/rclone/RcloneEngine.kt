@@ -3,6 +3,7 @@ package app.lusk.virga.core.rclone
 import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.common.model.Remote
+import app.lusk.virga.core.common.model.RemoteProvider
 import app.lusk.virga.core.common.model.RemoteQuota
 import app.lusk.virga.core.common.model.SyncProgress
 import kotlinx.coroutines.flow.Flow
@@ -26,6 +27,12 @@ interface RcloneEngine {
     suspend fun startDaemon(): RcloneDaemon
     suspend fun stopDaemon()
     suspend fun isDaemonHealthy(): Boolean
+
+    /**
+     * Fetches the full provider/option schema from rclone's `config/providers`
+     * endpoint. Returns an empty list on failure so callers are failure-tolerant.
+     */
+    suspend fun providers(): List<RemoteProvider>
 
     suspend fun listRemotes(): List<Remote>
     suspend fun createRemote(name: String, type: String, params: Map<String, String>)
