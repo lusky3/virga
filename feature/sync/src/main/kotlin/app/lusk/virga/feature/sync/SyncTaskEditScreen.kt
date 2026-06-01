@@ -280,6 +280,12 @@ fun SyncTaskEditScreen(
                 Switch(checked = form.wifiOnly, onCheckedChange = null)
             }
 
+            // Filters (Tier 1) — include/exclude rule builder.
+            FilterEditor(
+                filters = form.filters,
+                onFiltersChange = { v -> viewModel.update { f -> f.copy(filters = v) } },
+            )
+
             // Performance preset (Tier 1) — maps to rclone transfers/checkers.
             PerformancePresetRow(form = form, viewModel = viewModel)
 

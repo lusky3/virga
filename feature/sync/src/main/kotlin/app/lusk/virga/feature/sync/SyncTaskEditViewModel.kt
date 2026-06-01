@@ -51,6 +51,8 @@ data class SyncTaskForm(
     val bufferSize: String = "16M",
     val transfers: Int = 4,
     val checkers: Int = 8,
+    /** rclone FilterRule lines (newline-joined): "+ pattern" / "- pattern". */
+    val filters: String = "",
     val bwLimitWifiError: String? = null,
     val bwLimitMeteredError: String? = null,
     val bufferSizeError: String? = null,
@@ -178,6 +180,7 @@ class SyncTaskEditViewModel @Inject constructor(
                         bufferSize = task.bufferSize,
                         transfers = task.transfers,
                         checkers = task.checkers,
+                        filters = task.filters,
                         directionError = if (isSaf && task.direction == SyncDirection.BISYNC) BISYNC_SAF_ERROR else null,
                     )
                 }
@@ -267,6 +270,7 @@ class SyncTaskEditViewModel @Inject constructor(
                 bufferSize = form.bufferSize.trim().ifBlank { "16M" },
                 transfers = form.transfers,
                 checkers = form.checkers,
+                filters = form.filters,
                 // Stamp creation time here (the Room default used to do this);
                 // set explicitly so the entity mapper preserves it verbatim.
                 createdAtEpochMs = System.currentTimeMillis(),

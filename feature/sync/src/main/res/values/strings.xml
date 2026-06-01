@@ -194,5 +194,16 @@
     <string name="sync_edit_perf_balanced">Balanced</string>
     <string name="sync_edit_perf_aggressive">Aggressive</string>
     <string name="sync_edit_perf_hint">Higher speeds move more at once but use more battery and data. Balanced suits most backups.</string>
+    <!-- Filters editor (Tier 1) -->
+    <string name="sync_edit_filters_label">Filters</string>
+    <string name="sync_edit_filters_hint">Limit which files sync. Rules are rclone filters applied top to bottom.</string>
+    <string name="sync_edit_filters_skip">Skip</string>
+    <string name="sync_edit_filters_include">Include</string>
+    <string name="sync_edit_filters_pattern_hint">e.g. *.tmp</string>
+    <string name="sync_edit_filters_add">Add rule</string>
+    <string name="sync_edit_filters_remove">Remove rule</string>
+    <string name="sync_edit_filters_edit_text">Edit as text</string>
+    <string name="sync_edit_filters_hide_text">Hide text</string>
+    <string name="sync_edit_filters_raw_label">One rule per line (e.g. - *.tmp)</string>
 </resources>
 
