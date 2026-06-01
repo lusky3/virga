@@ -8,6 +8,7 @@ import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffoldRole
 import androidx.compose.material3.adaptive.layout.PaneAdaptedValue
 import androidx.compose.material3.adaptive.navigation.rememberListDetailPaneScaffoldNavigator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.rememberCoroutineScope
@@ -41,6 +42,9 @@ fun SyncTasksAdaptiveScreen(
     onOpenHistory: () -> Unit,
     onOpenConflicts: () -> Unit,
     onOpenRun: (Long) -> Unit,
+    /** Reports whether the scaffold currently has its own back to handle, so the
+     *  host can stand its exit handler down and avoid a back-handler clash (WS3.5). */
+    onDetailBackAvailableChanged: (Boolean) -> Unit = {},
 ) {
     val scaffoldNavigator = rememberListDetailPaneScaffoldNavigator<Long>()
     val scope = rememberCoroutineScope()
@@ -54,7 +58,9 @@ fun SyncTasksAdaptiveScreen(
 
     // Collapse the detail pane when back is pressed while the scaffold can
     // navigate back (only relevant on compact single-pane mode).
-    BackHandler(enabled = scaffoldNavigator.canNavigateBack()) {
+    val canNavigateBack = scaffoldNavigator.canNavigateBack()
+    LaunchedEffect(canNavigateBack) { onDetailBackAvailableChanged(canNavigateBack) }
+    BackHandler(enabled = canNavigateBack) {
         scope.launch { scaffoldNavigator.navigateBack() }
     }
 

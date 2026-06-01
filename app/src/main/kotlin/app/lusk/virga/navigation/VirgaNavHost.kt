@@ -18,6 +18,7 @@ import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffo
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -105,6 +106,12 @@ fun VirgaNavHost() {
     )
     val navigator = remember { Navigator(navigationState) }
 
+    // The Sync tab's adaptive list-detail scaffold can have its own internal back
+    // state (detail pane open on a single-pane width). While it can navigate back,
+    // its own BackHandler must win — so the exit-toast handler below stands down to
+    // avoid the two competing at the home root (WS3.5).
+    var syncDetailCanGoBack by remember { mutableStateOf(false) }
+
     val entryProvider = entryProvider {
         entry<SyncRoute> {
             SyncTasksAdaptiveScreen(
@@ -114,6 +121,7 @@ fun VirgaNavHost() {
                 onOpenHistory = dropUnlessResumed { navigator.navigate(HistoryRoute) },
                 onOpenConflicts = dropUnlessResumed { navigator.navigate(ConflictsRoute) },
                 onOpenRun = { id -> navigator.navigate(RunDetailRoute(id)) },
+                onDetailBackAvailableChanged = { syncDetailCanGoBack = it },
             )
         }
         entry<TaskSummaryRoute> { key ->
@@ -235,8 +243,9 @@ fun VirgaNavHost() {
                 }
             },
         )
-        // Double-tap-to-exit, active only at the home tab root.
-        BackHandler(enabled = atHomeRoot) {
+        // Double-tap-to-exit, active only at the home tab root — and only when the
+        // Sync adaptive scaffold has no internal back of its own to handle (WS3.5).
+        BackHandler(enabled = atHomeRoot && !syncDetailCanGoBack) {
             val now = System.currentTimeMillis()
             if (now - lastBackMs < EXIT_CONFIRM_WINDOW_MS) {
                 (context as? Activity)?.finish()
