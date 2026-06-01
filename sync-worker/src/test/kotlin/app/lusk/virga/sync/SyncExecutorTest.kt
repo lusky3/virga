@@ -49,6 +49,12 @@ class SyncExecutorTest {
             app.lusk.virga.core.common.model.RemoteQuota(null, null, null)
         override suspend fun providers() =
             emptyList<app.lusk.virga.core.common.model.RemoteProvider>()
+        override suspend fun createCryptRemote(
+            name: String,
+            baseRemoteSpec: String,
+            password: String,
+            salt: String?,
+        ) = Unit
     }
 
     private fun task(
