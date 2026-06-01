@@ -64,6 +64,13 @@ class SyncWorker @AssistedInject constructor(
         val metered = applicationContext.getSystemService<ConnectivityManager>()
             ?.isActiveNetworkMetered ?: false
 
+        // Per-run log (WS2.5): built from observed events, written on finish.
+        val log = RunLogWriter(applicationContext.filesDir, runId)
+        log.line("Sync started: ${task.name}")
+        log.line("Direction: ${task.direction} · Mirror: ${task.deleteExtraneous}")
+        log.line("Source: ${task.sourcePath}")
+        log.line("Destination: ${task.remoteName}:${task.remotePath}")
+
         val staged = staging.prepare(task.sourcePath, task.direction)
         val effectiveTask = if (staged.isStaged) task.copy(sourcePath = staged.localPath) else task
 
@@ -115,6 +122,11 @@ class SyncWorker @AssistedInject constructor(
                         last = progress
                         // Publish to the UI (WS1.1) and mirror to the notification.
                         setProgress(SyncProgressData.encode(progress))
+                        log.line(
+                            "Progress ${(progress.fraction * 100).toInt()}% · " +
+                                "${progress.transferredFiles}/${progress.totalFiles} files · " +
+                                "${progress.errors} error(s)",
+                        )
                         setForeground(foregroundInfo(notifications.progress(task.name, progress)))
                     }
                 }
@@ -147,11 +159,15 @@ class SyncWorker @AssistedInject constructor(
                 val writeResult = runCatching { staging.writeBack(staged) }
                 if (writeResult.isFailure) {
                     val msg = writeResult.exceptionOrNull()?.message ?: "Failed to write back to folder"
-                    finishFailed(runId, taskId, startedAt, last, msg)
+                    log.line("Failed: $msg")
+                    log.flush()
+                    finishFailed(runId, taskId, startedAt, last, msg, log.path)
                     return Result.failure()
                 }
             }
-            finishSucceeded(runId, taskId, startedAt, last)
+            log.line("Completed: ${last?.transferredFiles ?: 0} file(s) transferred")
+            log.flush()
+            finishSucceeded(runId, taskId, startedAt, last, log.path)
             // After a bisync, scan the destination for rclone conflict files
             // and queue them for user resolution.
             if (task.direction == SyncDirection.BISYNC) {
@@ -164,14 +180,22 @@ class SyncWorker @AssistedInject constructor(
             }
             Result.success()
         } else {
-            finishFailed(runId, taskId, startedAt, last, failure.message ?: "Sync failed")
+            log.line("Failed: ${failure.message ?: "Sync failed"}")
+            log.flush()
+            finishFailed(runId, taskId, startedAt, last, failure.message ?: "Sync failed", log.path)
             // Transient transport problems are worth retrying; everything else fails.
             if (failure is VirgaError.Network) Result.retry() else Result.failure()
         }
     }
 
     /** Record a SUCCESS run from the last observed [progress] snapshot. */
-    private suspend fun finishSucceeded(runId: Long, taskId: Long, startedAt: Long, progress: SyncProgress?) =
+    private suspend fun finishSucceeded(
+        runId: Long,
+        taskId: Long,
+        startedAt: Long,
+        progress: SyncProgress?,
+        logPath: String? = null,
+    ) =
         historyRepository.finishRun(
             runId = runId,
             taskId = taskId,
@@ -180,6 +204,7 @@ class SyncWorker @AssistedInject constructor(
             filesTransferred = progress?.transferredFiles ?: 0,
             bytesTransferred = progress?.bytesTransferred ?: 0L,
             errorCount = progress?.errors ?: 0,
+            logPath = logPath,
         )
 
     /** Record a FAILED run (+1 error) with [message] from the last [progress] snapshot. */
@@ -189,6 +214,7 @@ class SyncWorker @AssistedInject constructor(
         startedAt: Long,
         progress: SyncProgress?,
         message: String,
+        logPath: String? = null,
     ) = historyRepository.finishRun(
         runId = runId,
         taskId = taskId,
@@ -198,6 +224,7 @@ class SyncWorker @AssistedInject constructor(
         bytesTransferred = progress?.bytesTransferred ?: 0L,
         errorCount = (progress?.errors ?: 0) + 1,
         errorMessage = message,
+        logPath = logPath,
     )
 
     private fun foregroundInfo(notification: android.app.Notification): ForegroundInfo =

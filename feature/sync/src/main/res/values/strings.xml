@@ -214,5 +214,11 @@
     <string name="sync_edit_mirror_confirm_cancel">Cancel</string>
     <string name="sync_summary_mirror">Mirror</string>
     <string name="sync_summary_mirror_on">On - deletes extra files at the destination</string>
+    <!-- Log viewer (WS2.5) -->
+    <string name="log_viewer_title">Run log</string>
+    <string name="log_viewer_search">Search log</string>
+    <string name="log_viewer_share">Share log</string>
+    <string name="log_viewer_empty">No log for this run.</string>
+    <string name="run_detail_view_log">View log</string>
 </resources>
 

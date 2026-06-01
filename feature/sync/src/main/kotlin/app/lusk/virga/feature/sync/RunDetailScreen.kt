@@ -8,6 +8,8 @@ import android.os.PersistableBundle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -16,8 +18,10 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ListAlt
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,6 +50,7 @@ import kotlin.time.Duration.Companion.milliseconds
 fun RunDetailScreen(
     runId: Long,
     onBack: () -> Unit,
+    onViewLog: (String) -> Unit = {},
     viewModel: RunDetailViewModel = hiltViewModel(),
 ) {
     LaunchedEffect(runId) { viewModel.load(runId) }
@@ -76,6 +81,7 @@ fun RunDetailScreen(
             RunDetailContent(
                 run = run,
                 taskName = state.taskName,
+                onViewLog = onViewLog,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
@@ -90,10 +96,18 @@ fun RunDetailScreen(
 private fun RunDetailContent(
     run: SyncRun,
     taskName: String,
+    onViewLog: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        run.logPath?.let { path ->
+            FilledTonalButton(onClick = { onViewLog(path) }, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.AutoMirrored.Filled.ListAlt, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.run_detail_view_log))
+            }
+        }
         if (taskName.isNotBlank()) {
             Text(taskName, style = MaterialTheme.typography.titleLarge)
         }

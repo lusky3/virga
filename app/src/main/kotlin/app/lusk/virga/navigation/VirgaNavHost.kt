@@ -34,6 +34,7 @@ import app.lusk.virga.feature.explorer.FileBrowserScreen
 import app.lusk.virga.feature.remotes.RemotesScreen
 import app.lusk.virga.feature.settings.SettingsScreen
 import app.lusk.virga.feature.sync.ConflictsScreen
+import app.lusk.virga.feature.sync.LogViewerScreen
 import app.lusk.virga.feature.sync.RunDetailScreen
 import app.lusk.virga.feature.sync.SyncHistoryScreen
 import app.lusk.virga.feature.sync.SyncTaskEditScreen
@@ -70,6 +71,9 @@ import kotlinx.serialization.Serializable
 
 /** Detail view for a completed sync run. */
 @Serializable data class RunDetailRoute(val runId: Long) : NavKey
+
+/** Per-run log viewer (WS2.5). */
+@Serializable data class LogViewerRoute(val logPath: String) : NavKey
 
 private data class TopLevel(
     val route: NavKey,
@@ -140,6 +144,13 @@ fun VirgaNavHost() {
         entry<RunDetailRoute> { key ->
             RunDetailScreen(
                 runId = key.runId,
+                onBack = dropUnlessResumed { navigator.goBack() },
+                onViewLog = { path -> navigator.navigate(LogViewerRoute(path)) },
+            )
+        }
+        entry<LogViewerRoute> { key ->
+            LogViewerScreen(
+                logPath = key.logPath,
                 onBack = dropUnlessResumed { navigator.goBack() },
             )
         }
