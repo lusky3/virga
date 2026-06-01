@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import app.lusk.virga.core.common.error.toUserMessage
 import app.lusk.virga.core.common.model.Remote
+import app.lusk.virga.core.common.model.RemoteQuota
 import app.lusk.virga.core.data.PendingRemoteResult
 import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.datastore.OAuthKeyStore
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
@@ -36,6 +38,8 @@ data class RemotesUiState(
     val message: String? = null,
     /** providerId → user-supplied client ID, for providers using their own keys. */
     val customClientIds: Map<String, String> = emptyMap(),
+    /** remoteName → quota; absent means not yet fetched or unsupported. */
+    val quotas: Map<String, RemoteQuota> = emptyMap(),
 )
 
 @HiltViewModel
@@ -70,6 +74,14 @@ class RemotesViewModel @Inject constructor(
     }
 
     private val transient = MutableStateFlow(TransientState())
+    private val _quotas = MutableStateFlow<Map<String, RemoteQuota>>(emptyMap())
+
+    /** Remotes whose quota fetch has been STARTED (regardless of outcome), so a
+     *  failing/offline remote isn't re-fetched every time its card scrolls back
+     *  into view, and concurrent in-flight fetches for the same remote are
+     *  deduped. Declared before the init{} that calls refresh(). Cleared only by
+     *  an explicit refresh(). */
+    private val quotaAttempted = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
     val uiState: StateFlow<RemotesUiState> = combineState()
 
@@ -78,6 +90,10 @@ class RemotesViewModel @Inject constructor(
     }
 
     fun refresh() {
+        // Allow quotas to be re-fetched on an explicit refresh (clears the
+        // once-per-lifetime guard so offline remotes get another chance).
+        quotaAttempted.clear()
+        _quotas.value = emptyMap()
         viewModelScope.launch {
             transient.value = transient.value.copy(refreshing = true)
             val result = repository.refresh()
@@ -172,6 +188,22 @@ class RemotesViewModel @Inject constructor(
         transient.value = transient.value.copy(message = null)
     }
 
+    /**
+     * Lazily fetches storage quota for [remoteName]. Called from the card's
+     * LaunchedEffect. Attempted at most once per VM lifetime per remote (guarded
+     * by [quotaAttempted], which records the attempt BEFORE the call so failures
+     * and in-flight fetches don't retry). Failures are swallowed — no quota shown.
+     */
+    fun fetchQuota(remoteName: String) {
+        if (!quotaAttempted.add(remoteName)) return
+        viewModelScope.launch {
+            val result = repository.about(remoteName)
+            result.getOrNull()?.let { quota ->
+                _quotas.update { it + (remoteName to quota) }
+            }
+        }
+    }
+
     private data class TransientState(
         val refreshing: Boolean = false,
         val oauthInProgress: Boolean = false,
@@ -179,13 +211,14 @@ class RemotesViewModel @Inject constructor(
     )
 
     private fun combineState(): StateFlow<RemotesUiState> =
-        combine(repository.remotes, transient, oauthKeyStore.clientIds) { remotes, t, customIds ->
+        combine(repository.remotes, transient, oauthKeyStore.clientIds, _quotas) { remotes, t, customIds, quotas ->
             RemotesUiState(
                 remotes = remotes,
                 refreshing = t.refreshing,
                 oauthInProgress = t.oauthInProgress,
                 message = t.message,
                 customClientIds = customIds,
+                quotas = quotas,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RemotesUiState())
 

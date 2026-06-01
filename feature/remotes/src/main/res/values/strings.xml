@@ -21,6 +21,9 @@
     <string name="remotes_delete_confirm">Delete</string>
     <string name="remotes_delete_cancel">Cancel</string>
 
+    <!-- RemoteCard quota row -->
+    <string name="remotes_quota_used_of_total">%1$s of %2$s used</string>
+
     <!-- RemoteCard overflow menu -->
     <string name="remotes_card_menu_browse">Browse</string>
     <string name="remotes_card_menu_new_task">New sync task</string>

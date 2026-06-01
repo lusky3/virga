@@ -25,6 +25,7 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -43,6 +44,8 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.lusk.virga.core.common.model.Remote
+import app.lusk.virga.core.common.model.RemoteQuota
+import app.lusk.virga.core.common.util.formatFileSize
 import app.lusk.virga.core.rclone.oauth.OAuthProvider
 
 /** Curated list of common rclone backend types with friendly display names. */
@@ -69,6 +72,7 @@ internal fun RemoteCard(
     onOpenBrowser: () -> Unit,
     onCreateTask: (String) -> Unit,
     onDelete: () -> Unit,
+    quota: RemoteQuota? = null,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -85,6 +89,7 @@ internal fun RemoteCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(remote.type, style = MaterialTheme.typography.bodySmall)
+                RemoteQuotaRow(quota)
             }
 
             // Overflow menu
@@ -115,6 +120,32 @@ internal fun RemoteCard(
                 )
             }
         }
+    }
+}
+
+/** Shows a compact "used of total" line with a progress bar. Renders nothing when quota is unavailable. */
+@Composable
+private fun RemoteQuotaRow(quota: RemoteQuota?) {
+    val used = quota?.used ?: return
+    val total = quota.total ?: return
+    if (total <= 0L) return
+
+    val fraction = (used.toFloat() / total).coerceIn(0f, 1f)
+    val label = stringResource(
+        R.string.remotes_quota_used_of_total,
+        formatFileSize(used),
+        formatFileSize(total),
+    )
+    Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        LinearProgressIndicator(
+            progress = { fraction },
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+        )
     }
 }
 

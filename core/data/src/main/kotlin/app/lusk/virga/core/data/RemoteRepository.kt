@@ -2,6 +2,7 @@ package app.lusk.virga.core.data
 
 import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.common.model.Remote
+import app.lusk.virga.core.common.model.RemoteQuota
 import app.lusk.virga.core.database.dao.RemoteDao
 import app.lusk.virga.core.database.entity.RemoteEntity
 import app.lusk.virga.core.rclone.RcloneEngine
@@ -53,4 +54,8 @@ class RemoteRepository @Inject constructor(
     }
 
     suspend fun exportConfig(): String = configManager.exportPlaintext()
+
+    /** Fetches storage quota for [remoteName]. Returns [Result.failure] when offline or unsupported. */
+    suspend fun about(remoteName: String): Result<RemoteQuota> =
+        runCatching { engine.about(remoteName) }
 }

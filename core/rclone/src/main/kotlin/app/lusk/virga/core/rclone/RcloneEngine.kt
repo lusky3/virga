@@ -3,6 +3,7 @@ package app.lusk.virga.core.rclone
 import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.common.model.Remote
+import app.lusk.virga.core.common.model.RemoteQuota
 import app.lusk.virga.core.common.model.SyncProgress
 import kotlinx.coroutines.flow.Flow
 
@@ -44,6 +45,13 @@ interface RcloneEngine {
 
     /** Moves/renames a file. Paths use rclone "remote:path" syntax. Throws [VirgaError] on failure. */
     suspend fun moveFile(source: String, dest: String)
+
+    /**
+     * Fetches storage quota for [remoteName] via `operations/about`.
+     * Throws [VirgaError] on failure; any field in the result may be null
+     * when the backend does not report it.
+     */
+    suspend fun about(remoteName: String): RemoteQuota
 
     /** Emits progress until the sync completes; the terminal emission has full counts. */
     fun sync(source: String, dest: String, options: SyncOptions): Flow<SyncProgress>

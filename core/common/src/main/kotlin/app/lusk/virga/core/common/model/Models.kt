@@ -104,6 +104,16 @@ data class Conflict(
     val resolved: Boolean = false,
 )
 
+/**
+ * Storage quota for a remote, fetched from rclone `operations/about`.
+ * Any field may be null — backends that don't support about return partial data.
+ */
+data class RemoteQuota(
+    val total: Long?,
+    val used: Long?,
+    val free: Long?,
+)
+
 /** Aggregate progress for a running sync, derived from rclone `core/stats`. */
 data class SyncProgress(
     val bytesTransferred: Long,

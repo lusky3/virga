@@ -177,11 +177,15 @@ fun RemotesScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         items(state.remotes, key = { it.name }) { remote ->
+                            LaunchedEffect(remote.name) {
+                                viewModel.fetchQuota(remote.name)
+                            }
                             RemoteCard(
                                 remote = remote,
                                 onOpenBrowser = { onOpenBrowser(remote.name) },
                                 onCreateTask = onCreateTask,
                                 onDelete = { remoteToDelete = remote },
+                                quota = state.quotas[remote.name],
                             )
                         }
                     }

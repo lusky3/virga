@@ -4,6 +4,7 @@ import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.common.model.Remote
+import app.lusk.virga.core.common.model.RemoteQuota
 import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.common.model.SyncProgress
 import app.lusk.virga.core.rclone.api.RcApiClient
@@ -234,6 +235,18 @@ class RcloneEngineImpl @Inject constructor(
             put("srcFs", srcFs); put("srcRemote", srcRemote)
             put("dstFs", dstFs); put("dstRemote", dstRemote)
         })
+    }
+
+    override suspend fun about(remoteName: String): RemoteQuota {
+        val d = ensureDaemon()
+        val result = rc(d, "operations/about", buildJsonObject {
+            put("fs", "$remoteName:")
+        })
+        return RemoteQuota(
+            total = result["total"]?.jsonPrimitive?.longOrNull,
+            used = result["used"]?.jsonPrimitive?.longOrNull,
+            free = result["free"]?.jsonPrimitive?.longOrNull,
+        )
     }
 
     /**
