@@ -54,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.common.util.formatFileSize
 import app.lusk.virga.core.designsystem.component.EmptyState
+import app.lusk.virga.core.designsystem.component.rememberLongPressHaptic
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -239,6 +240,7 @@ private fun FileList(
     onLongPress: (String) -> Unit,
     onToggleSelect: (String) -> Unit,
 ) {
+    val longPressHaptic = rememberLongPressHaptic()
     LazyColumn(Modifier.fillMaxSize()) {
         // Drive (and other backends) can hold multiple files with the SAME name
         // in one folder, so path alone isn't a unique LazyColumn key — collisions
@@ -274,7 +276,7 @@ private fun FileList(
                             if (selectionMode) onToggleSelect(item.path)
                             else onOpen(item)
                         },
-                        onLongClick = { onLongPress(item.path) },
+                        onLongClick = { longPressHaptic(); onLongPress(item.path) },
                     )
                     .semantics(mergeDescendants = true) {
                         contentDescription = a11yDesc

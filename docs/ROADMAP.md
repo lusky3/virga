@@ -96,7 +96,7 @@ Definition of Done.
 | 2 | "Show advanced options" master toggle + default seeding | ✅ done | 2026-05-31 |
 | 2 | Log viewer (write `logPath` + screen) | ☐ todo | |
 | 2 | File-browser multi-select → "Create task from selection" | ✅ done | 2026-05-31 |
-| 2 | Shared contextual-action-mode primitive + haptics | ☐ todo | |
+| 2 | Shared contextual-action-mode primitive + haptics | ✅ done | 2026-05-31 |
 | 3 | Tier-2/3 typed flag groups + `extraFlags` passthrough | ☐ todo | |
 | 3 | `config/providers`-driven remote config + crypt wizard | ☐ todo | |
 | 3 | Bottom-sheet conversions; conflicts selection bar | ☐ todo | |

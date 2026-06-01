@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import app.lusk.virga.core.designsystem.component.SelectionTopBar as DsSelectionTopBar
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -92,31 +93,26 @@ internal fun SelectionTopBar(
     onBulkDisable: () -> Unit,
     onBulkDelete: () -> Unit,
 ) {
-    TopAppBar(
-        title = { Text(stringResource(R.string.sync_task_selection_count, count)) },
-        navigationIcon = {
-            IconButton(onClick = onClear) {
-                Icon(
-                    Icons.Filled.Close,
-                    contentDescription = stringResource(R.string.sync_task_cd_clear_selection),
-                )
-            }
-        },
-        actions = {
-            IconButton(onClick = onBulkRun) {
-                Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.sync_task_cd_sync_now))
-            }
-            IconButton(onClick = onBulkEnable) {
-                Icon(Icons.Filled.CheckBox, contentDescription = stringResource(R.string.sync_task_cd_bulk_enable))
-            }
-            IconButton(onClick = onBulkDisable) {
-                Icon(Icons.Filled.CheckBoxOutlineBlank, contentDescription = stringResource(R.string.sync_task_cd_bulk_disable))
-            }
-            IconButton(onClick = onBulkDelete) {
-                Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.sync_task_cd_delete))
-            }
-        },
-    )
+    // Uses the shared contextual-action-mode primitive (WS2.7); the bulk action
+    // icons here are this surface's specific operations.
+    DsSelectionTopBar(
+        title = stringResource(R.string.sync_task_selection_count, count),
+        onClear = onClear,
+        clearContentDescription = stringResource(R.string.sync_task_cd_clear_selection),
+    ) {
+        IconButton(onClick = onBulkRun) {
+            Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.sync_task_cd_sync_now))
+        }
+        IconButton(onClick = onBulkEnable) {
+            Icon(Icons.Filled.CheckBox, contentDescription = stringResource(R.string.sync_task_cd_bulk_enable))
+        }
+        IconButton(onClick = onBulkDisable) {
+            Icon(Icons.Filled.CheckBoxOutlineBlank, contentDescription = stringResource(R.string.sync_task_cd_bulk_disable))
+        }
+        IconButton(onClick = onBulkDelete) {
+            Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.sync_task_cd_delete))
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

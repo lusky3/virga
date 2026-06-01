@@ -38,6 +38,7 @@ import app.lusk.virga.core.common.model.SyncProgress
 import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.designsystem.component.EmptyState
+import app.lusk.virga.core.designsystem.component.rememberLongPressHaptic
 import kotlinx.coroutines.flow.flowOf
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -53,6 +54,7 @@ fun SyncTasksScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
+    val longPressHaptic = rememberLongPressHaptic()
 
     // Collapse FAB once the user scrolls down.
     val fabExpanded by remember { derivedStateOf { !listState.canScrollBackward } }
@@ -191,7 +193,7 @@ fun SyncTasksScreen(
                                     if (inSelectionMode) viewModel.toggleSelection(task.id)
                                     else onOpenTask(task.id)
                                 },
-                                onLongClick = { viewModel.toggleSelection(task.id) },
+                                onLongClick = { longPressHaptic(); viewModel.toggleSelection(task.id) },
                                 onDuplicate = { viewModel.duplicate(task) },
                                 onEdit = { onEditTask(task.id) },
                                 onOpenHistory = onOpenHistory,
