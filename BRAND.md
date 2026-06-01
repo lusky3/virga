@@ -150,7 +150,7 @@ crisp). **Do not** re-tune per screen.
 
 - **Add one real display typeface** (Phase 0) via the single `fontFamily` hook the file already anticipates. Candidate:
   a calm geometric/humanist sans for Display/Headline (e.g., a variable font shipped in `app/src/main/res/font/`),
-  Body/Label stay on the platform default for legibility + size. **Status (Phase 0): hook wired** — `VirgaDisplayFontFamily` in `Type.kt` (null → platform default) feeds Display/Headline. To activate, drop a foss-safe (OFL/Apache) variable font into `core:designsystem` `res/font/` and point the val at it; GMS downloadable fonts are intentionally avoided (foss flavor).
+  Body/Label stay on the platform default for legibility + size. **Status (Phase 0): DONE — typeface = Manrope (SIL OFL).** `VirgaDisplayFontFamily` in `Type.kt` feeds Display/Headline from the bundled variable font `core:designsystem/res/font/manrope.ttf` (`wght` axis pinned per weight via `FontVariation`, minSdk 26); license at `core:designsystem/licenses/Manrope-OFL.txt`. A bundled OFL font is used (not the GMS downloadable-font provider) so the F-Droid/foss flavor needs no Google Play Services.
 - **Usage map:**
   - `displaySmall`/`headlineMedium` → hero moments only (onboarding, empty-state heading, run-detail header).
   - `titleLarge` → screen titles in the compact top bars.

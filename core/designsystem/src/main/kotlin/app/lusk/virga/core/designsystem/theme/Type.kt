@@ -2,23 +2,42 @@ package app.lusk.virga.core.designsystem.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import app.lusk.virga.core.designsystem.R
 
 /**
- * The single display-typeface hook (BRAND §5). Display + Headline styles use this
- * family; Body/Label stay on the platform default for legibility at small sizes.
+ * Manrope (SIL Open Font License) — Virga's display typeface. Bundled as a single
+ * variable font (`res/font/manrope.ttf`, `wght` axis); each weight Virga uses is
+ * registered with a [FontVariation] so the axis is pinned natively (minSdk 26).
+ * License text: `core/designsystem/licenses/Manrope-OFL.txt`.
  *
- * Currently `null` → the platform default is used (a `null` fontFamily on a
- * [TextStyle] is the system default, so the scale is unchanged until a face is
- * dropped in). To adopt a real display typeface, add a **foss-flavor-safe**
- * (OFL/Apache) variable font to `core/designsystem/src/main/res/font/` and point
- * this at it, e.g. `FontFamily(Font(R.font.virga_display))`. A downloadable
- * Google Font provider is intentionally NOT used: it requires Google Play
- * Services, which the F-Droid/foss flavor must not depend on.
+ * A bundled OFL font is used rather than the Google downloadable-font provider on
+ * purpose: the provider needs Google Play Services, which the F-Droid/foss flavor
+ * must not depend on.
  */
-val VirgaDisplayFontFamily: FontFamily? = null
+@OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
+private fun manropeWeight(weight: FontWeight, axis: Int) =
+    Font(R.font.manrope, weight, variationSettings = FontVariation.Settings(FontVariation.weight(axis)))
+
+private val ManropeFontFamily = FontFamily(
+    manropeWeight(FontWeight.W300, 300),
+    manropeWeight(FontWeight.W400, 400),
+    manropeWeight(FontWeight.W500, 500),
+    manropeWeight(FontWeight.W600, 600),
+    manropeWeight(FontWeight.W700, 700),
+)
+
+/**
+ * The single display-typeface hook (BRAND §5): [ManropeFontFamily] feeds Display +
+ * Headline styles; Body/Label stay on the platform default for legibility and
+ * full script/locale coverage at small sizes. Set to `null` to fall back to the
+ * platform font everywhere.
+ */
+val VirgaDisplayFontFamily: FontFamily? = ManropeFontFamily
 
 /**
  * Intentional M3 type scale for Virga (2026).
