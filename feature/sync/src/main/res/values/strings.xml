@@ -188,5 +188,11 @@
     <string name="sync_task_deleted_snackbar">\"%1$s\" deleted</string>
     <string name="sync_task_deleted_snackbar_undo">Undo</string>
     <string name="sync_task_swipe_delete">Delete</string>
+    <!-- Performance preset (Tier 1) -->
+    <string name="sync_edit_perf_label">Performance</string>
+    <string name="sync_edit_perf_conservative">Conservative</string>
+    <string name="sync_edit_perf_balanced">Balanced</string>
+    <string name="sync_edit_perf_aggressive">Aggressive</string>
+    <string name="sync_edit_perf_hint">Higher speeds move more at once but use more battery and data. Balanced suits most backups.</string>
 </resources>
 

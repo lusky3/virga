@@ -49,6 +49,8 @@ data class SyncTaskForm(
     val bwLimitWifi: String = "",
     val bwLimitMetered: String = "",
     val bufferSize: String = "16M",
+    val transfers: Int = 4,
+    val checkers: Int = 8,
     val bwLimitWifiError: String? = null,
     val bwLimitMeteredError: String? = null,
     val bufferSizeError: String? = null,
@@ -174,6 +176,8 @@ class SyncTaskEditViewModel @Inject constructor(
                         bwLimitWifi = task.bwLimitWifi.orEmpty(),
                         bwLimitMetered = task.bwLimitMetered.orEmpty(),
                         bufferSize = task.bufferSize,
+                        transfers = task.transfers,
+                        checkers = task.checkers,
                         directionError = if (isSaf && task.direction == SyncDirection.BISYNC) BISYNC_SAF_ERROR else null,
                     )
                 }
@@ -261,6 +265,8 @@ class SyncTaskEditViewModel @Inject constructor(
                 bwLimitWifi = form.bwLimitWifi.trim().ifBlank { null },
                 bwLimitMetered = form.bwLimitMetered.trim().ifBlank { null },
                 bufferSize = form.bufferSize.trim().ifBlank { "16M" },
+                transfers = form.transfers,
+                checkers = form.checkers,
                 // Stamp creation time here (the Room default used to do this);
                 // set explicitly so the entity mapper preserves it verbatim.
                 createdAtEpochMs = System.currentTimeMillis(),
