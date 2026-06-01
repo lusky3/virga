@@ -39,6 +39,18 @@ data class SyncOptions(
      * destructive, explicit opt-in, not a default.
      */
     val deleteExtraneous: Boolean = false,
+    // WS3.1 Tier-2 options -------------------------------------------------------
+    /** Rclone _config key "CheckSum": compare by hash rather than size+modtime. */
+    val checksum: Boolean = false,
+    /** Rclone _config key "BackupDir": move replaced/deleted files here instead of
+     *  removing them. Null = unset (rclone default). */
+    val backupDir: String? = null,
+    /** Rclone _config key "MaxDelete": abort if more than N deletes would occur.
+     *  Null = unset. */
+    val maxDelete: Int? = null,
+    /** Pre-validated extra _config entries (key → typed value). Empty = none.
+     *  Keys are validated against [ExtraConfigParser.ALLOWLIST] before this point. */
+    val extraConfig: Map<String, Any> = emptyMap(),
 )
 
 /** Options for a two-way `sync/bisync`. */
@@ -50,6 +62,15 @@ data class BisyncOptions(
     val dryRun: Boolean = false,
     /** First-run resync to establish the bisync baseline. */
     val resync: Boolean = false,
+    // WS3.1 Tier-2 options -------------------------------------------------------
+    /** Rclone _config key "CheckSum": compare by hash rather than size+modtime. */
+    val checksum: Boolean = false,
+    /** Rclone _config key "BackupDir": move replaced/deleted files here. Null = unset. */
+    val backupDir: String? = null,
+    /** Rclone _config key "MaxDelete" abort threshold. Null = unset. */
+    val maxDelete: Int? = null,
+    /** Pre-validated extra _config entries (key → typed value). Empty = none. */
+    val extraConfig: Map<String, Any> = emptyMap(),
 )
 
 /** Parsed view of the rclone config (remote name -> type). */

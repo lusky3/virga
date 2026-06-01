@@ -57,6 +57,18 @@ data class SyncTask(
     val requiresCharging: Boolean = false,
     val enabled: Boolean = true,
     val createdAtEpochMs: Long = 0,
+    // WS3.1 Tier-2 rclone options -----------------------------------------------
+    /** Compare by hash rather than size+modtime (rclone _config key "CheckSum"). */
+    val checksum: Boolean = false,
+    /** Rclone _config key "BackupDir"; null = unset. */
+    val backupDir: String? = null,
+    /** Rclone _config key "MaxDelete" abort threshold; null = unset. */
+    val maxDelete: Int? = null,
+    /**
+     * Newline-separated "Key=Value" pairs for the rclone _config block.
+     * Must be validated against the allowlist (see ExtraConfigParser) before use.
+     */
+    val extraConfig: String = "",
 )
 
 /** A single execution of a [SyncTask]. Domain model; mirrors `SyncRunEntity`. */

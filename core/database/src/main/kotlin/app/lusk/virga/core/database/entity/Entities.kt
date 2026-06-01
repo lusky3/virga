@@ -55,6 +55,31 @@ data class SyncTaskEntity(
     val requiresCharging: Boolean = false,
     val enabled: Boolean = true,
     val createdAtEpochMs: Long = System.currentTimeMillis(),
+    // WS3.1 Tier-2 rclone options -----------------------------------------------
+    /** Compare by hash rather than size+modtime (rclone _config key "CheckSum"). */
+    val checksum: Boolean = false,
+    /**
+     * Rclone _config key "BackupDir". When set, files deleted or replaced at the
+     * destination are moved here rather than removed — a safety net for Mirror/sync.
+     * Null/blank = unset (rclone default: files are deleted outright).
+     */
+    val backupDir: String? = null,
+    /**
+     * Rclone _config key "MaxDelete". Aborts a mirror/sync run if more than N files
+     * would be deleted, guarding against accidental mass-delete. Null = unset.
+     */
+    val maxDelete: Int? = null,
+    /**
+     * Newline-separated "Key=Value" pairs merged into the RC _config block at run
+     * time (power-user passthrough). Validated against an allowlist before persisting
+     * and again at execution. Unknown keys are dropped with a warning at execution
+     * time as a defence-in-depth measure.
+     *
+     * DEFERRED dedicated typed toggles (reachable via this field using their
+     * allowlisted keys): TrackRenames, SizeOnly, ConflictResolve, MaxTransfer,
+     * OrderBy.
+     */
+    val extraConfig: String = "",
 )
 
 /**

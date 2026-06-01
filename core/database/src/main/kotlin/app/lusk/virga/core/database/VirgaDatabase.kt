@@ -22,7 +22,7 @@ import app.lusk.virga.core.database.entity.SyncTaskEntity
         SyncRunEntity::class,
         ConflictEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -55,6 +55,22 @@ abstract class VirgaDatabase : RoomDatabase() {
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL("ALTER TABLE sync_tasks ADD COLUMN deleteExtraneous INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        /**
+         * v4 → v5: WS3.1 Tier-2 rclone options.
+         *   checksum  — compare by hash; default false (0).
+         *   backupDir — nullable rclone BackupDir path; existing rows = null.
+         *   maxDelete — nullable MaxDelete abort threshold; existing rows = null.
+         *   extraConfig — newline-separated Key=Value passthrough; default "".
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE sync_tasks ADD COLUMN checksum INTEGER NOT NULL DEFAULT 0")
+                connection.execSQL("ALTER TABLE sync_tasks ADD COLUMN backupDir TEXT")
+                connection.execSQL("ALTER TABLE sync_tasks ADD COLUMN maxDelete INTEGER")
+                connection.execSQL("ALTER TABLE sync_tasks ADD COLUMN extraConfig TEXT NOT NULL DEFAULT ''")
             }
         }
     }

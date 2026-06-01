@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.common.model.SyncTask
+import app.lusk.virga.sync.ExtraConfigParser
 import app.lusk.virga.core.data.PendingRemoteResult
 import app.lusk.virga.core.data.RemoteFolderPickStore
 import app.lusk.virga.core.data.RemoteRepository
@@ -56,11 +57,23 @@ data class SyncTaskForm(
     /** rclone FilterRule lines (newline-joined): "+ pattern" / "- pattern". */
     val filters: String = "",
     val deleteExtraneous: Boolean = false,
+    // WS3.1 Tier-2 options -------------------------------------------------------
+    /** Checksum toggle: compare by hash rather than size+modtime. */
+    val checksum: Boolean = false,
+    /** Backup folder for replaced/deleted files; blank = unset. */
+    val backupDir: String = "",
+    /** Max-delete abort threshold; null = unset. */
+    val maxDelete: Int? = null,
+    val maxDeleteText: String = "",
+    /** Raw "Key=Value" extra config block (newline-separated). */
+    val extraConfig: String = "",
     val bwLimitWifiError: String? = null,
     val bwLimitMeteredError: String? = null,
     val bufferSizeError: String? = null,
     val customIntervalError: String? = null,
     val directionError: String? = null,
+    /** Null when valid; non-null describes the first offending line. */
+    val extraConfigError: String? = null,
     // Touched flags — errors only shown after field blur or failed save attempt
     val nameTouched: Boolean = false,
     val sourcePathTouched: Boolean = false,
@@ -97,7 +110,8 @@ data class SyncTaskForm(
             bufferSizeError == null &&
             customIntervalError == null &&
             scheduleDaysError == null &&
-            directionError == null
+            directionError == null &&
+            extraConfigError == null
 }
 
 @HiltViewModel
@@ -192,6 +206,11 @@ class SyncTaskEditViewModel @Inject constructor(
                         checkers = task.checkers,
                         filters = task.filters,
                         deleteExtraneous = task.deleteExtraneous,
+                        checksum = task.checksum,
+                        backupDir = task.backupDir.orEmpty(),
+                        maxDelete = task.maxDelete,
+                        maxDeleteText = task.maxDelete?.toString() ?: "",
+                        extraConfig = task.extraConfig,
                         directionError = if (isSaf && task.direction == SyncDirection.BISYNC) BISYNC_SAF_ERROR else null,
                     )
                 }
@@ -246,6 +265,7 @@ class SyncTaskEditViewModel @Inject constructor(
             directionError = if (isSafSource && next.direction == SyncDirection.BISYNC) {
                 BISYNC_SAF_ERROR
             } else null,
+            extraConfigError = ExtraConfigParser.firstError(next.extraConfig),
         )
     }
 
@@ -294,6 +314,10 @@ class SyncTaskEditViewModel @Inject constructor(
                 checkers = form.checkers,
                 filters = form.filters,
                 deleteExtraneous = form.deleteExtraneous,
+                checksum = form.checksum,
+                backupDir = form.backupDir.trim().ifBlank { null },
+                maxDelete = form.maxDelete,
+                extraConfig = form.extraConfig.trim(),
                 // Stamp creation time here (the Room default used to do this);
                 // set explicitly so the entity mapper preserves it verbatim.
                 createdAtEpochMs = System.currentTimeMillis(),

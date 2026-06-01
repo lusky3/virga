@@ -46,6 +46,7 @@ class SyncExecutor @Inject constructor(
         val bwLimit = if (metered) task.bwLimitMetered else task.bwLimitWifi
         val filters = task.filters.lines().filter { it.isNotBlank() }
 
+        val extra = ExtraConfigParser.parseToMap(task.extraConfig)
         return when (task.direction) {
             SyncDirection.BISYNC -> engine.bisync(
                 path1 = local,
@@ -57,6 +58,10 @@ class SyncExecutor @Inject constructor(
                     filters = filters,
                     resync = resync,
                     dryRun = dryRun,
+                    checksum = task.checksum,
+                    backupDir = task.backupDir,
+                    maxDelete = task.maxDelete,
+                    extraConfig = extra,
                 ),
             )
             else -> engine.sync(
@@ -71,6 +76,10 @@ class SyncExecutor @Inject constructor(
                     filters = filters,
                     deleteExtraneous = allowDeletes,
                     dryRun = dryRun,
+                    checksum = task.checksum,
+                    backupDir = task.backupDir,
+                    maxDelete = task.maxDelete,
+                    extraConfig = extra,
                 ),
             )
         }

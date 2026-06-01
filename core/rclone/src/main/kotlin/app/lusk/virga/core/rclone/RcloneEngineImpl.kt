@@ -17,6 +17,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.time.Instant
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
@@ -166,7 +167,17 @@ class RcloneEngineImpl @Inject constructor(
                 put("srcFs", srcFs)
                 put("dstFs", dstFs)
                 put("_async", true)
-                putConfig(options.bwLimit, options.transfers, options.checkers, options.bufferSize, options.dryRun)
+                putConfig(
+                    bwLimit = options.bwLimit,
+                    transfers = options.transfers,
+                    checkers = options.checkers,
+                    bufferSize = options.bufferSize,
+                    dryRun = options.dryRun,
+                    checksum = options.checksum,
+                    backupDir = options.backupDir,
+                    maxDelete = options.maxDelete,
+                    extraConfig = options.extraConfig,
+                )
                 putFilters(options.filters)
             })
         }
@@ -192,7 +203,17 @@ class RcloneEngineImpl @Inject constructor(
                 put("path2", path2)
                 put("_async", true)
                 if (options.resync) put("resync", true)
-                putConfig(options.bwLimit, options.transfers, options.checkers, "16M", options.dryRun)
+                putConfig(
+                    bwLimit = options.bwLimit,
+                    transfers = options.transfers,
+                    checkers = options.checkers,
+                    bufferSize = "16M",
+                    dryRun = options.dryRun,
+                    checksum = options.checksum,
+                    backupDir = options.backupDir,
+                    maxDelete = options.maxDelete,
+                    extraConfig = options.extraConfig,
+                )
                 putFilters(options.filters)
             })
         }
@@ -325,6 +346,10 @@ private fun kotlinx.serialization.json.JsonObjectBuilder.putConfig(
     checkers: Int,
     bufferSize: String,
     dryRun: Boolean,
+    checksum: Boolean = false,
+    backupDir: String? = null,
+    maxDelete: Int? = null,
+    extraConfig: Map<String, Any> = emptyMap(),
 ) {
     putJsonObject("_config") {
         put("Transfers", transfers)
@@ -332,6 +357,22 @@ private fun kotlinx.serialization.json.JsonObjectBuilder.putConfig(
         put("BufferSize", bufferSize)
         if (dryRun) put("DryRun", true)
         if (!bwLimit.isNullOrBlank()) put("BwLimit", bwLimit)
+        // WS3.1 Tier-2 options
+        if (checksum) put("CheckSum", true)
+        if (!backupDir.isNullOrBlank()) put("BackupDir", backupDir)
+        if (maxDelete != null) put("MaxDelete", maxDelete)
+        // Merge power-user extra config entries. The Map<String, Any> contract
+        // guarantees values are Boolean, Number, or String (enforced by
+        // ExtraConfigParser before this point). Applied LAST, so an explicit
+        // extraConfig entry (e.g. "CheckSum=false") intentionally overrides the
+        // matching typed toggle above — the raw box is the power-user escape hatch.
+        extraConfig.forEach { (key, value) ->
+            when (value) {
+                is Boolean -> put(key, JsonPrimitive(value))
+                is Number -> put(key, JsonPrimitive(value))
+                else -> put(key, JsonPrimitive(value.toString()))
+            }
+        }
     }
 }
 

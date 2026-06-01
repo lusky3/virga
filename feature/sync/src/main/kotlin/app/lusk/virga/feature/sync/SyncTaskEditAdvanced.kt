@@ -24,9 +24,11 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -112,9 +114,71 @@ internal fun AdvancedSection(form: SyncTaskForm, viewModel: SyncTaskEditViewMode
                     },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Ascii,
-                        imeAction = ImeAction.Done,
+                        imeAction = ImeAction.Next,
                     ),
                     singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                // ---- WS3.1 Tier-2 options ------------------------------------
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.sync_edit_field_checksum)) },
+                    supportingContent = { Text(stringResource(R.string.sync_edit_field_checksum_hint)) },
+                    trailingContent = {
+                        Switch(
+                            checked = form.checksum,
+                            onCheckedChange = { viewModel.update { f -> f.copy(checksum = it) } },
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = form.backupDir,
+                    onValueChange = { viewModel.update { f -> f.copy(backupDir = it) } },
+                    label = { Text(stringResource(R.string.sync_edit_field_backup_dir)) },
+                    placeholder = { Text(stringResource(R.string.sync_edit_field_backup_dir_placeholder)) },
+                    supportingText = { Text(stringResource(R.string.sync_edit_field_backup_dir_hint)) },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Uri,
+                        imeAction = ImeAction.Next,
+                    ),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = form.maxDeleteText,
+                    onValueChange = { raw ->
+                        val n = raw.filter { it.isDigit() }
+                        viewModel.update { f ->
+                            f.copy(maxDeleteText = n, maxDelete = n.toIntOrNull())
+                        }
+                    },
+                    label = { Text(stringResource(R.string.sync_edit_field_max_delete)) },
+                    placeholder = { Text(stringResource(R.string.sync_edit_field_max_delete_placeholder)) },
+                    supportingText = { Text(stringResource(R.string.sync_edit_field_max_delete_hint)) },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Next,
+                    ),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = form.extraConfig,
+                    onValueChange = { viewModel.update { f -> f.copy(extraConfig = it) } },
+                    label = { Text(stringResource(R.string.sync_edit_field_extra_config)) },
+                    placeholder = { Text(stringResource(R.string.sync_edit_field_extra_config_placeholder)) },
+                    isError = form.extraConfigError != null,
+                    supportingText = if (form.extraConfigError != null) {
+                        { Text(form.extraConfigError!!) }
+                    } else {
+                        { Text(stringResource(R.string.sync_edit_field_extra_config_hint)) }
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Ascii,
+                        imeAction = ImeAction.Done,
+                    ),
+                    singleLine = false,
+                    minLines = 2,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

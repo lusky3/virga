@@ -224,6 +224,18 @@
     <string name="log_viewer_share">Share log</string>
     <string name="log_viewer_empty">No log for this run.</string>
     <string name="run_detail_view_log">View log</string>
+    <!-- WS3.1 Tier-2 rclone options -->
+    <string name="sync_edit_field_checksum">Compare by checksum</string>
+    <string name="sync_edit_field_checksum_hint">Use file hash instead of size and modification time. Slower but catches bit-for-bit differences. Rclone config key: CheckSum.</string>
+    <string name="sync_edit_field_backup_dir">Keep deleted files (backup folder)</string>
+    <string name="sync_edit_field_backup_dir_placeholder">remote:path or /local/path</string>
+    <string name="sync_edit_field_backup_dir_hint">Files removed or replaced at the destination are moved here instead of deleted. Leave blank to disable. Rclone config key: BackupDir.</string>
+    <string name="sync_edit_field_max_delete">Max deletes before abort</string>
+    <string name="sync_edit_field_max_delete_placeholder">e.g. 50</string>
+    <string name="sync_edit_field_max_delete_hint">Abort the sync if more than this many files would be deleted. Leave blank for no limit. Rclone config key: MaxDelete.</string>
+    <string name="sync_edit_field_extra_config">Extra rclone config (Key=Value per line)</string>
+    <string name="sync_edit_field_extra_config_placeholder">TrackRenames=true\nSizeOnly=false</string>
+    <string name="sync_edit_field_extra_config_hint">Advanced: merged into the rclone _config block. One Key=Value per line. Only allowlisted keys are accepted.</string>
     <!-- Dry-run preview (WS2.3) -->
     <string name="sync_preview_action">Preview changes</string>
     <string name="sync_preview_running">Previewing\u2026</string>

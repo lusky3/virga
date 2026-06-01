@@ -36,6 +36,10 @@ internal fun SyncTaskEntity.toDomain() = SyncTask(
     requiresCharging = requiresCharging,
     enabled = enabled,
     createdAtEpochMs = createdAtEpochMs,
+    checksum = checksum,
+    backupDir = backupDir,
+    maxDelete = maxDelete,
+    extraConfig = extraConfig,
 )
 
 internal fun SyncTask.toEntity() = SyncTaskEntity(
@@ -62,6 +66,10 @@ internal fun SyncTask.toEntity() = SyncTaskEntity(
     // A new task (id == 0) gets its creation timestamp here, mirroring the
     // entity's former default; an existing task keeps its stored value.
     createdAtEpochMs = if (id == 0L && createdAtEpochMs == 0L) System.currentTimeMillis() else createdAtEpochMs,
+    checksum = checksum,
+    backupDir = backupDir,
+    maxDelete = maxDelete,
+    extraConfig = extraConfig,
 )
 
 internal fun SyncRunEntity.toDomain() = SyncRun(
