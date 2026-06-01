@@ -68,10 +68,25 @@ class FirstSyncWizardViewModel @Inject constructor(
     fun selectRemote(name: String) = _state.update { it.copy(remoteName = name) }
 
     fun applySourcePath(path: String) {
-        val folderName = path.trimEnd('/').substringAfterLast('/')
+        val folderName = friendlyFolderName(path)
         _state.update { s ->
             val nameToSet = if (s.taskName.isBlank() && folderName.isNotBlank()) folderName else s.taskName
             s.copy(sourcePath = path, taskName = nameToSet)
+        }
+    }
+
+    /**
+     * A human-readable folder name for the default task name. A SAF tree URI like
+     * `content://…/tree/primary%3ADownload%2Fvirgatest` URL-decodes to
+     * `…/tree/primary:Download/virgatest`, so taking the last path-and-colon
+     * segment yields "virgatest" rather than the percent-encoded blob. Plain
+     * filesystem paths (e.g. `/storage/emulated/0/DCIM`) are unaffected.
+     */
+    private fun friendlyFolderName(path: String): String {
+        val raw = path.trimEnd('/')
+        val decoded = runCatching { java.net.URLDecoder.decode(raw, "UTF-8") }.getOrDefault(raw)
+        return decoded.substringAfterLast('/').substringAfterLast(':').ifBlank {
+            raw.substringAfterLast('/')
         }
     }
 

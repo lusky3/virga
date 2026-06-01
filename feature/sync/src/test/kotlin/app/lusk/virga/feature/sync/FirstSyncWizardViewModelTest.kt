@@ -84,6 +84,22 @@ class FirstSyncWizardViewModelTest {
     }
 
     @Test
+    fun applySourcePath_safTreeUri_decodesToFolderName() {
+        val vm = viewModel()
+        // A SAF OpenDocumentTree URI: the document id "primary:Download/virgatest"
+        // is percent-encoded; the default name must decode to "virgatest", not the blob.
+        vm.applySourcePath("content://com.android.externalstorage.documents/tree/primary%3ADownload%2Fvirgatest")
+        assertThat(vm.state.value.taskName).isEqualTo("virgatest")
+    }
+
+    @Test
+    fun applySourcePath_safVolumeRootUri_decodesToVolumeName() {
+        val vm = viewModel()
+        vm.applySourcePath("content://com.android.externalstorage.documents/tree/primary%3ADCIM")
+        assertThat(vm.state.value.taskName).isEqualTo("DCIM")
+    }
+
+    @Test
     fun applySourcePath_doesNotOverrideUserEnteredName() {
         val vm = viewModel()
         vm.setTaskName("My Backup")
