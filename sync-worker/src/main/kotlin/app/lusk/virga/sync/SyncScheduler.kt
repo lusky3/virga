@@ -101,7 +101,12 @@ class SyncScheduler @Inject constructor(
     }
 
     fun cancel(taskId: Long) {
+        // Cancel BOTH unique-work names: the scheduled/periodic one and the
+        // immediate "_now" one from syncNow(). A running sync is usually the
+        // manual "_now" job, so cancelling only the bare name would leave it
+        // running (the notification Cancel action + in-app cancel both rely on this).
         workManager.cancelUniqueWork(uniqueName(taskId))
+        workManager.cancelUniqueWork(uniqueName(taskId) + "_now")
     }
 
     /** Re-registers every scheduled task — used after device reboot. */

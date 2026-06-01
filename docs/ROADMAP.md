@@ -100,6 +100,6 @@ Definition of Done.
 | 3 | Tier-2/3 typed flag groups + `extraFlags` passthrough | ☐ todo | |
 | 3 | `config/providers`-driven remote config + crypt wizard | ☐ todo | |
 | 3 | Bottom-sheet conversions; conflicts selection bar | ☐ todo | |
-| 3 | Notification deep links + Cancel/Retry | ☐ todo | |
+| 3 | Notification Cancel/Retry actions + open-app intent (per-run deep link deferred) | ✅ done | 2026-06-01 |
 | 3 | Adaptive list-detail panes | ☐ todo | |
 | 3 | Shared-element transitions; Glance widget + QS tile; remote quota | ☐ todo | |

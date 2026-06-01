@@ -11,5 +11,15 @@
                 <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
+
+        <!--
+            SyncActionReceiver handles Cancel/Retry notification actions.
+            Only reachable via explicit PendingIntents built in SyncNotifications;
+            no intent-filter is needed (and exported=false prevents external callers).
+        -->
+        <receiver
+            android:name=".SyncActionReceiver"
+            android:enabled="true"
+            android:exported="false" />
     </application>
 </manifest>

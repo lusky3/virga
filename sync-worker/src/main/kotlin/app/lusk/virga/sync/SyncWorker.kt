@@ -6,6 +6,7 @@ import android.net.ConnectivityManager
 import android.os.Build
 import android.os.Environment
 import android.util.Log
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.getSystemService
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
@@ -54,10 +55,14 @@ class SyncWorker @AssistedInject constructor(
         if (task.sourcePath.startsWith("content://") && task.direction == SyncDirection.BISYNC) {
             val msg = "Two-way sync isn't supported for this folder on this device."
             finishFailed(historyRepository.startRun(taskId), taskId, System.currentTimeMillis(), null, msg)
+            runCatching {
+                NotificationManagerCompat.from(applicationContext)
+                    .notify(SyncNotifications.RESULT_NOTIFICATION_ID, notifications.error(task.name, msg, taskId))
+            }
             return Result.failure()
         }
 
-        setForeground(foregroundInfo(notifications.progress(task.name, null)))
+        setForeground(foregroundInfo(notifications.progress(task.name, null, taskId)))
 
         val startedAt = System.currentTimeMillis()
         val runId = historyRepository.startRun(taskId)
@@ -127,7 +132,7 @@ class SyncWorker @AssistedInject constructor(
                                 "${progress.transferredFiles}/${progress.totalFiles} files · " +
                                 "${progress.errors} error(s)",
                         )
-                        setForeground(foregroundInfo(notifications.progress(task.name, progress)))
+                        setForeground(foregroundInfo(notifications.progress(task.name, progress, taskId)))
                     }
                 }
             }
@@ -162,6 +167,10 @@ class SyncWorker @AssistedInject constructor(
                     log.line("Failed: $msg")
                     log.flush()
                     finishFailed(runId, taskId, startedAt, last, msg, log.path)
+                    runCatching {
+                        NotificationManagerCompat.from(applicationContext)
+                            .notify(SyncNotifications.RESULT_NOTIFICATION_ID, notifications.error(task.name, msg, taskId))
+                    }
                     return Result.failure()
                 }
             }
@@ -180,9 +189,14 @@ class SyncWorker @AssistedInject constructor(
             }
             Result.success()
         } else {
-            log.line("Failed: ${failure.message ?: "Sync failed"}")
+            val msg = failure.message ?: "Sync failed"
+            log.line("Failed: $msg")
             log.flush()
-            finishFailed(runId, taskId, startedAt, last, failure.message ?: "Sync failed", log.path)
+            finishFailed(runId, taskId, startedAt, last, msg, log.path)
+            runCatching {
+                NotificationManagerCompat.from(applicationContext)
+                    .notify(SyncNotifications.RESULT_NOTIFICATION_ID, notifications.error(task.name, msg, taskId))
+            }
             // Transient transport problems are worth retrying; everything else fails.
             if (failure is VirgaError.Network) Result.retry() else Result.failure()
         }
