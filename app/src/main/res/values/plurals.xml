@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Widget task summary: "%1$d enabled of %2$d total" -->
+    <plurals name="widget_task_summary">
+        <item quantity="one">%1$d task enabled (of %2$d)</item>
+        <item quantity="other">%1$d tasks enabled (of %2$d)</item>
+    </plurals>
+</resources>

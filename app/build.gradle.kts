@@ -233,6 +233,10 @@ dependencies {
 
     // The baseline profile is installed at build time by ProfileInstaller; the
     // dependency below is what wires the generated file into the APK.
+    // Glance home-screen widget + Quick Settings tile (Phase 3 WS3.6)
+    implementation(libs.glance.appwidget)
+    implementation(libs.glance.material3)
+
     implementation(libs.profileinstaller)
     "baselineProfile"(project(":benchmark"))
 }

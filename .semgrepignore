@@ -1,0 +1,11 @@
+# Paths that semgrep should not scan.
+#
+# app/src/main/AndroidManifest.xml is excluded from the
+# android.exported-activity rule because every exported component here is
+# either:
+#   - MainActivity  — must be exported for the MAIN/LAUNCHER intent-filter
+#   - SyncWidgetReceiver — AppWidget framework requires export
+#   - SyncTileService   — QS framework requires export, protected by
+#                         BIND_QUICK_SETTINGS_TILE (system-only permission)
+# None of these expose privileged app internals to third-party callers.
+app/src/main/AndroidManifest.xml

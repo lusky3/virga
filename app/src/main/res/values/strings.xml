@@ -42,4 +42,13 @@
     <!-- OnboardingScreen — page indicator accessibility (a11y-04) -->
     <string name="onboarding_page_indicator">Page %1$d of %2$d</string>
     <string name="exit_confirm_toast">Press back again to exit</string>
+
+    <!-- Glance home-screen widget (Phase 3 WS3.6) -->
+    <string name="widget_no_tasks">No sync tasks configured</string>
+    <string name="widget_back_up_now">Back up now</string>
+    <string name="widget_description">Virga sync widget</string>
+
+    <!-- Quick Settings tile (Phase 3 WS3.6) -->
+    <string name="tile_label">Virga sync</string>
+    <string name="tile_subtitle">Back up now</string>
 </resources>

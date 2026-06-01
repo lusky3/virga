@@ -43,10 +43,15 @@
              shipping release APK. Debug builds are debuggable and therefore
              already profileable locally. -->
 
+        <!-- SEC: exported is required for the MAIN/LAUNCHER intent-filter.
+             tools:ignore suppresses the static-analysis false-positive — the
+             launcher activity has no privileged access to app internals beyond
+             what any app entry-point normally has. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.Virga">
+            android:theme="@style/Theme.Virga"
+            tools:ignore="ExportedActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -85,6 +90,40 @@
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="dataSync"
             tools:node="merge" />
+
+        <!-- Phase 3 WS3.6: Glance home-screen widget.
+             SEC: exported is required by the AppWidget framework — the launcher
+             must be able to send APPWIDGET_UPDATE. The receiver exposes no
+             privileged operations; it only renders the widget UI. -->
+        <receiver
+            android:name=".widget.SyncWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_description"
+            tools:ignore="ExportedReceiver">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/sync_widget_info" />
+        </receiver>
+
+        <!-- Phase 3 WS3.6: Quick Settings tile.
+             SEC: exported is required by the QS framework — the system binds
+             this service. The android:permission attribute restricts callers to
+             the system (only the system holds BIND_QUICK_SETTINGS_TILE), so no
+             third-party app can invoke it. -->
+        <service
+            android:name=".widget.SyncTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_sync"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            tools:ignore="ExportedService">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
 
     </application>
 </manifest>
