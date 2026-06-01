@@ -37,11 +37,15 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.navigation3.ui.LocalNavAnimatedContentScope
 import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.common.util.formatFileSize
 import app.lusk.virga.core.common.model.SyncRun
 import app.lusk.virga.core.designsystem.component.EmptyState
 import app.lusk.virga.core.designsystem.component.VirgaCard
+import app.lusk.virga.core.designsystem.theme.LocalSharedTransitionScope
+import app.lusk.virga.core.designsystem.theme.rememberReduceMotion
 import java.text.DateFormat
 import java.util.Date
 import kotlin.time.Duration.Companion.milliseconds
@@ -158,6 +162,7 @@ private fun TaskAndStatusFilterRow(
     }
 }
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 internal fun RunCard(
     row: SyncRunRow,
@@ -165,7 +170,22 @@ internal fun RunCard(
     onRetry: (() -> Unit)? = null,
 ) {
     val run = row.run
-    VirgaCard(onClick = onClick) {
+    // See RunDetailScreen: LocalNavAnimatedContentScope throws outside a NavEntry
+    // (e.g. @Preview), so read it only inside the nullable-scope guard.
+    val sharedScope = LocalSharedTransitionScope.current
+    val reduceMotion = rememberReduceMotion()
+    val sharedBoundsModifier = if (sharedScope != null && !reduceMotion) {
+        val animScope = LocalNavAnimatedContentScope.current
+        with(sharedScope) {
+            Modifier.sharedBounds(
+                sharedContentState = rememberSharedContentState(key = "run-card-${run.id}"),
+                animatedVisibilityScope = animScope,
+            )
+        }
+    } else {
+        Modifier
+    }
+    VirgaCard(onClick = onClick, modifier = sharedBoundsModifier) {
         Column(Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(

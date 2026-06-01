@@ -102,4 +102,4 @@ Definition of Done.
 | 3 | Bottom-sheet Add Remote; conflicts selection bar (footgun removed) | ✅ done | 2026-06-01 |
 | 3 | Notification Cancel/Retry actions + open-app intent (per-run deep link deferred) | ✅ done | 2026-06-01 |
 | 3 | Adaptive list-detail panes (Sync→Summary; back-handler coordinated) | ✅ done | 2026-06-01 |
-| 3 | Remote quota + Glance widget + QS tile (shared-element transitions remain) | ◐ partial | 2026-06-01 |
+| 3 | Shared-element transitions; Glance widget + QS tile; remote quota | ✅ done | 2026-06-01 |

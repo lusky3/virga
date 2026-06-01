@@ -30,6 +30,7 @@ dependencies {
     implementation(libs.hilt.navigation.compose)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.material3.adaptive.navigation)
+    implementation(libs.androidx.navigation3.ui)
 
     testImplementation(libs.junit4)
     testImplementation(libs.robolectric)

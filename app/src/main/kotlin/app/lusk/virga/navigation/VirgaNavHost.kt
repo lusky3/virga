@@ -3,6 +3,9 @@ package app.lusk.virga.navigation
 import android.app.Activity
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -16,6 +19,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -28,6 +32,7 @@ import androidx.lifecycle.compose.dropUnlessResumed
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
+import app.lusk.virga.core.designsystem.theme.LocalSharedTransitionScope
 import app.lusk.virga.core.designsystem.theme.VirgaMotion
 import app.lusk.virga.core.designsystem.theme.rememberReduceMotion
 import app.lusk.virga.R
@@ -242,6 +247,9 @@ fun VirgaNavHost(startAtWizard: Boolean = false) {
         // Shared X-axis nav motion + predictive back (BRAND §12). Falls back to a
         // plain crossfade when the system "remove animations" setting is on.
         val reduceMotion = rememberReduceMotion()
+        @OptIn(ExperimentalSharedTransitionApi::class)
+        SharedTransitionLayout {
+        CompositionLocalProvider(LocalSharedTransitionScope provides this) {
         NavDisplay(
             entries = navigationState.toEntries(entryProvider),
             onBack = { navigator.goBack() },
@@ -270,6 +278,8 @@ fun VirgaNavHost(startAtWizard: Boolean = false) {
                 }
             },
         )
+        } // CompositionLocalProvider
+        } // SharedTransitionLayout
         // Double-tap-to-exit, active only at the home tab root — and only when the
         // Sync adaptive scaffold has no internal back of its own to handle (WS3.5).
         BackHandler(enabled = atHomeRoot && !syncDetailCanGoBack) {

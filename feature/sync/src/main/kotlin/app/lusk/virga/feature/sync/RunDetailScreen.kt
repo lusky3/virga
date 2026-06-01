@@ -5,7 +5,9 @@ import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import android.os.PersistableBundle
+import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -38,14 +40,17 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation3.ui.LocalNavAnimatedContentScope
 import app.lusk.virga.core.common.util.formatFileSize
 import app.lusk.virga.core.common.model.SyncRun
 import app.lusk.virga.core.designsystem.component.EmptyState
+import app.lusk.virga.core.designsystem.theme.LocalSharedTransitionScope
+import app.lusk.virga.core.designsystem.theme.rememberReduceMotion
 import java.text.DateFormat
 import java.util.Date
 import kotlin.time.Duration.Companion.milliseconds
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun RunDetailScreen(
     runId: Long,
@@ -56,6 +61,24 @@ fun RunDetailScreen(
     LaunchedEffect(runId) { viewModel.load(runId) }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
+    // LocalSharedTransitionScope is nullable (null outside the NavDisplay wrapper,
+    // e.g. @Preview); LocalNavAnimatedContentScope is NOT — it throws if read
+    // outside a NavEntry — so only read it once we know we're in the provider.
+    val sharedScope = LocalSharedTransitionScope.current
+    val reduceMotion = rememberReduceMotion()
+    val sharedBoundsModifier = if (sharedScope != null && !reduceMotion) {
+        val animScope = LocalNavAnimatedContentScope.current
+        with(sharedScope) {
+            Modifier.sharedBounds(
+                sharedContentState = rememberSharedContentState(key = "run-card-$runId"),
+                animatedVisibilityScope = animScope,
+            )
+        }
+    } else {
+        Modifier
+    }
+
+    Box(modifier = sharedBoundsModifier.fillMaxSize()) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -90,6 +113,7 @@ fun RunDetailScreen(
             )
         }
     }
+    } // Box (sharedBounds container)
 }
 
 @Composable

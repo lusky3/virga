@@ -1,12 +1,15 @@
 package app.lusk.virga.core.designsystem.theme
 
 import android.provider.Settings
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.TweenSpec
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 
@@ -56,6 +59,14 @@ object VirgaMotion {
     fun <T> listEnterTween(): TweenSpec<T> =
         tween(durationMillis = ListItemEnterMs, easing = LinearOutSlowInEasing)
 }
+
+/**
+ * Provides the [SharedTransitionScope] that wraps NavDisplay to children that
+ * want to apply [SharedTransitionScope.sharedBounds] or [SharedTransitionScope.sharedElement]
+ * across Nav3 entries. Provided by VirgaNavHost; null everywhere else.
+ */
+@OptIn(ExperimentalSharedTransitionApi::class)
+val LocalSharedTransitionScope = compositionLocalOf<SharedTransitionScope?> { null }
 
 /**
  * Reads the system "remove animations" / reduced-motion preference.
