@@ -40,6 +40,20 @@ class RemoteRepository @Inject constructor(
         runCatching { engine.createRemote(name, type, params) }
             .mapCatching { refresh().getOrThrow() }
 
+    /**
+     * Creates a `crypt:` remote wrapping [baseRemoteSpec]. Delegates password
+     * obscuring to rclone (via [RcloneEngine.createCryptRemote]) — no plaintext
+     * password material is stored or logged by this layer.
+     */
+    suspend fun addCryptRemote(
+        name: String,
+        baseRemoteSpec: String,
+        password: String,
+        salt: String?,
+    ): Result<Unit> =
+        runCatching { engine.createCryptRemote(name, baseRemoteSpec, password, salt) }
+            .mapCatching { refresh().getOrThrow() }
+
     suspend fun deleteRemote(name: String): Result<Unit> =
         runCatching {
             engine.deleteRemote(name)

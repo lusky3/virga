@@ -53,6 +53,20 @@
     <string name="remotes_add_hide_advanced">Hide advanced options</string>
     <string name="remotes_add_required_hint"> (required)</string>
 
+    <!-- Crypt wizard (AddRemoteDialog — crypt backend type) -->
+    <string name="remotes_crypt_title">Add encrypted remote</string>
+    <string name="remotes_crypt_base_remote_label">Base remote</string>
+    <string name="remotes_crypt_base_remote_placeholder">Select an existing remote to encrypt</string>
+    <string name="remotes_crypt_no_base_remotes">No remotes found. Add a cloud remote first, then wrap it with encryption.</string>
+    <string name="remotes_crypt_base_path_label">Path on base remote (optional)</string>
+    <string name="remotes_crypt_base_path_placeholder">e.g. encrypted-folder</string>
+    <string name="remotes_crypt_password_label">Encryption password</string>
+    <string name="remotes_crypt_salt_label">Password 2 / salt (optional)</string>
+    <string name="remotes_crypt_password_warning">Keep this password safe. If you lose it, your encrypted files cannot be recovered.</string>
+    <string name="remotes_crypt_show_password">Show password</string>
+    <string name="remotes_crypt_hide_password">Hide password</string>
+    <string name="remotes_msg_crypt_created">Encrypted remote \"%1$s\" created.</string>
+
     <!-- ViewModel user-facing messages -->
     <string name="remotes_msg_oauth_not_configured">%1$s OAuth client ID isn\'t configured yet.</string>
     <string name="remotes_msg_sign_in_failed">Sign-in failed: %1$s</string>

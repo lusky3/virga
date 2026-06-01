@@ -36,6 +36,26 @@ interface RcloneEngine {
 
     suspend fun listRemotes(): List<Remote>
     suspend fun createRemote(name: String, type: String, params: Map<String, String>)
+
+    /**
+     * Creates a `crypt:` remote that wraps [baseRemoteSpec] (e.g. "gdrive:encrypted").
+     *
+     * Passwords are sent to rclone's `config/create` with `opt.obscure = true` so
+     * rclone performs the obscuring itself — **the plaintext values are never stored,
+     * logged, or persisted by this app**. They exist only in memory for the duration
+     * of this call.
+     *
+     * On-device note: rclone's crypt backend expects `remote`, `password`, and the
+     * optional `password2` (salt) as documented at https://rclone.org/crypt/.
+     * The parameter names are `remote` / `password` / `password2`.
+     */
+    suspend fun createCryptRemote(
+        name: String,
+        baseRemoteSpec: String,
+        password: String,
+        salt: String?,
+    )
+
     suspend fun deleteRemote(name: String)
     suspend fun getConfig(): RcloneConfig
     suspend fun importConfig(confContent: String)

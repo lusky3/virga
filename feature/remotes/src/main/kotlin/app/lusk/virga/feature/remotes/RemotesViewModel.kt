@@ -218,6 +218,46 @@ class RemotesViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Creates a `crypt:` remote.
+     *
+     * [baseRemote] and [basePath] are joined as "[baseRemote]:[basePath]" (or
+     * "[baseRemote]:" when [basePath] is blank) to form the `remote` parameter
+     * that rclone passes to the crypt backend.
+     *
+     * Plaintext [password] / [salt] values are forwarded to the repository
+     * **without logging** and rclone obscures them inside the daemon before
+     * they reach disk. This method imposes no further security guarantees
+     * beyond what the engine layer provides.
+     */
+    fun createCrypt(
+        name: String,
+        baseRemote: String,
+        basePath: String,
+        password: String,
+        salt: String,
+        onResult: (success: Boolean, error: String?) -> Unit,
+    ) {
+        val trimmedPath = basePath.trim().trimStart('/')
+        val baseRemoteSpec = if (trimmedPath.isEmpty()) "$baseRemote:" else "$baseRemote:$trimmedPath"
+        val saltOrNull = salt.trim().ifBlank { null }
+        viewModelScope.launch {
+            val result = repository.addCryptRemote(
+                name = name.trim(),
+                baseRemoteSpec = baseRemoteSpec,
+                password = password,
+                salt = saltOrNull,
+            )
+            if (result.isSuccess) {
+                pendingRemoteResult.created(name.trim())
+                transient.value = transient.value.copy(
+                    message = context.getString(R.string.remotes_msg_crypt_created, name.trim()),
+                )
+            }
+            onResult(result.isSuccess, result.exceptionOrNull()?.toUserMessage())
+        }
+    }
+
     companion object {
         private const val MAX_IMPORT_BYTES = 256 * 1024
     }

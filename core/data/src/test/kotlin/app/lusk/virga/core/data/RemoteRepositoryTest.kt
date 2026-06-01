@@ -114,6 +114,39 @@ class RemoteRepositoryTest {
         coVerify { engine.importConfig("[imported]\ntype=drive\n") }
     }
 
+    // --- addCryptRemote ---
+
+    @Test fun `addCryptRemote delegates to engine_createCryptRemote and then refreshes`() = runTest {
+        coEvery { engine.createCryptRemote("enc", "gdrive:vault", "s3cr3t", null) } returns Unit
+        coEvery { engine.listRemotes() } returns listOf(Remote("enc", "crypt"))
+
+        val result = repo.addCryptRemote("enc", "gdrive:vault", "s3cr3t", null)
+
+        assertThat(result.isSuccess).isTrue()
+        coVerify { engine.createCryptRemote("enc", "gdrive:vault", "s3cr3t", null) }
+        coVerify { remoteDao.replaceAll(match { it.any { r -> r.name == "enc" } }) }
+    }
+
+    @Test fun `addCryptRemote returns failure and skips refresh when engine fails`() = runTest {
+        coEvery { engine.createCryptRemote(any(), any(), any(), any()) } throws
+            VirgaError.Rclone(message = "base remote not found")
+
+        val result = repo.addCryptRemote("enc", "ghost:", "pass", null)
+
+        assertThat(result.isFailure).isTrue()
+        coVerify(exactly = 0) { remoteDao.replaceAll(any()) }
+    }
+
+    @Test fun `addCryptRemote forwards salt to engine when provided`() = runTest {
+        coEvery { engine.createCryptRemote("enc", "s3:bucket", "pass", "mysalt") } returns Unit
+        coEvery { engine.listRemotes() } returns listOf(Remote("enc", "crypt"))
+
+        val result = repo.addCryptRemote("enc", "s3:bucket", "pass", "mysalt")
+
+        assertThat(result.isSuccess).isTrue()
+        coVerify { engine.createCryptRemote("enc", "s3:bucket", "pass", "mysalt") }
+    }
+
     // --- exportConfig ---
 
     @Test fun `exportConfig delegates to configManager`() = runTest {

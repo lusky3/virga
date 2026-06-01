@@ -224,10 +224,17 @@ fun RemotesScreen(
             onEnsureProviders = viewModel::ensureProvidersLoaded,
             optionsForBackend = viewModel::optionsForBackend,
             providersLoaded = providersLoaded,
+            existingRemotes = state.remotes,
             onDismiss = { showAdd = false; manualError = null },
             onManualConfirm = { name, type, params ->
                 manualError = null
                 viewModel.addRemote(name, type, params) { success, error ->
+                    if (success) showAdd = false else manualError = error
+                }
+            },
+            onCryptConfirm = { name, baseRemote, basePath, password, salt ->
+                manualError = null
+                viewModel.createCrypt(name, baseRemote, basePath, password, salt) { success, error ->
                     if (success) showAdd = false else manualError = error
                 }
             },

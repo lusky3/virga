@@ -157,6 +157,50 @@ class RcloneEngineImpl @Inject constructor(
         }
     }
 
+    /**
+     * Creates a crypt remote via rclone's `config/create` RC endpoint.
+     *
+     * Security contract: plaintext [password] / [salt] values are placed directly
+     * into the RC request with `opt.obscure = true`. rclone's daemon handles the
+     * obscuring transformation before writing to its config file — this app never
+     * stores, logs, or otherwise persists any plaintext password material. The
+     * values exist in memory only for the duration of this call.
+     *
+     * RC parameters used (documented at https://rclone.org/crypt/):
+     *   - `remote`    : the base remote spec, e.g. "gdrive:encrypted"
+     *   - `password`  : plaintext password; rclone obscures it when opt.obscure=true
+     *   - `password2` : optional salt/second password; same treatment
+     *   - `opt.nonInteractive` : prevents rclone from opening its own browser flow
+     *   - `opt.obscure`        : instructs rclone to obscure any plaintext passwords
+     */
+    override suspend fun createCryptRemote(
+        name: String,
+        baseRemoteSpec: String,
+        password: String,
+        salt: String?,
+    ) {
+        mutatingConfig {
+            val d = ensureDaemon()
+            rc(d, "config/create", buildJsonObject {
+                put("name", name)
+                put("type", "crypt")
+                putJsonObject("parameters") {
+                    put("remote", baseRemoteSpec)
+                    put("password", password)
+                    if (!salt.isNullOrBlank()) put("password2", salt)
+                }
+                putJsonObject("opt") {
+                    put("nonInteractive", true)
+                    // Tell rclone to obscure plaintext passwords before persisting.
+                    // Without this, rclone would store the password in plaintext in
+                    // the config file. With it, rclone applies its own reversible
+                    // obscuring — this app never needs to implement that algorithm.
+                    put("obscure", true)
+                }
+            })
+        }
+    }
+
     override suspend fun deleteRemote(name: String) {
         mutatingConfig {
             val d = ensureDaemon()

@@ -15,7 +15,11 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -429,6 +433,81 @@ class RcloneEngineImplTest {
         assertThat(providerOpt.examples).hasSize(2)
         assertThat(providerOpt.examples[0].first).isEqualTo("AWS")
         assertThat(providerOpt.examples[0].second).isEqualTo("Amazon Web Services")
+    }
+
+    // --- createCryptRemote ---
+
+    @Test fun `createCryptRemote sends config_create with type=crypt and obscure=true`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.persistAndCleanup() } returns Unit
+
+        val capturedParams = mutableListOf<kotlinx.serialization.json.JsonObject>()
+        coEvery { apiClient.call(any(), any(), any(), "config/create", capture(capturedParams)) } returns buildJsonObject {}
+
+        engine.createCryptRemote("myenc", "gdrive:encrypted", "s3cr3t", null)
+
+        val req = capturedParams.first()
+        assertThat(req["name"]?.jsonPrimitive?.contentOrNull).isEqualTo("myenc")
+        assertThat(req["type"]?.jsonPrimitive?.contentOrNull).isEqualTo("crypt")
+        val params = req["parameters"]?.jsonObject
+        assertThat(params?.get("remote")?.jsonPrimitive?.contentOrNull).isEqualTo("gdrive:encrypted")
+        assertThat(params?.get("password")?.jsonPrimitive?.contentOrNull).isEqualTo("s3cr3t")
+        assertThat(params?.containsKey("password2")).isFalse()
+        val opt = req["opt"]?.jsonObject
+        assertThat(opt?.get("obscure")?.jsonPrimitive?.booleanOrNull).isTrue()
+        assertThat(opt?.get("nonInteractive")?.jsonPrimitive?.booleanOrNull).isTrue()
+    }
+
+    @Test fun `createCryptRemote includes password2 when salt is provided`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.persistAndCleanup() } returns Unit
+
+        val capturedParams = mutableListOf<kotlinx.serialization.json.JsonObject>()
+        coEvery { apiClient.call(any(), any(), any(), "config/create", capture(capturedParams)) } returns buildJsonObject {}
+
+        engine.createCryptRemote("myenc", "s3:bucket/enc", "pass", "saltvalue")
+
+        val params = capturedParams.first()["parameters"]?.jsonObject
+        assertThat(params?.get("password2")?.jsonPrimitive?.contentOrNull).isEqualTo("saltvalue")
+    }
+
+    @Test fun `createCryptRemote omits password2 when salt is blank`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.persistAndCleanup() } returns Unit
+
+        val capturedParams = mutableListOf<kotlinx.serialization.json.JsonObject>()
+        coEvery { apiClient.call(any(), any(), any(), "config/create", capture(capturedParams)) } returns buildJsonObject {}
+
+        engine.createCryptRemote("myenc", "dropbox:vault", "mypass", "   ")
+
+        val params = capturedParams.first()["parameters"]?.jsonObject
+        assertThat(params?.containsKey("password2")).isFalse()
+    }
+
+    @Test fun `createCryptRemote discards config on failure`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "config/create", any()) } throws
+            VirgaError.Rclone(exitCode = 400, message = "remote not found")
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.cleanup() } returns Unit
+
+        val error = assertThrows<VirgaError.Rclone> {
+            engine.createCryptRemote("enc", "ghost:path", "pass", null)
+        }
+
+        assertThat(error.message).contains("remote not found")
+        coVerify { configManager.cleanup() }
     }
 
     // --- importConfig ---

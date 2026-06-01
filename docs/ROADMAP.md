@@ -98,7 +98,7 @@ Definition of Done.
 | 2 | File-browser multi-select → "Create task from selection" | ✅ done | 2026-05-31 |
 | 2 | Shared contextual-action-mode primitive + haptics | ✅ done | 2026-05-31 |
 | 3 | Tier-2 typed options (checksum/backup-dir/max-delete) + validated extraConfig passthrough | ✅ done | 2026-06-01 |
-| 3 | config/providers-driven typed remote fields (crypt wizard deferred) | ◐ partial | 2026-06-01 |
+| 3 | config/providers typed remote fields + crypt-wrapping wizard | ✅ done | 2026-06-01 |
 | 3 | Bottom-sheet Add Remote; conflicts selection bar (footgun removed) | ✅ done | 2026-06-01 |
 | 3 | Notification Cancel/Retry actions + open-app intent (per-run deep link deferred) | ✅ done | 2026-06-01 |
 | 3 | Adaptive list-detail panes (Sync→Summary; back-handler coordinated) | ✅ done | 2026-06-01 |

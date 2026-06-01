@@ -589,5 +589,111 @@ class RemotesViewModelTest {
         assertThat(vm.optionsForBackend("drive")).isNull()
     }
 
+    // --- createCrypt -----------------------------------------------------------
+
+    @Test
+    fun `createCrypt builds baseRemoteSpec with path and delegates to repository`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.addCryptRemote(any(), any(), any(), any()) } returns Result.success(Unit)
+        val vm = viewModel()
+
+        vm.createCrypt(
+            name = "myenc",
+            baseRemote = "gdrive",
+            basePath = "vault/sub",
+            password = "s3cr3t",
+            salt = "",
+            onResult = { _, _ -> },
+        )
+        advanceUntilIdle()
+
+        coVerify {
+            repository.addCryptRemote(
+                name = "myenc",
+                baseRemoteSpec = "gdrive:vault/sub",
+                password = "s3cr3t",
+                salt = null,
+            )
+        }
+    }
+
+    @Test
+    fun `createCrypt uses base remote colon only when basePath is blank`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.addCryptRemote(any(), any(), any(), any()) } returns Result.success(Unit)
+        val vm = viewModel()
+
+        vm.createCrypt("enc2", "s3bucket", "   ", "pw", "", onResult = { _, _ -> })
+        advanceUntilIdle()
+
+        coVerify {
+            repository.addCryptRemote(
+                name = "enc2",
+                baseRemoteSpec = "s3bucket:",
+                password = "pw",
+                salt = null,
+            )
+        }
+    }
+
+    @Test
+    fun `createCrypt strips leading slash from basePath`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.addCryptRemote(any(), any(), any(), any()) } returns Result.success(Unit)
+        val vm = viewModel()
+
+        vm.createCrypt("enc3", "dropbox", "/myfolder", "pw", "", onResult = { _, _ -> })
+        advanceUntilIdle()
+
+        coVerify {
+            repository.addCryptRemote(
+                name = "enc3",
+                baseRemoteSpec = "dropbox:myfolder",
+                password = "pw",
+                salt = null,
+            )
+        }
+    }
+
+    @Test
+    fun `createCrypt passes salt to repository when non-blank`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.addCryptRemote(any(), any(), any(), any()) } returns Result.success(Unit)
+        val vm = viewModel()
+
+        vm.createCrypt("enc4", "b2", "bucket", "pw", "mysalt", onResult = { _, _ -> })
+        advanceUntilIdle()
+
+        coVerify {
+            repository.addCryptRemote(
+                name = "enc4",
+                baseRemoteSpec = "b2:bucket",
+                password = "pw",
+                salt = "mysalt",
+            )
+        }
+    }
+
+    @Test
+    fun `createCrypt reports success via onResult`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.addCryptRemote(any(), any(), any(), any()) } returns Result.success(Unit)
+        val vm = viewModel()
+        var didSucceed: Boolean? = null
+
+        vm.createCrypt("enc5", "gdrive", "", "pw", "", onResult = { success, _ -> didSucceed = success })
+        advanceUntilIdle()
+
+        assertThat(didSucceed).isTrue()
+    }
+
+    @Test
+    fun `createCrypt reports failure via onResult when repository fails`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.addCryptRemote(any(), any(), any(), any()) } returns
+            Result.failure(RuntimeException("bad remote"))
+        val vm = viewModel()
+        var errMsg: String? = null
+
+        vm.createCrypt("enc6", "gdrive", "", "pw", "", onResult = { _, err -> errMsg = err })
+        advanceUntilIdle()
+
+        assertThat(errMsg).isEqualTo("bad remote")
+    }
+
     private fun OAuthProvider.unused() = Unit  // silence unused-import warning for OAuthProvider import
 }
