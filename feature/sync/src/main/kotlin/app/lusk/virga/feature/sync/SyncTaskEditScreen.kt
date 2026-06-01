@@ -530,7 +530,7 @@ private fun directionHintRes(dir: SyncDirection): Int = when (dir) {
  * Converts a SAF tree URI (content://...) to a real filesystem path that rclone can use.
  * Returns null if the path cannot be resolved or does not exist on disk.
  */
-private fun resolveTreeUriToPath(uri: Uri): String? {
+internal fun resolveTreeUriToPath(uri: Uri): String? {
     val docId = DocumentsContract.getTreeDocumentId(uri) ?: return null
     val colonIdx = docId.indexOf(':')
     if (colonIdx < 0) return null

@@ -37,6 +37,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun SyncTasksAdaptiveScreen(
     onAddTask: () -> Unit,
+    onStartWizard: () -> Unit = {},
     onOpenTask: (Long) -> Unit,
     onEditTask: (Long) -> Unit,
     onOpenHistory: () -> Unit,
@@ -71,6 +72,7 @@ fun SyncTasksAdaptiveScreen(
             AnimatedPane {
                 SyncTasksScreen(
                     onAddTask = onAddTask,
+                    onStartWizard = onStartWizard,
                     onOpenTask = { id ->
                         if (isExpanded) {
                             selectedTaskId = id

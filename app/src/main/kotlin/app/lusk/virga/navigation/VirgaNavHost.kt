@@ -35,6 +35,7 @@ import app.lusk.virga.feature.explorer.FileBrowserScreen
 import app.lusk.virga.feature.remotes.RemotesScreen
 import app.lusk.virga.feature.settings.SettingsScreen
 import app.lusk.virga.feature.sync.ConflictsScreen
+import app.lusk.virga.feature.sync.FirstSyncWizardScreen
 import app.lusk.virga.feature.sync.LogViewerScreen
 import app.lusk.virga.feature.sync.RunDetailScreen
 import app.lusk.virga.feature.sync.SyncHistoryScreen
@@ -76,6 +77,9 @@ import kotlinx.serialization.Serializable
 /** Per-run log viewer (WS2.5). */
 @Serializable data class LogViewerRoute(val logPath: String) : NavKey
 
+/** Guided first-sync wizard for cold-install users (WS1.2). */
+@Serializable object FirstSyncWizardRoute : NavKey
+
 private data class TopLevel(
     val route: NavKey,
     val labelRes: Int,
@@ -97,14 +101,24 @@ private val topLevelDestinations = listOf(
  *
  * ia-06: Tab reselect (handled in [Navigator.navigate]) pops the active tab's
  * back stack to its root entry.
+ *
+ * [startAtWizard] — when true (set after first-run onboarding), the Sync tab
+ * starts with [FirstSyncWizardRoute] on the stack so the user lands directly
+ * in the guided setup wizard.
  */
 @Composable
-fun VirgaNavHost() {
+fun VirgaNavHost(startAtWizard: Boolean = false) {
     val navigationState = rememberNavigationState(
         startRoute = SyncRoute,
         topLevelRoutes = setOf(SyncRoute, RemotesRoute, SettingsRoute),
     )
     val navigator = remember { Navigator(navigationState) }
+
+    // Push the wizard onto the Sync stack once, on first composition, when
+    // the caller requests it (i.e. coming fresh from onboarding completion).
+    androidx.compose.runtime.LaunchedEffect(startAtWizard) {
+        if (startAtWizard) navigator.navigate(FirstSyncWizardRoute)
+    }
 
     // The Sync tab's adaptive list-detail scaffold can have its own internal back
     // state (detail pane open on a single-pane width). While it can navigate back,
@@ -116,12 +130,25 @@ fun VirgaNavHost() {
         entry<SyncRoute> {
             SyncTasksAdaptiveScreen(
                 onAddTask = dropUnlessResumed { navigator.navigate(TaskEditRoute(0)) },
+                onStartWizard = dropUnlessResumed { navigator.navigate(FirstSyncWizardRoute) },
                 onOpenTask = { id -> navigator.navigate(TaskSummaryRoute(id)) },
                 onEditTask = { id -> navigator.navigate(TaskEditRoute(id)) },
                 onOpenHistory = dropUnlessResumed { navigator.navigate(HistoryRoute) },
                 onOpenConflicts = dropUnlessResumed { navigator.navigate(ConflictsRoute) },
                 onOpenRun = { id -> navigator.navigate(RunDetailRoute(id)) },
                 onDetailBackAvailableChanged = { syncDetailCanGoBack = it },
+            )
+        }
+        entry<FirstSyncWizardRoute> {
+            FirstSyncWizardScreen(
+                onBack = dropUnlessResumed { navigator.goBack() },
+                onNavigateToRemotes = dropUnlessResumed { navigator.navigate(RemotesRoute) },
+                onFinished = { taskId ->
+                    // Pop the completed wizard first so Back from the summary lands
+                    // on the task list, not a blank finished wizard pane.
+                    navigator.goBack()
+                    navigator.navigate(TaskSummaryRoute(taskId))
+                },
             )
         }
         entry<TaskSummaryRoute> { key ->

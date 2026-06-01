@@ -45,6 +45,7 @@ import kotlinx.coroutines.flow.flowOf
 @Composable
 fun SyncTasksScreen(
     onAddTask: () -> Unit,
+    onStartWizard: () -> Unit = onAddTask,
     onOpenTask: (Long) -> Unit,
     onEditTask: (Long) -> Unit,
     onOpenHistory: () -> Unit,
@@ -133,7 +134,7 @@ fun SyncTasksScreen(
                     body = stringResource(R.string.sync_tasks_empty_body),
                     icon = Icons.Filled.SyncProblem,
                     action = {
-                        Button(onClick = onAddTask) {
+                        Button(onClick = onStartWizard) {
                             Text(stringResource(R.string.sync_tasks_empty_action))
                         }
                     },

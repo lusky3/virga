@@ -78,11 +78,14 @@ class MainActivity : ComponentActivity() {
                 // Local override so the user immediately enters the app after
                 // tapping "Get started", before the DataStore write propagates.
                 var dismissed by remember { mutableStateOf(false) }
+                // When onboarding finishes for the very first time, funnel the
+                // user directly into the guided setup wizard.
+                var startWizard by remember { mutableStateOf(false) }
 
                 when {
                     complete == null -> Unit // splash still showing
-                    complete == true || dismissed -> VirgaNavHost()
-                    else -> OnboardingScreen(onFinished = { dismissed = true })
+                    complete == true || dismissed -> VirgaNavHost(startAtWizard = startWizard)
+                    else -> OnboardingScreen(onFinished = { startWizard = true; dismissed = true })
                 }
             }
         }

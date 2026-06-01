@@ -244,5 +244,30 @@
     <string name="sync_preview_error">Preview failed: %1$s</string>
     <string name="sync_preview_run_for_real">Run for real</string>
     <string name="sync_preview_close">Close</string>
+    <!-- FirstSyncWizard -->
+    <string name="wizard_title">Set up your first sync</string>
+    <string name="wizard_next">Next</string>
+    <string name="wizard_back">Back</string>
+    <string name="wizard_create">Create sync task</string>
+    <!-- Step 1: Intro -->
+    <string name="wizard_intro_heading">Back up a folder to the cloud</string>
+    <string name="wizard_intro_body">A sync task keeps a folder on your phone copied to a cloud account — automatically, on a schedule you control. You can sync to Google Drive, Dropbox, S3, or any remote you configure.</string>
+    <string name="wizard_intro_steps">This wizard will walk you through:\n\n• Choosing a cloud account\n• Picking the folder to back up\n• Setting a destination path\n• Naming your task</string>
+    <!-- Step 2: Account -->
+    <string name="wizard_account_heading">Choose a cloud account</string>
+    <string name="wizard_account_body">Select the remote (cloud account) you want to back up to. If you haven\'t added one yet, tap below to add it — you\'ll return here automatically when done.</string>
+    <string name="wizard_account_add">Add a new account…</string>
+    <string name="wizard_account_add_cta">Add a cloud account</string>
+    <!-- Step 3: Source -->
+    <string name="wizard_source_heading">Choose a folder to back up</string>
+    <string name="wizard_source_body">Pick the local folder whose contents you want to sync to the cloud. This is the folder on your phone or SD card.</string>
+    <string name="wizard_source_choose">Choose folder</string>
+    <string name="wizard_source_change">Change folder</string>
+    <!-- Step 4: Destination -->
+    <string name="wizard_destination_heading">Where on the cloud?</string>
+    <string name="wizard_destination_body">Enter the path on the remote where files will be stored. For example: Backups/Photos or /Documents/Phone. The folder will be created if it doesn\'t exist.</string>
+    <string name="wizard_destination_placeholder">e.g. Backups/Photos</string>
+    <!-- Step 5: Direction and name -->
+    <string name="wizard_direction_heading">Direction and name</string>
 </resources>
 
