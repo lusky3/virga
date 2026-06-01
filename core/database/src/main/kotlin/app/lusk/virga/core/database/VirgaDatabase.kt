@@ -22,7 +22,7 @@ import app.lusk.virga.core.database.entity.SyncTaskEntity
         SyncRunEntity::class,
         ConflictEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -45,6 +45,16 @@ abstract class VirgaDatabase : RoomDatabase() {
                 connection.execSQL("ALTER TABLE sync_tasks ADD COLUMN scheduleDaysMask INTEGER NOT NULL DEFAULT 0")
                 connection.execSQL("ALTER TABLE sync_tasks ADD COLUMN scheduleHour INTEGER NOT NULL DEFAULT 9")
                 connection.execSQL("ALTER TABLE sync_tasks ADD COLUMN scheduleMinute INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        /**
+         * v3 -> v4: add the per-task Mirror flag (deleteExtraneous). Additive;
+         * existing rows default to 0 (additive copy, never deletes).
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE sync_tasks ADD COLUMN deleteExtraneous INTEGER NOT NULL DEFAULT 0")
             }
         }
     }

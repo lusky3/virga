@@ -70,14 +70,14 @@ class SyncWorker @AssistedInject constructor(
         var last: SyncProgress? = null
         var failure: Throwable? = null
 
-        // One-way syncs are ADDITIVE (rclone `copy`): they never delete files on
-        // the destination. Mirroring (rclone `sync`, delete-extraneous) would make
-        // the destination identical to the source — e.g. uploading a couple of
-        // local files to a remote folder that already holds hundreds would delete
-        // all the others. That is catastrophic and must be an explicit opt-in, not
-        // the default, so deletes are off for every one-way run here. (BISYNC
-        // reconciles deletions through its own two-way logic, not this flag.)
-        val allowDeletes = false
+        // One-way syncs are ADDITIVE (rclone `copy`) by default: they never delete
+        // files on the destination. Mirroring (rclone `sync`, delete-extraneous)
+        // makes the destination identical to the source — catastrophic if misused
+        // (uploading a couple of local files to a remote folder of hundreds would
+        // delete the rest). It is therefore an explicit per-task opt-in
+        // (Mirror toggle, WS2.2) that the editor gates behind an acknowledgement.
+        // (BISYNC reconciles deletions through its own two-way logic, ignoring this.)
+        val allowDeletes = task.deleteExtraneous
 
         try {
             // Guard: the SAF source folder couldn't be read (its persisted access

@@ -23,7 +23,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): VirgaDatabase =
         Room.databaseBuilder(context, VirgaDatabase::class.java, VirgaDatabase.NAME)
-            .addMigrations(VirgaDatabase.MIGRATION_2_3)
+            .addMigrations(VirgaDatabase.MIGRATION_2_3, VirgaDatabase.MIGRATION_3_4)
             .apply {
                 // Destructive fallback is a DEBUG-only convenience while the schema
                 // evolves. A release build must NOT silently wipe user data on a

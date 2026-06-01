@@ -180,6 +180,9 @@ private fun SummaryContent(
             SummaryRow(stringResource(R.string.sync_summary_source), task.sourcePath)
             SummaryRow(stringResource(R.string.sync_summary_destination), "${task.remoteName}:${task.remotePath}")
             SummaryRow(stringResource(R.string.sync_summary_direction), stringResource(directionLabelRes(task.direction)))
+            if (task.deleteExtraneous) {
+                SummaryRow(stringResource(R.string.sync_summary_mirror), stringResource(R.string.sync_summary_mirror_on))
+            }
             SummaryRow(
                 stringResource(R.string.sync_summary_schedule),
                 app.lusk.virga.sync.SyncSchedule.describe(task.scheduleDaysMask, task.scheduleHour, task.scheduleMinute)

@@ -50,6 +50,7 @@ data class SyncTaskEntity(
     val transfers: Int = 4,
     val checkers: Int = 8,
     val bufferSize: String = "16M",
+    val deleteExtraneous: Boolean = false,
     val wifiOnly: Boolean = true,
     val requiresCharging: Boolean = false,
     val enabled: Boolean = true,

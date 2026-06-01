@@ -205,5 +205,14 @@
     <string name="sync_edit_filters_edit_text">Edit as text</string>
     <string name="sync_edit_filters_hide_text">Hide text</string>
     <string name="sync_edit_filters_raw_label">One rule per line (e.g. - *.tmp)</string>
+    <!-- Mirror toggle (Tier 1, destructive) -->
+    <string name="sync_edit_mirror_label">Mirror (make destination match source)</string>
+    <string name="sync_edit_mirror_sub">Deletes files at the destination that are not in the source.</string>
+    <string name="sync_edit_mirror_confirm_title">Enable Mirror?</string>
+    <string name="sync_edit_mirror_confirm_body">With Mirror on, the next sync will DELETE files at the destination that are not in the source, including files already there that this task did not add. This cannot be undone. Consider a dry-run first.</string>
+    <string name="sync_edit_mirror_confirm_enable">Enable Mirror</string>
+    <string name="sync_edit_mirror_confirm_cancel">Cancel</string>
+    <string name="sync_summary_mirror">Mirror</string>
+    <string name="sync_summary_mirror_on">On - deletes extra files at the destination</string>
 </resources>
 
