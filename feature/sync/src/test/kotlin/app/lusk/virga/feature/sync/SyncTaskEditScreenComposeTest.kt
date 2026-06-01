@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTextInput
 import app.lusk.virga.core.data.RemoteRepository
+import app.lusk.virga.core.data.PendingRemoteResult
 import app.lusk.virga.core.data.RemoteFolderPickStore
 import app.lusk.virga.core.data.SyncTaskRepository
 import app.lusk.virga.core.common.model.Remote
@@ -41,7 +42,7 @@ class SyncTaskEditScreenComposeTest {
     private val scheduler: SyncScheduler = mockk(relaxed = true)
 
     private fun setContent(): SyncTaskEditViewModel {
-        val viewModel = SyncTaskEditViewModel(taskRepository, remoteRepository, scheduler, RemoteFolderPickStore())
+        val viewModel = SyncTaskEditViewModel(taskRepository, remoteRepository, scheduler, RemoteFolderPickStore(), PendingRemoteResult())
         composeRule.setContent {
             SyncTaskEditScreen(taskId = 0L, onBack = {}, viewModel = viewModel)
         }

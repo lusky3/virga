@@ -3,6 +3,7 @@ package app.lusk.virga.feature.remotes
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
+import app.lusk.virga.core.data.PendingRemoteResult
 import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.datastore.OAuthKeyStore
 import app.lusk.virga.core.common.model.Remote
@@ -97,7 +98,7 @@ class RemotesViewModelTest {
     }
 
     private fun viewModel(cfg: OAuthConfig = config()) =
-        RemotesViewModel(context, repository, cfg, store, tokenExchanger, keyStore, testDispatchers)
+        RemotesViewModel(context, repository, cfg, store, tokenExchanger, keyStore, testDispatchers, PendingRemoteResult())
 
     // --- Provider list -----------------------------------------------------------
 

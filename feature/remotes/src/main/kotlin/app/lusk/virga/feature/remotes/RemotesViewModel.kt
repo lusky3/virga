@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import app.lusk.virga.core.common.error.toUserMessage
 import app.lusk.virga.core.common.model.Remote
+import app.lusk.virga.core.data.PendingRemoteResult
 import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.datastore.OAuthKeyStore
 import app.lusk.virga.core.rclone.oauth.OAuthConfig
@@ -46,6 +47,7 @@ class RemotesViewModel @Inject constructor(
     private val tokenExchanger: OAuthTokenExchanger,
     private val oauthKeyStore: OAuthKeyStore,
     private val dispatchers: DispatcherProvider,
+    private val pendingRemoteResult: PendingRemoteResult,
 ) : ViewModel() {
 
     /** Single-shot signal to the screen: open this URL in Custom Tabs. */
@@ -118,6 +120,7 @@ class RemotesViewModel @Inject constructor(
             // auto-capitalized the first letter (KeyboardCapitalization.None is
             // only a hint and some IMEs ignore it).
             val result = repository.addRemote(name.trim(), type.trim().lowercase(), params)
+            if (result.isSuccess) pendingRemoteResult.created(name.trim())
             onResult(result.isSuccess, result.exceptionOrNull()?.toUserMessage())
         }
     }
@@ -287,6 +290,7 @@ class RemotesViewModel @Inject constructor(
                         "client_id" to pending.clientId,
                     ) + extras,
                 )
+                if (createResult.isSuccess) pendingRemoteResult.created(remoteName)
                 transient.value = transient.value.copy(
                     oauthInProgress = false,
                     message = if (createResult.isSuccess) {

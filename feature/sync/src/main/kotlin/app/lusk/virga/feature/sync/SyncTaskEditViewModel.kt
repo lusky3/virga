@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.common.model.SyncTask
+import app.lusk.virga.core.data.PendingRemoteResult
 import app.lusk.virga.core.data.RemoteFolderPickStore
 import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.data.SyncTaskRepository
@@ -98,6 +99,7 @@ class SyncTaskEditViewModel @Inject constructor(
     private val remoteRepository: RemoteRepository,
     private val scheduler: SyncScheduler,
     private val folderPickStore: RemoteFolderPickStore,
+    private val pendingRemoteResult: PendingRemoteResult,
 ) : ViewModel() {
 
     private val _form = MutableStateFlow(SyncTaskForm())
@@ -112,6 +114,15 @@ class SyncTaskEditViewModel @Inject constructor(
                     it.copy(remoteName = picked.remoteName, remotePath = picked.path)
                 }
                 folderPickStore.consume()
+            }
+        }
+        // Returnable add-remote (WS1.2): if the user tapped "add a remote" from
+        // the empty dropdown and created one, auto-select it on return — but
+        // never clobber a remote the user already picked.
+        viewModelScope.launch {
+            pendingRemoteResult.created.filterNotNull().collect { name ->
+                _form.update { if (it.remoteName.isBlank()) it.copy(remoteName = name) else it }
+                pendingRemoteResult.consume()
             }
         }
     }

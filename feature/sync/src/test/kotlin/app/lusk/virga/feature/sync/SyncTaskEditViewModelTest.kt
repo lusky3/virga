@@ -2,6 +2,7 @@ package app.lusk.virga.feature.sync
 
 import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.data.RemoteRepository
+import app.lusk.virga.core.data.PendingRemoteResult
 import app.lusk.virga.core.data.RemoteFolderPickStore
 import app.lusk.virga.core.data.SyncTaskRepository
 import app.lusk.virga.core.common.model.Remote
@@ -36,7 +37,7 @@ class SyncTaskEditViewModelTest {
     }
     private val scheduler: SyncScheduler = mockk(relaxed = true)
 
-    private fun viewModel() = SyncTaskEditViewModel(taskRepository, remoteRepository, scheduler, RemoteFolderPickStore())
+    private fun viewModel() = SyncTaskEditViewModel(taskRepository, remoteRepository, scheduler, RemoteFolderPickStore(), PendingRemoteResult())
 
     // --- pre-existing tests -------------------------------------------------
 
