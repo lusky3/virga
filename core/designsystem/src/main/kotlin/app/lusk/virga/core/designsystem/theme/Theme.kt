@@ -3,7 +3,9 @@ package app.lusk.virga.core.designsystem.theme
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.MaterialExpressiveTheme
+import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
@@ -27,20 +29,20 @@ import androidx.compose.ui.platform.LocalContext
  * device theme without replacing the brand.
  *
  * **Shape + type (BRAND §5, §7).** [VirgaShapes] supplies the brand corner
- * scale; [VirgaTypography] the type voice.
+ * scale; [VirgaTypography] the type voice (see [VirgaDisplayFontFamily] for the
+ * optional display typeface).
  *
- * **Motion (BRAND §12).** Named motion tokens live in [VirgaMotion]; reduce-
- * motion is honored via [rememberReduceMotion]. NOTE: `MaterialExpressiveTheme`
- * + `MotionScheme.expressive()` are still `internal` in the pinned material3
- * (1.4.0 via compose-bom 2026.05.01) and cannot be referenced yet. We therefore
- * use the standard [MaterialTheme] and drive motion through the [VirgaMotion]
- * token layer. Adopt `MaterialExpressiveTheme` (and the wavy progress indicator)
- * once material3 promotes those APIs to public — tracked in BRAND §12.
+ * **Expressive + motion (BRAND §12).** The app is wrapped in
+ * [MaterialExpressiveTheme] with [MotionScheme.expressive] so components use
+ * physics/spring motion (and the Expressive component variants — e.g. the wavy
+ * progress indicator — are available). Named motion tokens for nav/list/etc.
+ * live in [VirgaMotion]; reduce-motion is honored via [rememberReduceMotion].
  *
  * **Semantic colors (BRAND §4.4, §10).** [LocalVirgaColors] (success/warning/
  * running/info) is provided here; [SyncStatusBadge] and any status surface read
  * it. M3 has no such roles, so this CompositionLocal is the only source.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun VirgaTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -67,10 +69,11 @@ fun VirgaTheme(
     val semanticColors = if (darkTheme) VirgaDarkSemanticColors else VirgaLightSemanticColors
 
     CompositionLocalProvider(LocalVirgaColors provides semanticColors) {
-        MaterialTheme(
+        MaterialExpressiveTheme(
             colorScheme = colorScheme,
             typography = VirgaTypography,
             shapes = VirgaShapes,
+            motionScheme = MotionScheme.expressive(),
             content = content,
         )
     }

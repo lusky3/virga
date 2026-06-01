@@ -29,7 +29,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -52,6 +54,7 @@ import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.common.model.SyncProgress
 import app.lusk.virga.core.common.util.formatFileSize
 import app.lusk.virga.core.designsystem.theme.LocalVirgaColors
+import app.lusk.virga.core.designsystem.theme.rememberReduceMotion
 import app.lusk.virga.core.designsystem.component.EmptyState
 import app.lusk.virga.core.designsystem.component.ToggleRow
 
@@ -315,9 +318,11 @@ private fun SummaryRow(label: String, value: String) {
  * "Backing up…" heading, a `running`-tinted bar (indeterminate while listing),
  * and a metrics line. Determinate fallback for the deferred Expressive wavy bar.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun LiveSyncPanel(progress: SyncProgress) {
     val running = LocalVirgaColors.current.running
+    val reduceMotion = rememberReduceMotion()
     Column(Modifier.fillMaxWidth()) {
         Text(
             text = stringResource(R.string.sync_summary_backing_up),
@@ -325,14 +330,16 @@ private fun LiveSyncPanel(progress: SyncProgress) {
             color = running,
         )
         Spacer(Modifier.height(6.dp))
-        if (progress.totalBytes > 0) {
-            LinearProgressIndicator(
-                progress = { progress.fraction },
-                color = running,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        } else {
-            LinearProgressIndicator(color = running, modifier = Modifier.fillMaxWidth())
+        // Wavy "precipitation" bar (BRAND §12); static determinate under reduce-motion.
+        when {
+            reduceMotion && progress.totalBytes > 0 ->
+                LinearProgressIndicator(progress = { progress.fraction }, color = running, modifier = Modifier.fillMaxWidth())
+            reduceMotion ->
+                LinearProgressIndicator(color = running, modifier = Modifier.fillMaxWidth())
+            progress.totalBytes > 0 ->
+                LinearWavyProgressIndicator(progress = { progress.fraction }, color = running, modifier = Modifier.fillMaxWidth())
+            else ->
+                LinearWavyProgressIndicator(color = running, modifier = Modifier.fillMaxWidth())
         }
         Spacer(Modifier.height(4.dp))
         val parts = buildList {

@@ -150,7 +150,7 @@ crisp). **Do not** re-tune per screen.
 
 - **Add one real display typeface** (Phase 0) via the single `fontFamily` hook the file already anticipates. Candidate:
   a calm geometric/humanist sans for Display/Headline (e.g., a variable font shipped in `app/src/main/res/font/`),
-  Body/Label stay on the platform default for legibility + size. **Status (Phase 0):** deferred — the `fontFamily` hook in `Type.kt` is in place, but no typeface binary has been chosen/licensed yet; the scale runs FontWeight-only until one is added. Pick one and document it here when chosen.
+  Body/Label stay on the platform default for legibility + size. **Status (Phase 0): hook wired** — `VirgaDisplayFontFamily` in `Type.kt` (null → platform default) feeds Display/Headline. To activate, drop a foss-safe (OFL/Apache) variable font into `core:designsystem` `res/font/` and point the val at it; GMS downloadable fonts are intentionally avoided (foss flavor).
 - **Usage map:**
   - `displaySmall`/`headlineMedium` → hero moments only (onboarding, empty-state heading, run-detail header).
   - `titleLarge` → screen titles in the compact top bars.
@@ -260,7 +260,7 @@ re-style primitives. The current `core:ui` (`EmptyState`, `ToggleRow`) is the se
 
 Motion is the brand's heartbeat. Default crossfades are forbidden where a token exists.
 
-- **Adopt `MaterialExpressiveTheme` + a `VirgaMotionScheme`** (Phase 0). **Status: deferred** — `MaterialExpressiveTheme`/`MotionScheme` are still `internal` in the pinned material3 (1.4.0). Until promoted to public, motion is driven by the `VirgaMotion` token layer under the standard `MaterialTheme`. This flips the whole app from default
+- **Adopt `MaterialExpressiveTheme` + a `VirgaMotionScheme`** (Phase 0). **Status: adopted** — `VirgaTheme` wraps content in `MaterialExpressiveTheme` with `MotionScheme.expressive()` (material3 pinned to 1.5.0-alpha18 above the BOM, since the APIs are `internal` in stable 1.4.0); the wavy `LinearWavyProgressIndicator` drives the live-sync "precipitation". The `VirgaMotion` tokens still drive nav/list motion. This flips the whole app from default
   to physics/spring motion in one move. Expose motion tokens; never hardcode `tween(300)` in features.
 - **Named motions (use these, define once):**
   - **Nav forward/back:** `NavDisplay` `transitionSpec` + `predictivePopTransitionSpec` (shared X-axis slide/fade).

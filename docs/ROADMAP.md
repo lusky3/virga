@@ -82,7 +82,7 @@ Definition of Done.
 | 0 | Full branded color schemes + dynamic-as-tint | ✅ done | 2026-05-31 |
 | 0 | `LocalVirgaColors` semantic colors + status glyphs | ✅ done | 2026-05-31 |
 | 0 | `VirgaSpacing` / `VirgaShapes` / `VirgaGradients` tokens | ✅ done | 2026-05-31 |
-| 0 | `VirgaMotionScheme` tokens + shapes (Expressive wrap + font deferred) | ◐ partial | 2026-05-31 |
+| 0 | `MaterialExpressiveTheme` + `VirgaMotionScheme` + display-font hook | ✅ done | 2026-06-01 |
 | 0 | `VirgaCard` + migrate existing cards | ✅ done | 2026-05-31 |
 | 1 | Live sync visualization (card strip + summary panel) | ✅ done | 2026-05-31 |
 | 1 | Guided first-sync wizard + returnable add-remote | ✅ done | 2026-06-01 |

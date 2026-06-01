@@ -17,7 +17,9 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -41,6 +43,7 @@ import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.designsystem.component.VirgaCard
 import app.lusk.virga.core.designsystem.component.VirgaCardState
 import app.lusk.virga.core.designsystem.theme.LocalVirgaColors
+import app.lusk.virga.core.designsystem.theme.rememberReduceMotion
 
 @Composable
 internal fun SyncTaskCard(
@@ -181,27 +184,26 @@ internal fun SyncTaskCard(
 }
 
 /**
- * Live transfer treatment for an active run (BRAND §10/§12): a determinate
- * progress bar tinted `running` (indeterminate while still listing) plus a
- * compact metrics line. The wavy "precipitation" indicator is deferred until
- * the Expressive APIs are public (see Theme.kt); this is the determinate
- * fallback BRAND §12 calls for.
+ * Live transfer treatment for an active run (BRAND §10/§12): the wavy
+ * "precipitation" progress bar tinted `running` (indeterminate while still
+ * listing) plus a compact metrics line. Under reduce-motion it degrades to a
+ * static determinate bar (BRAND §12).
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun LiveProgressLine(progress: SyncProgress) {
     val running = LocalVirgaColors.current.running
+    val reduceMotion = rememberReduceMotion()
     Spacer(Modifier.height(4.dp))
-    if (progress.totalBytes > 0) {
-        LinearProgressIndicator(
-            progress = { progress.fraction },
-            color = running,
-            modifier = Modifier.fillMaxWidth(),
-        )
-    } else {
-        LinearProgressIndicator(
-            color = running,
-            modifier = Modifier.fillMaxWidth(),
-        )
+    when {
+        reduceMotion && progress.totalBytes > 0 ->
+            LinearProgressIndicator(progress = { progress.fraction }, color = running, modifier = Modifier.fillMaxWidth())
+        reduceMotion ->
+            LinearProgressIndicator(color = running, modifier = Modifier.fillMaxWidth())
+        progress.totalBytes > 0 ->
+            LinearWavyProgressIndicator(progress = { progress.fraction }, color = running, modifier = Modifier.fillMaxWidth())
+        else ->
+            LinearWavyProgressIndicator(color = running, modifier = Modifier.fillMaxWidth())
     }
     Spacer(Modifier.height(2.dp))
     val parts = buildList {
