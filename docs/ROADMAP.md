@@ -101,5 +101,5 @@ Definition of Done.
 | 3 | config/providers-driven typed remote fields (crypt wizard deferred) | ◐ partial | 2026-06-01 |
 | 3 | Bottom-sheet Add Remote; conflicts selection bar (footgun removed) | ✅ done | 2026-06-01 |
 | 3 | Notification Cancel/Retry actions + open-app intent (per-run deep link deferred) | ✅ done | 2026-06-01 |
-| 3 | Adaptive list-detail panes | ☐ todo | |
+| 3 | Adaptive list-detail panes (Sync→Summary; expanded-width back needs on-device check) | ✅ done | 2026-06-01 |
 | 3 | Remote quota on cards (rclone about). Shared-elements / Glance widget / QS tile deferred (need device + new modules) | ◐ partial | 2026-06-01 |

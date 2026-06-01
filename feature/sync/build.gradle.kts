@@ -28,6 +28,8 @@ dependencies {
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.hilt.navigation.compose)
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.material3.adaptive.navigation)
 
     testImplementation(libs.junit4)
     testImplementation(libs.robolectric)

@@ -39,7 +39,7 @@ import app.lusk.virga.feature.sync.RunDetailScreen
 import app.lusk.virga.feature.sync.SyncHistoryScreen
 import app.lusk.virga.feature.sync.SyncTaskEditScreen
 import app.lusk.virga.feature.sync.SyncTaskSummaryScreen
-import app.lusk.virga.feature.sync.SyncTasksScreen
+import app.lusk.virga.feature.sync.SyncTasksAdaptiveScreen
 import kotlinx.serialization.Serializable
 
 /** Type-safe Navigation 3 routes. Each is a [NavKey] so it can live in a back stack. */
@@ -107,12 +107,13 @@ fun VirgaNavHost() {
 
     val entryProvider = entryProvider {
         entry<SyncRoute> {
-            SyncTasksScreen(
+            SyncTasksAdaptiveScreen(
                 onAddTask = dropUnlessResumed { navigator.navigate(TaskEditRoute(0)) },
                 onOpenTask = { id -> navigator.navigate(TaskSummaryRoute(id)) },
                 onEditTask = { id -> navigator.navigate(TaskEditRoute(id)) },
                 onOpenHistory = dropUnlessResumed { navigator.navigate(HistoryRoute) },
                 onOpenConflicts = dropUnlessResumed { navigator.navigate(ConflictsRoute) },
+                onOpenRun = { id -> navigator.navigate(RunDetailRoute(id)) },
             )
         }
         entry<TaskSummaryRoute> { key ->
