@@ -7,6 +7,8 @@ import app.lusk.virga.core.common.model.SyncRun
 import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
+import app.lusk.virga.sync.DryRunResult
+import app.lusk.virga.sync.DryRunUseCase
 import app.lusk.virga.sync.SyncProgressMonitor
 import app.lusk.virga.sync.SyncScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -14,6 +16,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
@@ -43,9 +46,31 @@ class SyncTaskSummaryViewModel @Inject constructor(
     private val historyRepository: SyncHistoryRepository,
     private val scheduler: SyncScheduler,
     private val progressMonitor: SyncProgressMonitor,
+    private val dryRunUseCase: DryRunUseCase,
 ) : ViewModel() {
 
     private val taskId = MutableStateFlow<Long?>(null)
+
+    /** Dry-run preview state (WS2.3). */
+    data class DryRunUiState(val running: Boolean = false, val result: DryRunResult? = null)
+
+    private val _dryRun = MutableStateFlow(DryRunUiState())
+    val dryRun: StateFlow<DryRunUiState> = _dryRun.asStateFlow()
+
+    /** True when a dry-run preview can be offered for the current task (not SAF). */
+    fun previewAvailable(): Boolean =
+        uiState.value.task?.let { dryRunUseCase.isAvailableFor(it) } ?: false
+
+    fun previewChanges() {
+        val task = uiState.value.task ?: return
+        if (!dryRunUseCase.isAvailableFor(task)) return
+        _dryRun.value = DryRunUiState(running = true)
+        viewModelScope.launch {
+            _dryRun.value = DryRunUiState(running = false, result = dryRunUseCase.preview(task))
+        }
+    }
+
+    fun dismissPreview() { _dryRun.value = DryRunUiState() }
 
     /** Idempotent: starts observing the given task. Safe to call from a `LaunchedEffect`. */
     fun load(id: Long) {

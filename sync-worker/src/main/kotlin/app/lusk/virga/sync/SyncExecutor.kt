@@ -39,6 +39,7 @@ class SyncExecutor @Inject constructor(
         metered: Boolean,
         allowDeletes: Boolean = false,
         resync: Boolean = false,
+        dryRun: Boolean = false,
     ): Flow<SyncProgress> {
         val local = task.sourcePath
         val remote = remoteSpec(task)
@@ -55,6 +56,7 @@ class SyncExecutor @Inject constructor(
                     checkers = task.checkers,
                     filters = filters,
                     resync = resync,
+                    dryRun = dryRun,
                 ),
             )
             else -> engine.sync(
@@ -68,6 +70,7 @@ class SyncExecutor @Inject constructor(
                     bufferSize = task.bufferSize,
                     filters = filters,
                     deleteExtraneous = allowDeletes,
+                    dryRun = dryRun,
                 ),
             )
         }

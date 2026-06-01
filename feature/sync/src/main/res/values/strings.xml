@@ -220,5 +220,13 @@
     <string name="log_viewer_share">Share log</string>
     <string name="log_viewer_empty">No log for this run.</string>
     <string name="run_detail_view_log">View log</string>
+    <!-- Dry-run preview (WS2.3) -->
+    <string name="sync_preview_action">Preview changes</string>
+    <string name="sync_preview_running">Previewing\u2026</string>
+    <string name="sync_preview_title">Preview (dry run)</string>
+    <string name="sync_preview_body">%1$d file(s) and %2$s would transfer. Nothing has changed yet.</string>
+    <string name="sync_preview_error">Preview failed: %1$s</string>
+    <string name="sync_preview_run_for_real">Run for real</string>
+    <string name="sync_preview_close">Close</string>
 </resources>
 

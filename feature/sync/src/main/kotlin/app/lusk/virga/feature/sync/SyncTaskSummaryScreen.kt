@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Preview
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -65,6 +66,7 @@ fun SyncTaskSummaryScreen(
 ) {
     LaunchedEffect(taskId) { viewModel.load(taskId) }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val dryRun by viewModel.dryRun.collectAsStateWithLifecycle()
     var showDelete by remember { mutableStateOf(false) }
 
     val task = state.task
@@ -97,14 +99,58 @@ fun SyncTaskSummaryScreen(
                 task = task,
                 runs = state.runs,
                 liveProgress = state.liveProgress,
+                previewAvailable = viewModel.previewAvailable(),
+                previewRunning = dryRun.running,
                 modifier = Modifier.padding(padding),
                 onSyncNow = viewModel::syncNow,
                 onCancelSync = viewModel::cancelSync,
                 onToggleEnabled = viewModel::setEnabled,
+                onPreview = viewModel::previewChanges,
                 onOpenRun = onOpenRun,
                 onDelete = { showDelete = true },
             )
         }
+    }
+
+    // Dry-run preview result (WS2.3): show the planned change-set with a
+    // "Run for real" confirm.
+    dryRun.result?.let { result ->
+        val err = result.error
+        AlertDialog(
+            onDismissRequest = viewModel::dismissPreview,
+            title = { Text(stringResource(R.string.sync_preview_title)) },
+            text = {
+                Text(
+                    if (err != null) {
+                        stringResource(R.string.sync_preview_error, err)
+                    } else {
+                        stringResource(
+                            R.string.sync_preview_body,
+                            result.filesToTransfer,
+                            formatFileSize(result.bytesToTransfer),
+                        )
+                    },
+                )
+            },
+            confirmButton = {
+                if (err == null) {
+                    TextButton(onClick = { viewModel.dismissPreview(); viewModel.syncNow() }) {
+                        Text(stringResource(R.string.sync_preview_run_for_real))
+                    }
+                } else {
+                    TextButton(onClick = viewModel::dismissPreview) {
+                        Text(stringResource(R.string.sync_preview_close))
+                    }
+                }
+            },
+            dismissButton = {
+                if (err == null) {
+                    TextButton(onClick = viewModel::dismissPreview) {
+                        Text(stringResource(R.string.sync_preview_close))
+                    }
+                }
+            },
+        )
     }
 
     if (showDelete && task != null) {
@@ -132,10 +178,13 @@ private fun SummaryContent(
     task: SyncTask,
     runs: List<SyncRun>,
     liveProgress: SyncProgress?,
+    previewAvailable: Boolean,
+    previewRunning: Boolean,
     modifier: Modifier,
     onSyncNow: () -> Unit,
     onCancelSync: () -> Unit,
     onToggleEnabled: (Boolean) -> Unit,
+    onPreview: () -> Unit,
     onOpenRun: (Long) -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -161,6 +210,19 @@ private fun SummaryContent(
                         Icon(Icons.Filled.PlayArrow, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text(stringResource(R.string.sync_task_cd_sync_now))
+                    }
+                    if (previewAvailable) {
+                        Spacer(Modifier.width(8.dp))
+                        OutlinedButton(onClick = onPreview, enabled = !previewRunning) {
+                            Icon(Icons.Filled.Preview, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                stringResource(
+                                    if (previewRunning) R.string.sync_preview_running
+                                    else R.string.sync_preview_action,
+                                ),
+                            )
+                        }
                     }
                 }
             }

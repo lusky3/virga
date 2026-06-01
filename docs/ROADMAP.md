@@ -91,7 +91,7 @@ Definition of Done.
 | 1 | Teach the mental model in empty states + vocabulary | ✅ done | 2026-05-31 |
 | 2 | Tier-1: Filters editor | ✅ done | 2026-05-31 |
 | 2 | Tier-1: Mirror toggle (safety-railed) | ✅ done | 2026-05-31 |
-| 2 | Tier-1: Dry-run / preview changes | ☐ todo | |
+| 2 | Tier-1: Dry-run / preview changes | ✅ done | 2026-06-01 |
 | 2 | Tier-1: Performance preset (transfers/checkers) | ✅ done | 2026-05-31 |
 | 2 | "Show advanced options" master toggle + default seeding | ✅ done | 2026-05-31 |
 | 2 | Log viewer (write `logPath` + screen) | ✅ done | 2026-05-31 |
