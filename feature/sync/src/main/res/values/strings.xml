@@ -180,6 +180,10 @@
     <string name="conflicts_dialog_keep_remote_body">The local version will be permanently overwritten.</string>
     <string name="conflicts_dialog_keep_both_title">Keep both versions?</string>
     <string name="conflicts_dialog_keep_both_body">Both variants will be left on the remote under their conflict names.</string>
+    <string name="conflicts_cd_clear_selection">Clear selection</string>
+    <string name="conflicts_cd_bulk_keep_local">Keep local for selected</string>
+    <string name="conflicts_cd_bulk_keep_remote">Keep remote for selected</string>
+    <string name="conflicts_cd_bulk_keep_both">Keep both for selected</string>
     <string name="conflicts_dialog_confirm">Confirm</string>
     <string name="conflicts_dialog_cancel">Cancel</string>
     <string name="sync_tasks_no_match_title">No matching tasks</string>

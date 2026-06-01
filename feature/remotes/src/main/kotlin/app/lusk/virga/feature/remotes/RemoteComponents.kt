@@ -11,7 +11,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.DropdownMenu
@@ -25,9 +26,11 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -140,132 +143,148 @@ internal fun AddRemoteDialog(
         }
     }
 
-    AlertDialog(
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.remotes_add_dialog_title)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        sheetState = sheetState,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 8.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                stringResource(R.string.remotes_add_dialog_title),
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text(stringResource(R.string.remotes_add_field_name)) },
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.None,
+                    autoCorrectEnabled = false,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Text(
+                stringResource(R.string.remotes_add_sign_in_with),
+                style = MaterialTheme.typography.labelLarge,
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                providers.forEach { provider ->
+                    val custom = provider.id in customClientIds
+                    AssistChip(
+                        onClick = { onOAuth(provider, name) },
+                        enabled = name.isNotBlank(),
+                        label = {
+                            Text(
+                                if (custom) stringResource(R.string.remotes_byo_chip_custom, provider.displayName)
+                                else provider.displayName,
+                            )
+                        },
+                    )
+                }
+            }
+
+            ByoKeysSection(
+                providers = providers,
+                customClientIds = customClientIds,
+                onSaveClientId = onSaveClientId,
+                onClearClientId = onClearClientId,
+            )
+
+            HorizontalDivider()
+            Text(
+                stringResource(R.string.remotes_add_or_manual),
+                style = MaterialTheme.typography.labelLarge,
+            )
+
+            // Searchable / editable dropdown for backend type
+            ExposedDropdownMenuBox(
+                expanded = typeMenuExpanded,
+                onExpandedChange = { typeMenuExpanded = it },
+            ) {
                 OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text(stringResource(R.string.remotes_add_field_name)) },
+                    value = type,
+                    onValueChange = { type = it; typeMenuExpanded = true },
+                    label = { Text(stringResource(R.string.remotes_add_field_type)) },
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeMenuExpanded)
+                    },
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.None,
                         autoCorrectEnabled = false,
                     ),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
                 )
-
-                Text(
-                    stringResource(R.string.remotes_add_sign_in_with),
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    providers.forEach { provider ->
-                        val custom = provider.id in customClientIds
-                        AssistChip(
-                            onClick = { onOAuth(provider, name) },
-                            enabled = name.isNotBlank(),
-                            label = {
-                                Text(
-                                    if (custom) stringResource(R.string.remotes_byo_chip_custom, provider.displayName)
-                                    else provider.displayName,
-                                )
-                            },
-                        )
-                    }
-                }
-
-                ByoKeysSection(
-                    providers = providers,
-                    customClientIds = customClientIds,
-                    onSaveClientId = onSaveClientId,
-                    onClearClientId = onClearClientId,
-                )
-
-                HorizontalDivider()
-                Text(
-                    stringResource(R.string.remotes_add_or_manual),
-                    style = MaterialTheme.typography.labelLarge,
-                )
-
-                // Searchable / editable dropdown for backend type
-                ExposedDropdownMenuBox(
-                    expanded = typeMenuExpanded,
-                    onExpandedChange = { typeMenuExpanded = it },
-                ) {
-                    OutlinedTextField(
-                        value = type,
-                        onValueChange = { type = it; typeMenuExpanded = true },
-                        label = { Text(stringResource(R.string.remotes_add_field_type)) },
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeMenuExpanded)
-                        },
-                        keyboardOptions = KeyboardOptions(
-                            capitalization = KeyboardCapitalization.None,
-                            autoCorrectEnabled = false,
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
-                    )
-                    if (filteredBackends.isNotEmpty()) {
-                        ExposedDropdownMenu(
-                            expanded = typeMenuExpanded,
-                            onDismissRequest = { typeMenuExpanded = false },
-                        ) {
-                            filteredBackends.forEach { (id, label) ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Column {
-                                            Text(id, style = MaterialTheme.typography.bodyMedium)
-                                            Text(
-                                                label,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
-                                    },
-                                    onClick = {
-                                        type = id
-                                        typeMenuExpanded = false
-                                    },
-                                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
-                                )
-                            }
+                if (filteredBackends.isNotEmpty()) {
+                    ExposedDropdownMenu(
+                        expanded = typeMenuExpanded,
+                        onDismissRequest = { typeMenuExpanded = false },
+                    ) {
+                        filteredBackends.forEach { (id, label) ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(id, style = MaterialTheme.typography.bodyMedium)
+                                        Text(
+                                            label,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    type = id
+                                    typeMenuExpanded = false
+                                },
+                                contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                            )
                         }
                     }
                 }
-
-                OutlinedTextField(
-                    value = params,
-                    onValueChange = { params = it },
-                    label = { Text(stringResource(R.string.remotes_add_field_params)) },
-                    placeholder = { Text(stringResource(R.string.remotes_add_params_placeholder)) },
-                    supportingText = { Text(stringResource(R.string.remotes_add_params_supporting)) },
-                    minLines = 3,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                if (error != null) {
-                    Text(
-                        error,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onManualConfirm(name, type, params) },
-                enabled = name.isNotBlank() && type.isNotBlank(),
-            ) { Text(stringResource(R.string.remotes_add_create)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.remotes_add_cancel)) }
-        },
-    )
+
+            OutlinedTextField(
+                value = params,
+                onValueChange = { params = it },
+                label = { Text(stringResource(R.string.remotes_add_field_params)) },
+                placeholder = { Text(stringResource(R.string.remotes_add_params_placeholder)) },
+                supportingText = { Text(stringResource(R.string.remotes_add_params_supporting)) },
+                minLines = 3,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            if (error != null) {
+                Text(
+                    error,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.remotes_add_cancel)) }
+                TextButton(
+                    onClick = { onManualConfirm(name, type, params) },
+                    enabled = name.isNotBlank() && type.isNotBlank(),
+                ) { Text(stringResource(R.string.remotes_add_create)) }
+            }
+        }
+    }
 }
 
 /**

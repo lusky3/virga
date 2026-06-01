@@ -33,6 +33,11 @@ class ConflictsViewModel @Inject constructor(
     private val _selectedIds = MutableStateFlow<Set<Long>>(emptySet())
     private val _pendingBulkChoice = MutableStateFlow<ConflictChoice?>(null)
 
+    // Selection snapshot captured when the bulk dialog opens, so confirming acts
+    // strictly on what was selected — never silently on "all" if the live
+    // selection changes while the dialog is open.
+    private var pendingBulkIds: Set<Long> = emptySet()
+
     val uiState: StateFlow<ConflictsUiState> =
         combine(
             repository.unresolved,
@@ -67,21 +72,37 @@ class ConflictsViewModel @Inject constructor(
 
     fun clearSelection() = _selectedIds.update { emptySet() }
 
-    fun requestBulkChoice(choice: ConflictChoice) { _pendingBulkChoice.value = choice }
+    /** Opens the bulk-confirm dialog, snapshotting the current selection. No-op
+     *  when nothing is selected (the UI only exposes this in selection mode). */
+    fun requestBulkChoice(choice: ConflictChoice) {
+        val snapshot = _selectedIds.value
+        if (snapshot.isEmpty()) return
+        pendingBulkIds = snapshot
+        _pendingBulkChoice.value = choice
+    }
 
-    fun cancelBulkChoice() { _pendingBulkChoice.value = null }
+    fun cancelBulkChoice() {
+        _pendingBulkChoice.value = null
+        pendingBulkIds = emptySet()
+    }
 
     fun confirmBulkChoice() = viewModelScope.launch {
         val choice = _pendingBulkChoice.value ?: return@launch
-        val ids = _selectedIds.value.ifEmpty {
-            uiState.value.conflicts.mapTo(mutableSetOf()) { it.id }
-        }
+        val ids = pendingBulkIds
+        _pendingBulkChoice.value = null
+        pendingBulkIds = emptySet()
+        if (ids.isEmpty()) return@launch
+        // Resolve strictly the snapshot — never fall back to "all".
         val conflicts = uiState.value.conflicts.filter { it.id in ids }
+        var firstError: String? = null
         conflicts.forEach { conflict ->
-            repository.resolve(conflict, choice)
+            val result = repository.resolve(conflict, choice)
+            if (result.isFailure && firstError == null) {
+                firstError = result.exceptionOrNull()?.toUserMessage()
+            }
         }
         _selectedIds.value = emptySet()
-        _pendingBulkChoice.value = null
+        if (firstError != null) transient.value = null to firstError
     }
 }
 

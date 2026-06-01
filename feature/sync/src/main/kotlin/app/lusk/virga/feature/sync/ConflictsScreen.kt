@@ -18,7 +18,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.DevicesOther
+import androidx.compose.material.icons.filled.FileCopy
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -53,6 +57,7 @@ import app.lusk.virga.core.common.util.formatFileSize
 import app.lusk.virga.core.data.ConflictChoice
 import app.lusk.virga.core.common.model.Conflict
 import app.lusk.virga.core.designsystem.component.EmptyState
+import app.lusk.virga.core.designsystem.component.SelectionTopBar
 import app.lusk.virga.core.designsystem.component.VirgaCard
 import app.lusk.virga.core.designsystem.component.VirgaCardState
 import java.text.DateFormat
@@ -78,34 +83,44 @@ fun ConflictsScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        if (inSelectionMode) {
-                            stringResource(R.string.conflicts_selection_count, state.selectedIds.size)
-                        } else {
-                            stringResource(R.string.conflicts_title)
-                        },
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = if (inSelectionMode) viewModel::clearSelection else onBack) {
+            if (inSelectionMode) {
+                SelectionTopBar(
+                    title = stringResource(R.string.conflicts_selection_count, state.selectedIds.size),
+                    onClear = viewModel::clearSelection,
+                    clearContentDescription = stringResource(R.string.conflicts_cd_clear_selection),
+                ) {
+                    IconButton(onClick = { viewModel.requestBulkChoice(ConflictChoice.KEEP_VARIANT_1) }) {
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.conflicts_cd_back),
+                            Icons.Filled.DevicesOther,
+                            contentDescription = stringResource(R.string.conflicts_cd_bulk_keep_local),
                         )
                     }
-                },
-                actions = {
-                    if (state.conflicts.isNotEmpty()) {
-                        BulkActionRow(
-                            onKeepAllLocal = { viewModel.requestBulkChoice(ConflictChoice.KEEP_VARIANT_1) },
-                            onKeepAllRemote = { viewModel.requestBulkChoice(ConflictChoice.KEEP_VARIANT_2) },
-                            onKeepBoth = { viewModel.requestBulkChoice(ConflictChoice.KEEP_BOTH) },
+                    IconButton(onClick = { viewModel.requestBulkChoice(ConflictChoice.KEEP_VARIANT_2) }) {
+                        Icon(
+                            Icons.Filled.CloudDownload,
+                            contentDescription = stringResource(R.string.conflicts_cd_bulk_keep_remote),
                         )
                     }
-                },
-            )
+                    IconButton(onClick = { viewModel.requestBulkChoice(ConflictChoice.KEEP_BOTH) }) {
+                        Icon(
+                            Icons.Filled.FileCopy,
+                            contentDescription = stringResource(R.string.conflicts_cd_bulk_keep_both),
+                        )
+                    }
+                }
+            } else {
+                TopAppBar(
+                    title = { Text(stringResource(R.string.conflicts_title)) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.conflicts_cd_back),
+                            )
+                        }
+                    },
+                )
+            }
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
@@ -159,7 +174,8 @@ fun ConflictsScreen(
     // Bulk confirm dialog
     state.pendingBulkChoice?.let { choice ->
         val (titleRes, bodyRes) = conflictDialogStrings(choice)
-        val count = state.selectedIds.size.let { if (it == 0) state.conflicts.size else it }
+        // Bulk actions are selection-gated, so the count is always the selection.
+        val count = state.selectedIds.size
         AlertDialog(
             onDismissRequest = viewModel::cancelBulkChoice,
             title = { Text(stringResource(titleRes)) },
@@ -167,7 +183,12 @@ fun ConflictsScreen(
                 Text(stringResource(R.string.conflicts_bulk_body, count, stringResource(bodyRes)))
             },
             confirmButton = {
-                TextButton(onClick = viewModel::confirmBulkChoice) {
+                TextButton(
+                    onClick = viewModel::confirmBulkChoice,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) {
                     Text(stringResource(R.string.conflicts_dialog_confirm))
                 }
             },
@@ -187,19 +208,6 @@ private fun conflictDialogStrings(choice: ConflictChoice): Pair<Int, Int> = when
         R.string.conflicts_dialog_keep_remote_title to R.string.conflicts_dialog_keep_remote_body
     ConflictChoice.KEEP_BOTH ->
         R.string.conflicts_dialog_keep_both_title to R.string.conflicts_dialog_keep_both_body
-}
-
-@Composable
-private fun BulkActionRow(
-    onKeepAllLocal: () -> Unit,
-    onKeepAllRemote: () -> Unit,
-    onKeepBoth: () -> Unit,
-) {
-    Row {
-        TextButton(onClick = onKeepAllLocal) { Text(stringResource(R.string.conflicts_bulk_keep_local)) }
-        TextButton(onClick = onKeepAllRemote) { Text(stringResource(R.string.conflicts_bulk_keep_remote)) }
-        TextButton(onClick = onKeepBoth) { Text(stringResource(R.string.conflicts_bulk_keep_both)) }
-    }
 }
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)

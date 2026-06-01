@@ -178,7 +178,9 @@ class ConflictsViewModelTest {
     }
 
     @Test
-    fun confirmBulkChoice_appliesChoiceToAllConflictsWhenNoneSelected() = runTest(mainDispatcher.dispatcher) {
+    fun requestBulkChoice_isNoOpWhenNothingSelected() = runTest(mainDispatcher.dispatcher) {
+        // WS3.3 footgun fix: bulk resolve must NEVER act on "all" — with no
+        // selection, requesting a bulk choice does nothing (no dialog, no resolve).
         coEvery { repository.resolve(any(), any()) } returns Result.success(Unit)
         val c1 = conflict(id = 1)
         val c2 = conflict(id = 2)
@@ -191,8 +193,8 @@ class ConflictsViewModelTest {
         vm.confirmBulkChoice()
         advanceUntilIdle()
 
-        coVerify(exactly = 1) { repository.resolve(c1, ConflictChoice.KEEP_VARIANT_2) }
-        coVerify(exactly = 1) { repository.resolve(c2, ConflictChoice.KEEP_VARIANT_2) }
+        assertThat(vm.uiState.value.pendingBulkChoice).isNull()
+        coVerify(exactly = 0) { repository.resolve(any(), any()) }
         job.cancel()
     }
 
@@ -221,6 +223,7 @@ class ConflictsViewModelTest {
         val job = backgroundScope.launch { vm.uiState.collect {} }
         advanceUntilIdle()
 
+        vm.toggleSelection(1L) // bulk choice now requires a selection (WS3.3)
         vm.requestBulkChoice(ConflictChoice.KEEP_VARIANT_1)
         advanceUntilIdle()
         assertThat(vm.uiState.value.pendingBulkChoice).isEqualTo(ConflictChoice.KEEP_VARIANT_1)
