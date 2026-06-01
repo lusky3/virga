@@ -117,6 +117,11 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 checked = prefs.requireChargingByDefault,
                 onChange = viewModel::setRequireCharging,
             )
+            ToggleRow(
+                label = stringResource(R.string.settings_toggle_show_advanced),
+                checked = prefs.showAdvancedOptions,
+                onChange = viewModel::setShowAdvancedOptions,
+            )
             Text(
                 stringResource(R.string.settings_sync_defaults_hint),
                 style = MaterialTheme.typography.bodySmall,

@@ -13,6 +13,8 @@ data class AppPreferences(
     val defaultBwLimitWifi: String? = null,
     val defaultBwLimitMetered: String? = "1M",
     val onboardingComplete: Boolean = false,
+    /** Reveal Tier 2/3 advanced options in the task editor (default off — beginners). */
+    val showAdvancedOptions: Boolean = false,
     /** BYO OAuth client ids keyed by provider, when the user overrides defaults. */
     val byoOAuthClientIds: Map<String, String> = emptyMap(),
 )

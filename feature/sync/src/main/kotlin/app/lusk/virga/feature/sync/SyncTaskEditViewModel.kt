@@ -8,6 +8,7 @@ import app.lusk.virga.core.data.PendingRemoteResult
 import app.lusk.virga.core.data.RemoteFolderPickStore
 import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.data.SyncTaskRepository
+import app.lusk.virga.core.datastore.PreferencesRepository
 import app.lusk.virga.sync.SyncScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -105,6 +107,7 @@ class SyncTaskEditViewModel @Inject constructor(
     private val scheduler: SyncScheduler,
     private val folderPickStore: RemoteFolderPickStore,
     private val pendingRemoteResult: PendingRemoteResult,
+    private val preferences: PreferencesRepository,
 ) : ViewModel() {
 
     private val _form = MutableStateFlow(SyncTaskForm())
@@ -136,6 +139,12 @@ class SyncTaskEditViewModel @Inject constructor(
         remoteRepository.remotes
             .map { remotes -> remotes.map { it.name } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Whether Tier 2/3 advanced options are revealed (Settings toggle, WS2.0). */
+    val showAdvanced: StateFlow<Boolean> =
+        preferences.preferences
+            .map { it.showAdvancedOptions }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     /** Guards [load] so it initialises the form exactly once. The screen calls it
      *  from a `LaunchedEffect` that re-fires whenever the editor re-enters
@@ -193,6 +202,17 @@ class SyncTaskEditViewModel @Inject constructor(
                     remoteName = prefillRemote ?: current.remoteName,
                     remotePath = prefillRemotePath ?: current.remotePath,
                 )
+            }
+            // Seed Tier-0/1 defaults from app Settings for a NEW task (WS2.0).
+            viewModelScope.launch {
+                val prefs = preferences.preferences.first()
+                _form.update {
+                    it.copy(
+                        wifiOnly = prefs.wifiOnlyByDefault,
+                        bwLimitWifi = prefs.defaultBwLimitWifi ?: it.bwLimitWifi,
+                        bwLimitMetered = prefs.defaultBwLimitMetered ?: it.bwLimitMetered,
+                    )
+                }
             }
         }
     }

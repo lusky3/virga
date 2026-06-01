@@ -24,6 +24,7 @@ class SettingsViewModel @Inject constructor(
     fun setDynamicColor(enabled: Boolean) = viewModelScope.launch { preferences.setDynamicColor(enabled) }
     fun setWifiOnly(enabled: Boolean) = viewModelScope.launch { preferences.setWifiOnlyByDefault(enabled) }
     fun setRequireCharging(enabled: Boolean) = viewModelScope.launch { preferences.setRequireChargingByDefault(enabled) }
+    fun setShowAdvancedOptions(enabled: Boolean) = viewModelScope.launch { preferences.setShowAdvancedOptions(enabled) }
     fun setDefaultBwLimits(wifi: String?, metered: String?) =
         viewModelScope.launch { preferences.setDefaultBwLimits(wifi, metered) }
 }

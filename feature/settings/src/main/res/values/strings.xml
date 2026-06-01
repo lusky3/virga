@@ -11,6 +11,7 @@
     <string name="settings_section_sync_defaults">Sync defaults</string>
     <string name="settings_toggle_wifi_only">Wi-Fi only by default</string>
     <string name="settings_toggle_require_charging">Require charging by default</string>
+    <string name="settings_toggle_show_advanced">Show advanced options in the task editor</string>
     <string name="settings_sync_defaults_hint">Applied to new sync tasks; change per-task in the editor.</string>
     <string name="settings_field_bw_metered">Default metered bandwidth limit</string>
     <string name="settings_field_bw_metered_placeholder">e.g. 1M — blank = no limit</string>

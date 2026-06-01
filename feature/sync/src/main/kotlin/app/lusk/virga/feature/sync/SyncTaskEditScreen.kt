@@ -80,6 +80,7 @@ fun SyncTaskEditScreen(
     LaunchedEffect(taskId) { viewModel.load(taskId, prefillRemote, prefillRemotePath) }
     val form by viewModel.form.collectAsStateWithLifecycle()
     val remotes by viewModel.availableRemotes.collectAsStateWithLifecycle()
+    val showAdvanced by viewModel.showAdvanced.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -298,8 +299,10 @@ fun SyncTaskEditScreen(
                 onChange = { v -> viewModel.update { f -> f.copy(deleteExtraneous = v) } },
             )
 
-            // Advanced section
-            AdvancedSection(form = form, viewModel = viewModel)
+            // Advanced section (Tier 2/3) — hidden unless the user opts in (WS2.0).
+            if (showAdvanced) {
+                AdvancedSection(form = form, viewModel = viewModel)
+            }
 
             Button(
                 onClick = { viewModel.save(onBack) },

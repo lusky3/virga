@@ -3,6 +3,8 @@ package app.lusk.virga.feature.sync
 import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.data.PendingRemoteResult
+import app.lusk.virga.core.datastore.AppPreferences
+import app.lusk.virga.core.datastore.PreferencesRepository
 import app.lusk.virga.core.data.RemoteFolderPickStore
 import app.lusk.virga.core.data.SyncTaskRepository
 import app.lusk.virga.core.common.model.Remote
@@ -37,7 +39,7 @@ class SyncTaskEditViewModelTest {
     }
     private val scheduler: SyncScheduler = mockk(relaxed = true)
 
-    private fun viewModel() = SyncTaskEditViewModel(taskRepository, remoteRepository, scheduler, RemoteFolderPickStore(), PendingRemoteResult())
+    private fun viewModel() = SyncTaskEditViewModel(taskRepository, remoteRepository, scheduler, RemoteFolderPickStore(), PendingRemoteResult(), prefsRepo())
 
     // --- pre-existing tests -------------------------------------------------
 
@@ -113,7 +115,10 @@ class SyncTaskEditViewModelTest {
         vm.load(taskId = -1)
         advanceUntilIdle()
 
-        assertThat(vm.form.value).isEqualTo(SyncTaskForm())
+        // No task is loaded (negative id). New-task defaults are seeded from app
+        // prefs (WS2.0); prefsRepo() supplies AppPreferences() whose metered bw
+        // default is "1M", so the otherwise-blank form carries that one value.
+        assertThat(vm.form.value).isEqualTo(SyncTaskForm(bwLimitMetered = "1M"))
         coVerify(exactly = 0) { taskRepository.getTask(any()) }
     }
 
@@ -439,4 +444,8 @@ class SyncTaskEditViewModelTest {
         direction = SyncDirection.UPLOAD,
         intervalMinutes = intervalMinutes,
     )
+}
+
+private fun prefsRepo(): PreferencesRepository = mockk(relaxed = true) {
+    every { preferences } returns flowOf(AppPreferences())
 }
