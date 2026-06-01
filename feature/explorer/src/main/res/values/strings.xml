@@ -30,6 +30,7 @@
 
     <!-- Sync FAB -->
     <string name="explorer_sync_folder">Sync this folder</string>
+    <string name="explorer_create_task_from_selection">Create sync task</string>
     <string name="explorer_select_folder">Select this folder</string>
 
     <!-- Item a11y content descriptions -->

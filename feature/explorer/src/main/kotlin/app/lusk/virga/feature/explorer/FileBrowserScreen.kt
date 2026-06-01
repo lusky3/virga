@@ -108,20 +108,41 @@ fun FileBrowserScreen(
         floatingActionButton = {
             val remote = state.remoteName
             if (remote != null && !state.loading && state.error == null) {
-                if (pickMode) {
-                    val pickLabel = stringResource(R.string.explorer_select_folder)
-                    ExtendedFloatingActionButton(
-                        onClick = { viewModel.pickFolder(remote, state.path); onBack() },
-                        icon = { Icon(Icons.Filled.CheckCircle, contentDescription = null) },
-                        text = { Text(pickLabel) },
-                    )
-                } else {
-                    val syncLabel = stringResource(R.string.explorer_sync_folder)
-                    ExtendedFloatingActionButton(
-                        onClick = { onSyncFolder(remote, state.path) },
-                        icon = { Icon(Icons.Filled.CloudSync, contentDescription = null) },
-                        text = { Text(syncLabel) },
-                    )
+                // Selected folders (files can't be a sync source); drives the
+                // "Create sync task from selection" action (WS2.6).
+                val selectedFolders = entries.filter { it.path in state.selectedPaths && it.isDir }
+                when {
+                    state.selectionMode && !pickMode -> {
+                        if (selectedFolders.isNotEmpty()) {
+                            val label = stringResource(R.string.explorer_create_task_from_selection)
+                            ExtendedFloatingActionButton(
+                                onClick = {
+                                    // The prefill editor takes one source folder; use the first
+                                    // selected. (Multi-folder fan-out is a future enhancement.)
+                                    onSyncFolder(remote, selectedFolders.first().path)
+                                    viewModel.clearSelection()
+                                },
+                                icon = { Icon(Icons.Filled.CloudSync, contentDescription = null) },
+                                text = { Text(label) },
+                            )
+                        }
+                    }
+                    pickMode -> {
+                        val pickLabel = stringResource(R.string.explorer_select_folder)
+                        ExtendedFloatingActionButton(
+                            onClick = { viewModel.pickFolder(remote, state.path); onBack() },
+                            icon = { Icon(Icons.Filled.CheckCircle, contentDescription = null) },
+                            text = { Text(pickLabel) },
+                        )
+                    }
+                    else -> {
+                        val syncLabel = stringResource(R.string.explorer_sync_folder)
+                        ExtendedFloatingActionButton(
+                            onClick = { onSyncFolder(remote, state.path) },
+                            icon = { Icon(Icons.Filled.CloudSync, contentDescription = null) },
+                            text = { Text(syncLabel) },
+                        )
+                    }
                 }
             }
         },
