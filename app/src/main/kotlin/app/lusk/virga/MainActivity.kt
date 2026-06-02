@@ -44,15 +44,23 @@ class MainActivity : ComponentActivity() {
      */
     private var pendingRoute by mutableStateOf<String?>(null)
 
+    /** Task id for a [NotificationDeepLinks.ROUTE_TASK] deep link (e.g. a sync notification). */
+    private var pendingTaskId by mutableStateOf(-1L)
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        pendingRoute = intent.getStringExtra(NotificationDeepLinks.EXTRA_OPEN_ROUTE)
+        readDeepLink(intent)
+    }
+
+    private fun readDeepLink(intent: Intent?) {
+        pendingRoute = intent?.getStringExtra(NotificationDeepLinks.EXTRA_OPEN_ROUTE)
+        pendingTaskId = intent?.getLongExtra(NotificationDeepLinks.EXTRA_TASK_ID, -1L) ?: -1L
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
-        pendingRoute = intent?.getStringExtra(NotificationDeepLinks.EXTRA_OPEN_ROUTE)
+        readDeepLink(intent)
         // Keep the system splash up until we know whether to show onboarding,
         // so we never flash the wrong UI on cold start.
         var ready = false
@@ -109,7 +117,8 @@ class MainActivity : ComponentActivity() {
                     complete == true || dismissed -> VirgaNavHost(
                         startAtWizard = startWizard,
                         openRoute = pendingRoute,
-                        onOpenRouteConsumed = { pendingRoute = null },
+                        openTaskId = pendingTaskId.takeIf { it > 0 },
+                        onOpenRouteConsumed = { pendingRoute = null; pendingTaskId = -1L },
                     )
                     else -> OnboardingScreen(onFinished = { startWizard = true; dismissed = true })
                 }

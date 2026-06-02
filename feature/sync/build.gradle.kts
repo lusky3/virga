@@ -31,7 +31,7 @@ dependencies {
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.hilt.navigation.compose)
-    implementation(platform(libs.compose.bom))
+    // (compose BOM is added by the virga.android.compose convention plugin)
     implementation(libs.compose.material3.adaptive.navigation)
     implementation(libs.androidx.navigation3.ui)
 

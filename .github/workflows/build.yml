@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Weekly — drives the rclone-update-check job (which guards on `schedule`).
+  schedule:
+    - cron: '0 8 * * 1'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -26,19 +29,19 @@ jobs:
     # build falls back to AGP's default debug keystore.
     environment: dev
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           # SonarCloud needs full history for accurate blame/new-code detection.
           fetch-depth: 0
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           java-version: '21'
           distribution: temurin
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.25.x'
 
@@ -50,7 +53,7 @@ jobs:
         run: sdkmanager "ndk;${NDK_VERSION}"
 
       - name: Cache rclone build
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           # Cache the compiled binaries too, not just the clone: with jniLibs
           # present the Gradle onlyIf skips the ~5-min cross-compile on a hit.
@@ -79,10 +82,12 @@ jobs:
           # injected straight into the build step's env from secrets.
           echo "VIRGA_DEBUG_KEYSTORE_FILE=$RUNNER_TEMP/keystore/debug.jks" >> "$GITHUB_ENV"
 
-      - name: Build FOSS debug APKs
+      - name: Build FOSS + Play debug APKs
         # Debug OAuth client IDs + debug-keystore signing come from the dev
         # environment so the artifact is installable with working OAuth. The
         # debug keystore password is the well-known `android`, not a real secret.
+        # Play is built too (not uploaded) so its manifest merge / flavor config
+        # regressions are caught in CI, not at release time.
         env:
           VIRGA_OAUTH_CLIENT_ID_GDRIVE: ${{ secrets.OAUTH_CLIENT_ID_GDRIVE }}
           VIRGA_OAUTH_CLIENT_ID_ONEDRIVE: ${{ secrets.OAUTH_CLIENT_ID_ONEDRIVE }}
@@ -90,7 +95,7 @@ jobs:
           VIRGA_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           VIRGA_DEBUG_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           VIRGA_DEBUG_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: ./gradlew assembleFossDebug
+        run: ./gradlew assembleFossDebug assemblePlayDebug
 
       - name: Unit tests + coverage
         # koverXmlReport runs every module's unit tests (incl. the library
@@ -135,7 +140,7 @@ jobs:
           snyk monitor --all-sub-projects || true
 
       - name: Upload APKs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: foss-debug-apks
           path: app/build/outputs/apk/foss/debug/*.apk
@@ -147,7 +152,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
       - name: GitGuardian scan

@@ -12,4 +12,10 @@ object NotificationDeepLinks {
 
     /** [EXTRA_OPEN_ROUTE] value: switch to the Settings tab. */
     const val ROUTE_SETTINGS = "settings"
+
+    /** [EXTRA_OPEN_ROUTE] value: open a task's summary; pair with [EXTRA_TASK_ID]. */
+    const val ROUTE_TASK = "task"
+
+    /** Long extra carrying the task id for [ROUTE_TASK]. */
+    const val EXTRA_TASK_ID = "app.lusk.virga.OPEN_TASK_ID"
 }

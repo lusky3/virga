@@ -116,6 +116,7 @@ private val topLevelDestinations = listOf(
 fun VirgaNavHost(
     startAtWizard: Boolean = false,
     openRoute: String? = null,
+    openTaskId: Long? = null,
     onOpenRouteConsumed: () -> Unit = {},
 ) {
     val navigationState = rememberNavigationState(
@@ -130,12 +131,19 @@ fun VirgaNavHost(
         if (startAtWizard) navigator.navigate(FirstSyncWizardRoute)
     }
 
-    // Honour a notification deep link (e.g. the watchdog "Settings" action), then
-    // tell the caller to clear it so it doesn't re-fire on the next recomposition.
-    androidx.compose.runtime.LaunchedEffect(openRoute) {
-        if (openRoute == NotificationDeepLinks.ROUTE_SETTINGS) {
-            navigator.navigate(SettingsRoute)
-            onOpenRouteConsumed()
+    // Honour a notification deep link (watchdog "Settings" action, or a sync
+    // notification tapped to open its task), then tell the caller to clear it so it
+    // doesn't re-fire on the next recomposition.
+    androidx.compose.runtime.LaunchedEffect(openRoute, openTaskId) {
+        when (openRoute) {
+            NotificationDeepLinks.ROUTE_SETTINGS -> {
+                navigator.navigate(SettingsRoute)
+                onOpenRouteConsumed()
+            }
+            NotificationDeepLinks.ROUTE_TASK -> if (openTaskId != null) {
+                navigator.navigate(TaskSummaryRoute(openTaskId))
+                onOpenRouteConsumed()
+            }
         }
     }
 

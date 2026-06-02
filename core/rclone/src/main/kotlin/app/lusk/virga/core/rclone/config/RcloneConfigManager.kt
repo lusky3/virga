@@ -58,11 +58,17 @@ class RcloneConfigManager @Inject constructor(
             if (!encryptedConf.exists()) {
                 // First run: hand the daemon an empty, writable config.
                 plaintextConf.writeText("")
+                restrictToOwner(plaintextConf)
                 return@withContext plaintextConf
             }
             encryptedFile(encryptedConf).openFileInput().use { input ->
                 plaintextConf.outputStream().use { output -> input.copyTo(output) }
             }
+            // The plaintext briefly holds tokens/passwords; tighten to owner-only so
+            // it isn't group-readable for the daemon's lifetime (defence-in-depth on
+            // top of the per-UID sandbox). The leftover (if the process is hard-killed
+            // mid-session) is deleted by the delete-then-decrypt at the top above.
+            restrictToOwner(plaintextConf)
             plaintextConf
         }
     }
@@ -124,6 +130,16 @@ class RcloneConfigManager @Inject constructor(
             // Filesystem without atomic-move support: a same-volume move is still a
             // rename (effectively atomic on Android's internal storage).
             Files.move(tmp.toPath(), encryptedConf.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        }
+    }
+
+    /** Restricts [file] to owner read/write only (clears group/other access). */
+    private fun restrictToOwner(file: File) {
+        runCatching {
+            file.setReadable(false, false)
+            file.setReadable(true, true)
+            file.setWritable(false, false)
+            file.setWritable(true, true)
         }
     }
 

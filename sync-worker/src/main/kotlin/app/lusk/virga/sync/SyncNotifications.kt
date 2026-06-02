@@ -7,17 +7,14 @@ import android.content.Intent
 import androidx.core.app.NotificationCompat
 import app.lusk.virga.core.common.model.SyncProgress
 import app.lusk.virga.core.common.notification.NotificationChannelIds
+import app.lusk.virga.core.common.notification.NotificationDeepLinks
 
 /** Builds the notifications shown during and after a sync. */
 internal class SyncNotifications(private val context: Context) {
 
     /**
      * In-progress notification for [taskName]. Includes a Cancel action and a
-     * tap-to-open content intent.
-     *
-     * TODO: deep-link the contentIntent to the specific task/run screen once
-     *   the Navigation-3 custom navigator exposes a stable deep-link URI for it.
-     *   For now we just open the app launch activity.
+     * tap-to-open content intent that deep-links to the task's summary screen.
      */
     fun progress(taskName: String, progress: SyncProgress?, taskId: Long): Notification =
         NotificationCompat.Builder(context, NotificationChannelIds.SYNC_PROGRESS)
@@ -26,7 +23,7 @@ internal class SyncNotifications(private val context: Context) {
             .setContentText(progress?.let(::progressText) ?: context.getString(R.string.notif_sync_starting))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setContentIntent(launchIntent())
+            .setContentIntent(taskContentIntent(taskId))
             .apply {
                 if (progress != null && progress.totalBytes > 0) {
                     setProgress(PROGRESS_MAX, (progress.fraction * PROGRESS_MAX).toInt(), false)
@@ -43,11 +40,7 @@ internal class SyncNotifications(private val context: Context) {
             }
             .build()
 
-    /**
-     * Completion notification for [taskName]. Tapping opens the app.
-     *
-     * TODO: deep-link to the run detail screen once Navigation-3 supports it.
-     */
+    /** Completion notification for [taskName]. Tapping opens the task's summary. */
     fun complete(taskName: String, filesTransferred: Int, taskId: Long): Notification =
         NotificationCompat.Builder(context, NotificationChannelIds.SYNC_COMPLETE)
             .setSmallIcon(android.R.drawable.stat_sys_upload_done)
@@ -58,22 +51,17 @@ internal class SyncNotifications(private val context: Context) {
                 ),
             )
             .setAutoCancel(true)
-            .setContentIntent(launchIntent())
+            .setContentIntent(taskContentIntent(taskId))
             .build()
 
-    /**
-     * Error notification for [taskName]. Includes a Retry action and tapping
-     * opens the app.
-     *
-     * TODO: deep-link to the run detail screen once Navigation-3 supports it.
-     */
+    /** Error notification for [taskName]. Includes a Retry action; tapping opens the task's summary. */
     fun error(taskName: String, message: String, taskId: Long): Notification =
         NotificationCompat.Builder(context, NotificationChannelIds.SYNC_ERROR)
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setContentTitle(context.getString(R.string.notif_sync_error_title, taskName))
             .setContentText(message)
             .setAutoCancel(true)
-            .setContentIntent(launchIntent())
+            .setContentIntent(taskContentIntent(taskId))
             .apply {
                 if (taskId > 0) {
                     addAction(
@@ -85,13 +73,26 @@ internal class SyncNotifications(private val context: Context) {
             }
             .build()
 
-    /** Returns a PendingIntent that opens the app's launch activity. Null-safe. */
-    private fun launchIntent(): PendingIntent? {
+    /**
+     * PendingIntent that opens the app and deep-links to [taskId]'s summary screen
+     * (via the launch activity + [NotificationDeepLinks] extras, which MainActivity
+     * reads). Falls back to a plain launch when [taskId] isn't a real id. Null-safe.
+     */
+    private fun taskContentIntent(taskId: Long): PendingIntent? {
         val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
             ?: return null
+        if (taskId > 0) {
+            launch.putExtra(NotificationDeepLinks.EXTRA_OPEN_ROUTE, NotificationDeepLinks.ROUTE_TASK)
+            launch.putExtra(NotificationDeepLinks.EXTRA_TASK_ID, taskId)
+            // Deliver to the running instance (onNewIntent) instead of stacking one.
+            launch.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        // Distinct request code per task so concurrent notifications don't share
+        // (and overwrite) each other's extras under FLAG_UPDATE_CURRENT.
+        val requestCode = if (taskId > 0) RC_CONTENT_BASE + taskId.toInt() else RC_LAUNCH
         return PendingIntent.getActivity(
             context,
-            RC_LAUNCH,
+            requestCode,
             launch,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
@@ -130,8 +131,11 @@ internal class SyncNotifications(private val context: Context) {
         const val RESULT_NOTIFICATION_ID = 43
 
         // Request-code bases — offset by taskId to avoid per-task collisions.
-        private const val RC_LAUNCH      = 0
+        private const val RC_LAUNCH = 0
         private const val RC_CANCEL = 0
         private const val RC_RETRY = 1
+        // Content-intent request codes get their own high base (offset by taskId) so
+        // they never collide with the launch/cancel/retry codes above.
+        private const val RC_CONTENT_BASE = 1_000_000
     }
 }
