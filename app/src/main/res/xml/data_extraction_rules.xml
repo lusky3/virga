@@ -10,6 +10,7 @@
         <include domain="file" path="." />
         <exclude domain="file" path="rclone.conf.enc" />
         <exclude domain="file" path="datastore/" />
+        <exclude domain="file" path="run_logs/" />
         <include domain="database" path="virga.db" />
         <!-- No SharedPreferences are used; exclude so a future dependency that
              quietly creates one can't get its contents backed up / transferred. -->
@@ -19,6 +20,7 @@
         <include domain="file" path="." />
         <exclude domain="file" path="rclone.conf.enc" />
         <exclude domain="file" path="datastore/" />
+        <exclude domain="file" path="run_logs/" />
         <include domain="database" path="virga.db" />
         <!-- No SharedPreferences are used; exclude so a future dependency that
              quietly creates one can't get its contents backed up / transferred. -->

@@ -29,6 +29,25 @@ interface RcloneEngine {
     suspend fun isDaemonHealthy(): Boolean
 
     /**
+     * Acquire a reference-counted lease on the shared daemon (starting it if needed)
+     * and return it. Long-lived consumers (a running sync, dry-run preview, file
+     * browser) MUST use [acquireDaemon]/[releaseDaemon] rather than [startDaemon]/
+     * [stopDaemon], so concurrent consumers don't tear down each other's daemon
+     * mid-operation. Every [acquireDaemon] must be balanced by one [releaseDaemon].
+     */
+    suspend fun acquireDaemon(): RcloneDaemon
+
+    /** Release a lease from [acquireDaemon]; stops the daemon when the last lease drops. */
+    suspend fun releaseDaemon()
+
+    /**
+     * Best-effort stop for non-leasing consumers (e.g. the file browser closing):
+     * stops the daemon ONLY if no lease is currently held, so it never tears down a
+     * daemon an active sync is using. A no-op while any lease is outstanding.
+     */
+    suspend fun stopDaemonIfIdle()
+
+    /**
      * Fetches the full provider/option schema from rclone's `config/providers`
      * endpoint. Returns an empty list on failure so callers are failure-tolerant.
      */

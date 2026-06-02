@@ -86,6 +86,10 @@ class SyncWorker @AssistedInject constructor(
 
         var last: SyncProgress? = null
         var failure: Throwable? = null
+        // Reference-counted daemon lease: a concurrent sync ("sync all" / co-scheduled
+        // tasks) must not have its daemon torn down by THIS worker's cleanup. Released
+        // only if successfully acquired.
+        var leased = false
 
         // One-way syncs are ADDITIVE (rclone `copy`) by default: they never delete
         // files on the destination. Mirroring (rclone `sync`, delete-extraneous)
@@ -97,6 +101,9 @@ class SyncWorker @AssistedInject constructor(
         val allowDeletes = task.deleteExtraneous
 
         try {
+            // Lease the shared daemon for the lifetime of this sync (released in finally).
+            engine.acquireDaemon()
+            leased = true
             // Guard: the SAF source folder couldn't be read (its persisted access
             // permission was lost). Staging is empty, so proceeding with an upload
             // mirror would DELETE the cloud destination. Fail loudly and tell the
@@ -156,7 +163,7 @@ class SyncWorker @AssistedInject constructor(
             if (t is kotlinx.coroutines.CancellationException) throw t
             failure = t
         } finally {
-            runCatching { engine.stopDaemon() }
+            if (leased) runCatching { engine.releaseDaemon() }
             runCatching { staging.cleanup(staged) }
         }
 

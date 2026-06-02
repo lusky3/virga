@@ -24,6 +24,10 @@ class VirgaApplication : Application(), Configuration.Provider {
     @Inject lateinit var preferences: PreferencesRepository
     @Inject lateinit var watchdog: WatchdogController
 
+    // Captured at Application construction (before any worker can run) so reconcile
+    // only fails runs that were already in flight before this process started.
+    private val processStartMs = System.currentTimeMillis()
+
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
@@ -37,7 +41,7 @@ class VirgaApplication : Application(), Configuration.Provider {
         // in-progress sync after a crash/force-stop.
         val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         appScope.launch {
-            runCatching { syncHistory.reconcileInterruptedRuns() }
+            runCatching { syncHistory.reconcileInterruptedRuns(processStartMs) }
         }
         // Keep the persistent watchdog in sync with its preference. Runs for the
         // app's lifetime: applies the saved state on every launch and reacts to

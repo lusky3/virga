@@ -14,6 +14,24 @@ RCLONE_COMMIT="${RCLONE_COMMIT:-b22fe9811c672e4d226ae2c054d7c965d8783805}"
 NDK_VERSION="${NDK_VERSION:-27.2.12479018}"
 MIN_SDK="${MIN_SDK:-26}"
 
+# The Go stdlib is statically linked into the shipped librclone.so, so its
+# vulnerabilities (crypto/tls, crypto/x509, net, net/http resource-exhaustion /
+# double-free / infinite-loop CVEs) are fixed ONLY by the compiler version, not by
+# the rclone tag. Refuse to build with a toolchain older than the first patched
+# release so a stale Go can't bake known-vulnerable stdlib into the binary.
+MIN_GO_VERSION="${MIN_GO_VERSION:-1.25.10}"
+GO_VERSION="$(go env GOVERSION 2>/dev/null | sed 's/^go//')"
+if [[ -z "$GO_VERSION" ]]; then
+  echo "ERROR: Go not found on PATH (need >= $MIN_GO_VERSION)." >&2
+  exit 1
+fi
+if [[ "$(printf '%s\n%s\n' "$MIN_GO_VERSION" "$GO_VERSION" | sort -V | head -n1)" != "$MIN_GO_VERSION" ]]; then
+  echo "ERROR: Go $GO_VERSION is older than the required $MIN_GO_VERSION." >&2
+  echo "       Older toolchains link known-vulnerable Go stdlib into librclone.so. Upgrade Go." >&2
+  exit 1
+fi
+echo ">> Go $GO_VERSION (>= $MIN_GO_VERSION) OK"
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ANDROID_SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/android-sdk}}"
 NDK="$ANDROID_SDK/ndk/$NDK_VERSION"

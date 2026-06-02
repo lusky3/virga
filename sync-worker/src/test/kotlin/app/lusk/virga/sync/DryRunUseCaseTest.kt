@@ -47,7 +47,7 @@ class DryRunUseCaseTest {
         assertThat(result.filesToTransfer).isEqualTo(7)
         assertThat(result.bytesToTransfer).isEqualTo(2048L)
         assertThat(result.error).isNull()
-        coVerify { engine.stopDaemon() }
+        coVerify { engine.releaseDaemon() }
     }
 
     @Test

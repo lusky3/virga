@@ -84,10 +84,19 @@ class RemotesViewModel @Inject constructor(
      * subsequent calls are no-ops once the value is set. Failures leave the
      * value as an empty list so the UI can detect them and fall back gracefully.
      */
+    // Guards against two concurrent ensureProvidersLoaded() calls each launching a
+    // providers() fetch (and starting/reusing the daemon twice). Main-confined.
+    private var providersLoading = false
+
     fun ensureProvidersLoaded() {
-        if (_providers.value != null) return
+        if (_providers.value != null || providersLoading) return
+        providersLoading = true
         viewModelScope.launch {
-            _providers.value = repository.providers()
+            try {
+                _providers.value = repository.providers()
+            } finally {
+                providersLoading = false
+            }
         }
     }
 
@@ -147,12 +156,12 @@ class RemotesViewModel @Inject constructor(
         quotaAttempted.clear()
         _quotaState.update { QuotaState(epoch = it.epoch + 1) }
         viewModelScope.launch {
-            transient.value = transient.value.copy(refreshing = true)
+            transient.update { it.copy(refreshing = true) }
             val result = repository.refresh()
-            transient.value = TransientState(
-                refreshing = false,
-                message = result.exceptionOrNull()?.toUserMessage(),
-            )
+            // update {} (not a fresh TransientState) so a concurrent startOAuth's
+            // oauthInProgress set during repository.refresh()'s suspension isn't
+            // clobbered when this resumes.
+            transient.update { it.copy(refreshing = false, message = result.exceptionOrNull()?.toUserMessage()) }
         }
     }
 
@@ -381,10 +390,18 @@ class RemotesViewModel @Inject constructor(
                 // state) is a no-op against an unrelated pending flow.
                 val state = result.state
                 if (state != null && oauthStore.consume(state) != null) {
-                    transient.value = transient.value.copy(
-                        oauthInProgress = false,
-                        message = context.getString(R.string.remotes_msg_sign_in_failed, result.message),
-                    )
+                    transient.update {
+                        it.copy(
+                            oauthInProgress = false,
+                            message = context.getString(R.string.remotes_msg_sign_in_failed, result.message),
+                        )
+                    }
+                } else {
+                    // Unmatched / state-less error (e.g. a fabricated redirect injected
+                    // by another app). Don't disturb the pending auth — the genuine
+                    // redirect still completes via the Success path — but clear the
+                    // spinner so a stuck oauthInProgress can't trap the UI forever.
+                    transient.update { it.copy(oauthInProgress = false) }
                 }
             }
             is OAuthResult.Success -> {

@@ -124,9 +124,10 @@ interface SyncRunDao {
      */
     @Query(
         "UPDATE sync_runs SET status = 'FAILED', endedAtEpochMs = :now, " +
-            "errorCount = errorCount + 1, errorMessage = :message WHERE status = 'RUNNING'",
+            "errorCount = errorCount + 1, errorMessage = :message " +
+            "WHERE status = 'RUNNING' AND startedAtEpochMs < :startedBefore",
     )
-    suspend fun failInterruptedRuns(now: Long, message: String): Int
+    suspend fun failInterruptedRuns(now: Long, message: String, startedBefore: Long): Int
 
     @Query("DELETE FROM sync_runs")
     suspend fun deleteAll()

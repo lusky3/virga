@@ -35,7 +35,10 @@ class DryRunUseCase @Inject constructor(
     suspend fun preview(task: SyncTask): DryRunResult {
         var last: SyncProgress? = null
         var error: String? = null
+        var leased = false
         try {
+            engine.acquireDaemon()
+            leased = true
             executor.run(
                 task = task,
                 metered = false,
@@ -45,10 +48,11 @@ class DryRunUseCase @Inject constructor(
                 .catch { error = it.message ?: "Preview failed" }
                 .collect { last = it }
         } finally {
-            // Stop the daemon even if the caller's scope was cancelled (e.g. the
-            // user navigated away mid-preview); stopDaemon() suspends, so run it
+            // Release even if the caller's scope was cancelled (e.g. the user
+            // navigated away mid-preview); releaseDaemon() suspends, so run it
             // NonCancellable or it would no-op on an already-cancelled coroutine.
-            withContext(NonCancellable) { runCatching { engine.stopDaemon() } }
+            // Reference-counted, so it won't tear down a concurrent sync's daemon.
+            if (leased) withContext(NonCancellable) { runCatching { engine.releaseDaemon() } }
         }
         // In --dry-run, rclone transfers nothing, so "transferred" stats stay 0;
         // the PLANNED change-set is in the total* fields.

@@ -18,6 +18,10 @@ class FileBrowserRepository @Inject constructor(
     suspend fun list(remoteName: String, path: String): List<FileItem> =
         engine.listDir("$remoteName:", path)
 
-    /** Releases the shared rclone daemon when browsing no longer needs it. */
-    suspend fun releaseDaemon() = engine.stopDaemon()
+    /**
+     * Releases the daemon when browsing closes — best-effort: stops it only if no
+     * sync is currently leasing it (the browser is a non-leasing consumer using the
+     * warm daemon), so closing the browser can't kill an in-flight sync.
+     */
+    suspend fun releaseDaemon() = engine.stopDaemonIfIdle()
 }

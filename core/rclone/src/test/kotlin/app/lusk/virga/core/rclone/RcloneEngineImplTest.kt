@@ -97,6 +97,43 @@ class RcloneEngineImplTest {
         coVerify { configManager.persistAndCleanup() }
     }
 
+    // --- lease (acquire/release) reference counting ---
+
+    @Test fun `daemon survives until the last lease is released`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.persistAndCleanup() } returns Unit
+
+        // Two concurrent consumers (e.g. two SyncWorkers) lease the shared daemon.
+        engine.acquireDaemon()
+        engine.acquireDaemon()
+
+        // First release must NOT stop the daemon the second consumer is still using.
+        engine.releaseDaemon()
+        coVerify(exactly = 0) { daemonManager.stop(fakeDaemon) }
+
+        // Last release tears it down exactly once.
+        engine.releaseDaemon()
+        coVerify(exactly = 1) { daemonManager.stop(fakeDaemon) }
+    }
+
+    @Test fun `stopDaemonIfIdle does not stop a leased daemon`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.persistAndCleanup() } returns Unit
+
+        engine.acquireDaemon()          // a sync holds a lease
+        engine.stopDaemonIfIdle()       // browser closing — must be a no-op
+        coVerify(exactly = 0) { daemonManager.stop(fakeDaemon) }
+
+        engine.releaseDaemon()          // sync done -> now it stops
+        coVerify(exactly = 1) { daemonManager.stop(fakeDaemon) }
+    }
+
     // --- isDaemonHealthy ---
 
     @Test fun `isDaemonHealthy returns false when daemon is null`() = runTest(testDispatcher) {
@@ -512,13 +549,16 @@ class RcloneEngineImplTest {
 
     // --- importConfig ---
 
-    @Test fun `importConfig stops daemon and delegates to configManager`() = runTest(testDispatcher) {
+    @Test fun `importConfig replaces config without re-persisting the old one`() = runTest(testDispatcher) {
         coEvery { daemonManager.stop(any()) } returns Unit
-        coEvery { configManager.persistAndCleanup() } returns Unit
+        coEvery { configManager.cleanup() } returns Unit
         coEvery { configManager.import(any()) } returns Unit
 
         engine.importConfig("[gdrive]\ntype=drive\n")
 
         coVerify { configManager.import("[gdrive]\ntype=drive\n") }
+        // Must NOT re-encrypt the old plaintext over the freshly imported config
+        // (the old delete-then-write could clobber the import under a concurrent start).
+        coVerify(exactly = 0) { configManager.persistAndCleanup() }
     }
 }

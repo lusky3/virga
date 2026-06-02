@@ -5,4 +5,7 @@
 <full-backup-content>
     <exclude domain="file" path="rclone.conf.enc" />
     <exclude domain="file" path="datastore/" />
+    <!-- Per-run sync logs record local folder paths + remote names; no reason to
+         ship that operational metadata to cloud backup / device transfer. -->
+    <exclude domain="file" path="run_logs/" />
 </full-backup-content>

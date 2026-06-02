@@ -67,10 +67,15 @@ class OAuthRedirectActivity : ComponentActivity() {
         }
     }
 
-    /** True only for Virga's real OAuth redirect origins (matches the manifest filters). */
+    /**
+     * True only for Virga's real OAuth redirect origins — scheme, host AND path must
+     * match the manifest filters. The path check matters because this activity is
+     * exported: another app can send an explicit intent (bypassing the filters), and
+     * without it a crafted `https://lusk.app/anything` would be accepted.
+     */
     private fun isExpectedRedirect(uri: Uri): Boolean {
         val scheme = uri.scheme?.lowercase()
-        return (scheme == "https" && uri.host == "lusk.app") ||
-            (scheme?.startsWith("com.googleusercontent.apps.") == true)
+        return (scheme == "https" && uri.host == "lusk.app" && uri.path == "/virga/oauth/callback") ||
+            (scheme?.startsWith("com.googleusercontent.apps.") == true && uri.path == "/oauth2redirect")
     }
 }

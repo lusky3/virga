@@ -65,10 +65,17 @@ class SyncHistoryRepository @Inject constructor(
     /**
      * Reconcile runs left RUNNING by a worker that died mid-run (process death /
      * force-stop, where the finally never executed). Marks them FAILED. Call once
-     * at app startup. Returns the number of rows reconciled.
+     * at app startup, passing [startedBeforeEpochMs] = the process-start time, so a
+     * worker that legitimately started a fresh run *during* startup (WorkManager can
+     * resume workers before Application.onCreate finishes) is NOT mis-marked FAILED.
+     * Returns the number of rows reconciled.
      */
-    suspend fun reconcileInterruptedRuns(): Int =
-        runDao.failInterruptedRuns(System.currentTimeMillis(), "Interrupted (app stopped mid-sync)")
+    suspend fun reconcileInterruptedRuns(startedBeforeEpochMs: Long): Int =
+        runDao.failInterruptedRuns(
+            now = System.currentTimeMillis(),
+            message = "Interrupted (app stopped mid-sync)",
+            startedBefore = startedBeforeEpochMs,
+        )
 
     suspend fun clearAll() = runDao.deleteAll()
 }

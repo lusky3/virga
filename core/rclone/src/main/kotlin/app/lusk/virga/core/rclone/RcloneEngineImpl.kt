@@ -52,7 +52,37 @@ class RcloneEngineImpl @Inject constructor(
     private val lock = Mutex()
     @Volatile private var daemon: RcloneDaemon? = null
 
+    // Reference count of active long-lived consumers (syncs, dry-run, file browser).
+    // The daemon is torn down only when the last lease is released, so one sync's
+    // completion can't kill a daemon another concurrent sync is still using.
+    // Guarded by [lock].
+    private var leases = 0
+
     override suspend fun startDaemon(): RcloneDaemon = lock.withLock { ensureDaemonLocked() }
+
+    override suspend fun acquireDaemon(): RcloneDaemon = lock.withLock {
+        val d = ensureDaemonLocked()  // increment only after a successful start
+        leases++
+        d
+    }
+
+    override suspend fun releaseDaemon() = lock.withLock {
+        if (leases > 0) leases--
+        if (leases == 0) {
+            daemon?.let { daemonManager.stop(it) }
+            daemon = null
+            configManager.persistAndCleanup()
+        }
+    }
+
+    override suspend fun stopDaemonIfIdle() = lock.withLock {
+        // Don't disturb a daemon a leased consumer (an active sync) is using.
+        if (leases == 0) {
+            daemon?.let { daemonManager.stop(it) }
+            daemon = null
+            configManager.persistAndCleanup()
+        }
+    }
 
     /**
      * Start-or-reuse the daemon. MUST be called while holding [lock]: the
@@ -142,8 +172,7 @@ class RcloneEngineImpl @Inject constructor(
         type: String,
         params: Map<String, String>,
     ) {
-        mutatingConfig {
-            val d = ensureDaemon()
+        mutatingConfig { d ->
             rc(d, "config/create", buildJsonObject {
                 put("name", name)
                 put("type", type)
@@ -179,8 +208,7 @@ class RcloneEngineImpl @Inject constructor(
         password: String,
         salt: String?,
     ) {
-        mutatingConfig {
-            val d = ensureDaemon()
+        mutatingConfig { d ->
             rc(d, "config/create", buildJsonObject {
                 put("name", name)
                 put("type", "crypt")
@@ -202,14 +230,19 @@ class RcloneEngineImpl @Inject constructor(
     }
 
     override suspend fun deleteRemote(name: String) {
-        mutatingConfig {
-            val d = ensureDaemon()
+        mutatingConfig { d ->
             rc(d, "config/delete", buildJsonObject { put("name", name) })
         }
     }
 
-    override suspend fun importConfig(confContent: String) {
-        stopDaemon()
+    override suspend fun importConfig(confContent: String) = lock.withLock {
+        // Atomic under [lock]: stop the daemon and replace the config without a gap
+        // where a concurrent ensureDaemon could start with the OLD config and then
+        // clobber the import on its next persist. Discard (not persist) the old
+        // plaintext — we're overwriting it with the imported config.
+        daemon?.let { daemonManager.stop(it) }
+        daemon = null
+        configManager.cleanup()
         configManager.import(confContent)
     }
 
@@ -424,17 +457,27 @@ class RcloneEngineImpl @Inject constructor(
      * never leave decrypted OAuth tokens on disk, and the daemon never keeps
      * serving a config that no longer exists.
      */
-    private suspend fun mutatingConfig(block: suspend () -> Unit) {
-        var ok = false
-        try {
-            block()
-            ok = true
-        } finally {
-            lock.withLock {
-                daemon?.let { daemonManager.stop(it) }
+    /**
+     * Runs a config-mutating RC call ([block]) and then re-persists + reloads the
+     * config (stop daemon → encrypt the daemon-written plaintext). The whole thing
+     * holds [lock] so no concurrent [ensureDaemon] can interleave during the mutation
+     * (which previously left a window where a reader got a daemon being torn down).
+     * [block] receives the daemon directly — it must NOT re-acquire [lock] (the Mutex
+     * is non-reentrant), which is why callers use the passed `d` rather than
+     * [ensureDaemon].
+     */
+    private suspend fun mutatingConfig(block: suspend (RcloneDaemon) -> Unit) {
+        lock.withLock {
+            val d = ensureDaemonLocked()
+            var ok = false
+            try {
+                block(d)
+                ok = true
+            } finally {
+                daemonManager.stop(d)
                 daemon = null
+                if (ok) configManager.persistAndCleanup() else runCatching { configManager.cleanup() }
             }
-            if (ok) configManager.persistAndCleanup() else runCatching { configManager.cleanup() }
         }
     }
 
