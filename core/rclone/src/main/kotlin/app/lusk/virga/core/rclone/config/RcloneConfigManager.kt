@@ -9,6 +9,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -69,9 +71,7 @@ class RcloneConfigManager @Inject constructor(
     suspend fun persistAndCleanup() = withContext(dispatchers.io) {
         ioLock.withLock {
             if (plaintextConf.exists()) {
-                val bytes = plaintextConf.readBytes()
-                if (encryptedConf.exists()) encryptedConf.delete()
-                encryptedFile(encryptedConf).openFileOutput().use { it.write(bytes) }
+                writeEncryptedAtomically(plaintextConf.readBytes())
                 plaintextConf.delete()
             }
         }
@@ -87,8 +87,7 @@ class RcloneConfigManager @Inject constructor(
     /** Imports an external rclone.conf, encrypting it into place. */
     suspend fun import(confContent: String) = withContext(dispatchers.io) {
         ioLock.withLock {
-            if (encryptedConf.exists()) encryptedConf.delete()
-            encryptedFile(encryptedConf).openFileOutput().use { it.write(confContent.toByteArray()) }
+            writeEncryptedAtomically(confContent.toByteArray())
         }
     }
 
@@ -101,6 +100,32 @@ class RcloneConfigManager @Inject constructor(
     }
 
     suspend fun hasConfig(): Boolean = withContext(dispatchers.io) { encryptedConf.exists() }
+
+    /**
+     * Encrypts [bytes] into [encryptedConf] without ever leaving it half-written:
+     * write to a temp file, then atomically replace. The previous ciphertext stays
+     * intact until the new one is durable, so a Keystore/disk failure mid-write can't
+     * destroy the credential store (the old delete-then-write did exactly that).
+     * Decryptability is path-independent — the master key is Keystore-bound — so the
+     * rename preserves it (same property the legacy-path migration above relies on).
+     */
+    private fun writeEncryptedAtomically(bytes: ByteArray) {
+        val tmp = File(encryptedConf.parentFile, "${encryptedConf.name}.tmp")
+        if (tmp.exists()) tmp.delete()
+        encryptedFile(tmp).openFileOutput().use { it.write(bytes) }
+        runCatching {
+            Files.move(
+                tmp.toPath(),
+                encryptedConf.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+        }.getOrElse {
+            // Filesystem without atomic-move support: a same-volume move is still a
+            // rename (effectively atomic on Android's internal storage).
+            Files.move(tmp.toPath(), encryptedConf.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        }
+    }
 
     private fun encryptedFile(file: File): EncryptedFile =
         EncryptedFile.Builder(

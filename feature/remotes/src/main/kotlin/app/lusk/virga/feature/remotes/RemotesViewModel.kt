@@ -42,6 +42,11 @@ data class RemotesUiState(
     val customClientIds: Map<String, String> = emptyMap(),
     /** remoteName → quota; absent means not yet fetched or unsupported. */
     val quotas: Map<String, RemoteQuota> = emptyMap(),
+    /** Remotes whose quota fetch is currently in flight — show a loading bar. */
+    val quotaLoading: Set<String> = emptySet(),
+    /** Bumped by [RemotesViewModel.refresh]; cards key their quota fetch on it so
+     *  a pull-to-refresh re-fires the lazy fetch even though the card stays composed. */
+    val quotaEpoch: Int = 0,
 )
 
 @HiltViewModel
@@ -112,7 +117,15 @@ class RemotesViewModel @Inject constructor(
     }
 
     private val transient = MutableStateFlow(TransientState())
-    private val _quotas = MutableStateFlow<Map<String, RemoteQuota>>(emptyMap())
+
+    /** Quota fetch results, in-flight set, and the refresh epoch, kept in one flow
+     *  so [combineState] stays within the 5-argument [combine] overload. */
+    private data class QuotaState(
+        val quotas: Map<String, RemoteQuota> = emptyMap(),
+        val loading: Set<String> = emptySet(),
+        val epoch: Int = 0,
+    )
+    private val _quotaState = MutableStateFlow(QuotaState())
 
     /** Remotes whose quota fetch has been STARTED (regardless of outcome), so a
      *  failing/offline remote isn't re-fetched every time its card scrolls back
@@ -129,9 +142,10 @@ class RemotesViewModel @Inject constructor(
 
     fun refresh() {
         // Allow quotas to be re-fetched on an explicit refresh (clears the
-        // once-per-lifetime guard so offline remotes get another chance).
+        // once-per-lifetime guard so offline remotes get another chance) and bump
+        // the epoch so each card's LaunchedEffect re-fires fetchQuota.
         quotaAttempted.clear()
-        _quotas.value = emptyMap()
+        _quotaState.update { QuotaState(epoch = it.epoch + 1) }
         viewModelScope.launch {
             transient.value = transient.value.copy(refreshing = true)
             val result = repository.refresh()
@@ -274,10 +288,15 @@ class RemotesViewModel @Inject constructor(
      */
     fun fetchQuota(remoteName: String) {
         if (!quotaAttempted.add(remoteName)) return
+        _quotaState.update { it.copy(loading = it.loading + remoteName) }
         viewModelScope.launch {
             val result = repository.about(remoteName)
-            result.getOrNull()?.let { quota ->
-                _quotas.update { it + (remoteName to quota) }
+            _quotaState.update { s ->
+                val quota = result.getOrNull()
+                s.copy(
+                    quotas = if (quota != null) s.quotas + (remoteName to quota) else s.quotas,
+                    loading = s.loading - remoteName,
+                )
             }
         }
     }
@@ -289,14 +308,16 @@ class RemotesViewModel @Inject constructor(
     )
 
     private fun combineState(): StateFlow<RemotesUiState> =
-        combine(repository.remotes, transient, oauthKeyStore.clientIds, _quotas) { remotes, t, customIds, quotas ->
+        combine(repository.remotes, transient, oauthKeyStore.clientIds, _quotaState) { remotes, t, customIds, quota ->
             RemotesUiState(
                 remotes = remotes,
                 refreshing = t.refreshing,
                 oauthInProgress = t.oauthInProgress,
                 message = t.message,
                 customClientIds = customIds,
-                quotas = quotas,
+                quotas = quota.quotas,
+                quotaLoading = quota.loading,
+                quotaEpoch = quota.epoch,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RemotesUiState())
 

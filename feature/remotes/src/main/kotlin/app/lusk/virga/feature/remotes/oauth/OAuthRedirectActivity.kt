@@ -1,6 +1,7 @@
 package app.lusk.virga.feature.remotes.oauth
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import app.lusk.virga.core.rclone.oauth.OAuthResult
@@ -50,10 +51,12 @@ class OAuthRedirectActivity : ComponentActivity() {
     }
 
     private fun handle(intent: Intent?) {
-        val uri = intent?.data ?: run {
-            store.emit(OAuthResult.Error(state = null, message = "Empty OAuth redirect"))
-            return
-        }
+        val uri = intent?.data
+        // The activity is exported (the App Link / custom-scheme filters require it),
+        // so any app can send it an explicit intent. Ignore anything that isn't a
+        // genuine OAuth redirect origin rather than emitting to the store — otherwise
+        // a fabricated intent could cancel an in-flight authorization (DoS).
+        if (uri == null || !isExpectedRedirect(uri)) return
         val state = uri.getQueryParameter("state")
         val code = uri.getQueryParameter("code")
         val error = uri.getQueryParameter("error")
@@ -62,5 +65,12 @@ class OAuthRedirectActivity : ComponentActivity() {
             code != null && state != null -> store.emit(OAuthResult.Success(state = state, code = code))
             else -> store.emit(OAuthResult.Error(state, message = "Malformed OAuth redirect"))
         }
+    }
+
+    /** True only for Virga's real OAuth redirect origins (matches the manifest filters). */
+    private fun isExpectedRedirect(uri: Uri): Boolean {
+        val scheme = uri.scheme?.lowercase()
+        return (scheme == "https" && uri.host == "lusk.app") ||
+            (scheme?.startsWith("com.googleusercontent.apps.") == true)
     }
 }

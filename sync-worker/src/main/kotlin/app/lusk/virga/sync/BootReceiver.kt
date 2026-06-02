@@ -3,12 +3,14 @@ package app.lusk.virga.sync
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import app.lusk.virga.core.datastore.PreferencesRepository
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 
@@ -28,6 +30,8 @@ class BootReceiver : BroadcastReceiver() {
     @InstallIn(SingletonComponent::class)
     interface BootReceiverEntryPoint {
         fun scheduler(): SyncScheduler
+        fun preferences(): PreferencesRepository
+        fun watchdog(): WatchdogController
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -36,11 +40,11 @@ class BootReceiver : BroadcastReceiver() {
         ) {
             return
         }
-        val scheduler = runCatching {
+        val entryPoint = runCatching {
             EntryPointAccessors.fromApplication(
                 context.applicationContext,
                 BootReceiverEntryPoint::class.java,
-            ).scheduler()
+            )
         }.getOrNull() ?: return
 
         val pending = goAsync()
@@ -48,7 +52,15 @@ class BootReceiver : BroadcastReceiver() {
             try {
                 // Bound the work to the goAsync() window (~10s) so a hung
                 // rescheduleAll() can't blow past it; reschedule retries next boot.
-                withTimeout(8_000) { scheduler.rescheduleAll() }
+                withTimeout(8_000) {
+                    entryPoint.scheduler().rescheduleAll()
+                    // Re-arm the persistent watchdog if the user enabled it. BOOT_COMPLETED
+                    // grants the background foreground-service-start exemption, so this is
+                    // the reliable place to start it after a reboot.
+                    if (entryPoint.preferences().preferences.first().watchdogEnabled) {
+                        entryPoint.watchdog().setEnabled(true)
+                    }
+                }
             } catch (_: Exception) {
                 // Timed out or failed — safe to ignore; rescheduled on next boot/launch.
             } finally {

@@ -36,6 +36,31 @@ abstract class VirgaDatabase : RoomDatabase() {
         const val NAME = "virga.db"
 
         /**
+         * v1 → v2: add the `conflicts` table (bisync conflict tracking). Additive;
+         * no existing data is touched. DDL matches schemas/2.json verbatim.
+         */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `conflicts` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`taskId` INTEGER NOT NULL, `remoteName` TEXT NOT NULL, " +
+                        "`basePath` TEXT NOT NULL, `variant1Path` TEXT NOT NULL, " +
+                        "`variant2Path` TEXT NOT NULL, `variant1Size` INTEGER NOT NULL, " +
+                        "`variant2Size` INTEGER NOT NULL, `detectedAtEpochMs` INTEGER NOT NULL, " +
+                        "`resolved` INTEGER NOT NULL, " +
+                        "FOREIGN KEY(`taskId`) REFERENCES `sync_tasks`(`id`) " +
+                        "ON UPDATE NO ACTION ON DELETE CASCADE )",
+                )
+                connection.execSQL("CREATE INDEX IF NOT EXISTS `index_conflicts_taskId` ON `conflicts` (`taskId`)")
+                connection.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_conflicts_remoteName_basePath` " +
+                        "ON `conflicts` (`remoteName`, `basePath`)",
+                )
+            }
+        }
+
+        /**
          * v2 → v3: add the calendar-schedule columns to sync_tasks (day-of-week
          * bitmask + time-of-day). Additive only — existing rows default to 0/9/0
          * (no calendar schedule), preserving all data.

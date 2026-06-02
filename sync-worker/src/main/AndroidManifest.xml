@@ -21,5 +21,29 @@
             android:name=".SyncActionReceiver"
             android:enabled="true"
             android:exported="false" />
+
+        <!--
+            Optional persistent watchdog (off by default). FGS type `specialUse`:
+            a periodic keep-alive babysitter fits no other type. The <property>
+            subtype is required on API 34+.
+
+            FLAVOR NOTE: if Play rejects `specialUse`, move this <service> + the
+            FOREGROUND_SERVICE_SPECIAL_USE permission to an app/src/foss/ manifest.
+        -->
+        <service
+            android:name=".WatchdogService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps user-configured scheduled file syncs reliable on devices that aggressively kill background apps; no other foreground-service type fits a periodic keep-alive." />
+        </service>
+
+        <!-- Heartbeat alarm target for the watchdog; explicit PendingIntent only. -->
+        <receiver
+            android:name=".WatchdogReceiver"
+            android:enabled="true"
+            android:exported="false" />
     </application>
 </manifest>

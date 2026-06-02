@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -69,9 +70,25 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     }
 
     var showHowItWorksDialog by remember { mutableStateOf(false) }
+    var showLicensesDialog by remember { mutableStateOf(false) }
+
+    // Opens an external URL, falling back to a snackbar when no browser is present.
+    val openUrl: (String) -> Unit = { url ->
+        runCatching {
+            context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
+        }.onFailure {
+            scope.launch { snackbarHostState.showSnackbar(noBrowserMsg) }
+        }
+    }
 
     if (showHowItWorksDialog) {
         HowVirgaWorksDialog(onDismiss = { showHowItWorksDialog = false })
+    }
+    if (showLicensesDialog) {
+        AcknowledgementsDialog(
+            onOpenUrl = openUrl,
+            onDismiss = { showLicensesDialog = false },
+        )
     }
 
     Scaffold(
@@ -179,6 +196,16 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 stringResource(R.string.settings_battery_hint),
                 style = MaterialTheme.typography.bodySmall,
             )
+            ToggleRow(
+                label = stringResource(R.string.settings_toggle_watchdog),
+                checked = prefs.watchdogEnabled,
+                onChange = viewModel::setWatchdog,
+            )
+            Text(
+                stringResource(R.string.settings_watchdog_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = {
                     runCatching {
@@ -221,6 +248,15 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             ) {
                 Text(
                     stringResource(R.string.settings_item_rclone_docs),
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            TextButton(
+                onClick = { showLicensesDialog = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    stringResource(R.string.settings_item_licenses),
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -302,6 +338,69 @@ private fun HowVirgaWorksDialog(onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.settings_how_virga_works_title)) },
         text = { Text(stringResource(R.string.settings_how_virga_works_body)) },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.settings_dialog_ok))
+            }
+        },
+    )
+}
+
+/** A bundled or linked open-source dependency, shown in the acknowledgements modal. */
+private data class OssLibrary(val name: String, val license: String, val url: String)
+
+/**
+ * Curated from Virga's actual *runtime* dependencies (test/build-only tooling is
+ * intentionally excluded). Keep in sync with the version catalog when shipping
+ * dependencies change. Names/licenses are proper nouns, so they live in code
+ * rather than strings.xml.
+ */
+private val AcknowledgedLibraries: List<OssLibrary> = listOf(
+    OssLibrary("rclone", "MIT License", "https://rclone.org/"),
+    OssLibrary("Manrope (display font)", "SIL Open Font License 1.1", "https://fonts.google.com/specimen/Manrope"),
+    OssLibrary("AndroidX & Jetpack libraries", "Apache License 2.0", "https://developer.android.com/jetpack"),
+    OssLibrary("Jetpack Compose", "Apache License 2.0", "https://developer.android.com/jetpack/compose"),
+    OssLibrary("Material Components for Android", "Apache License 2.0", "https://github.com/material-components/material-components-android"),
+    OssLibrary("Dagger & Hilt", "Apache License 2.0", "https://dagger.dev/hilt/"),
+    OssLibrary("Kotlin", "Apache License 2.0", "https://kotlinlang.org/"),
+    OssLibrary("Kotlin Coroutines", "Apache License 2.0", "https://github.com/Kotlin/kotlinx.coroutines"),
+    OssLibrary("kotlinx.serialization", "Apache License 2.0", "https://github.com/Kotlin/kotlinx.serialization"),
+    OssLibrary("OkHttp", "Apache License 2.0", "https://square.github.io/okhttp/"),
+    OssLibrary("Bcrypt (favre)", "Apache License 2.0", "https://github.com/patrickfav/bcrypt"),
+)
+
+@Composable
+private fun AcknowledgementsDialog(onOpenUrl: (String) -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_licenses_title)) },
+        text = {
+            Column(
+                Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    stringResource(R.string.settings_licenses_intro),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                AcknowledgedLibraries.forEach { lib ->
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onOpenUrl(lib.url) }
+                            .padding(vertical = 4.dp),
+                    ) {
+                        Text(lib.name, style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            lib.license,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        },
         confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.settings_dialog_ok))

@@ -166,6 +166,27 @@ class PreferencesRepositoryTest {
         }
     }
 
+    // --- setWatchdogEnabled ---
+
+    @Test fun `watchdogEnabled defaults to false`() = testScope.runTest {
+        val repo = createRepo()
+        repo.preferences.test {
+            assertThat(awaitItem().watchdogEnabled).isFalse()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `setWatchdogEnabled true is persisted`() = testScope.runTest {
+        val repo = createRepo()
+
+        repo.setWatchdogEnabled(true)
+
+        repo.preferences.test {
+            assertThat(awaitItem().watchdogEnabled).isTrue()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
     // --- invalid ThemeMode name stored externally ---
 
     @Test fun `unknown theme mode string stored externally falls back to SYSTEM`() = testScope.runTest {

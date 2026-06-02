@@ -362,7 +362,7 @@ class RcloneEngineImpl @Inject constructor(
                 val success = status["success"]?.jsonPrimitive?.booleanOrNull ?: false
                 if (!success) {
                     val err = status["error"]?.jsonPrimitive?.contentOrNull ?: "sync failed"
-                    throw VirgaError.Rclone(message = err)
+                    throw classifyJobError(err)
                 }
                 // Fetch final stats once on completion for accurate counters.
                 emit(rc(d, "core/stats", buildJsonObject { put("group", group) }).toSyncProgress())
@@ -384,6 +384,25 @@ class RcloneEngineImpl @Inject constructor(
             delay(POLL_INTERVAL_MS)
         }
     }.flowOn(dispatchers.io)
+
+    /**
+     * Classifies a finished-job error string. Transient transport failures become
+     * [VirgaError.Network] so the worker retries (the previous blanket
+     * [VirgaError.Rclone] never retried). Everything else stays [VirgaError.Rclone]
+     * carrying the original rclone text, which [toUserMessage] now surfaces verbatim
+     * (e.g. "directory not found", quota, or token errors) instead of a generic line.
+     * Only textual markers are matched — bare HTTP-code substrings would false-match
+     * byte counts.
+     */
+    private fun classifyJobError(err: String): VirgaError {
+        val lower = err.lowercase()
+        val transient = listOf(
+            "timeout", "timed out", "deadline exceeded", "connection reset",
+            "connection refused", "no such host", "temporarily", "try again",
+            "too many requests", "i/o timeout", "broken pipe",
+        )
+        return if (transient.any { it in lower }) VirgaError.Network(err) else VirgaError.Rclone(message = err)
+    }
 
     private fun JsonObject.toSyncProgress(): SyncProgress = SyncProgress(
         bytesTransferred = this["bytes"]?.jsonPrimitive?.longOrNull ?: 0L,

@@ -79,6 +79,9 @@ data class SyncTaskForm(
     val sourcePathTouched: Boolean = false,
     val remoteNameTouched: Boolean = false,
     val submitAttempted: Boolean = false,
+    /** Original creation time for an existing task; 0 for a new one. Preserved on
+     *  save so editing a task doesn't reset its creation timestamp. */
+    val createdAtEpochMs: Long = 0L,
 ) {
     val nameError: String? get() =
         if ((nameTouched || submitAttempted) && name.isBlank()) "Name is required" else null
@@ -211,6 +214,7 @@ class SyncTaskEditViewModel @Inject constructor(
                         maxDelete = task.maxDelete,
                         maxDeleteText = task.maxDelete?.toString() ?: "",
                         extraConfig = task.extraConfig,
+                        createdAtEpochMs = task.createdAtEpochMs,
                         directionError = if (isSaf && task.direction == SyncDirection.BISYNC) BISYNC_SAF_ERROR else null,
                     )
                 }
@@ -318,9 +322,9 @@ class SyncTaskEditViewModel @Inject constructor(
                 backupDir = form.backupDir.trim().ifBlank { null },
                 maxDelete = form.maxDelete,
                 extraConfig = form.extraConfig.trim(),
-                // Stamp creation time here (the Room default used to do this);
-                // set explicitly so the entity mapper preserves it verbatim.
-                createdAtEpochMs = System.currentTimeMillis(),
+                // New task: stamp creation time now. Existing task (edit): preserve the
+                // original timestamp loaded into the form, so editing doesn't reset it.
+                createdAtEpochMs = if (form.id == 0L) System.currentTimeMillis() else form.createdAtEpochMs,
             )
             val id = taskRepository.save(task)
             scheduler.schedule(task.copy(id = id))

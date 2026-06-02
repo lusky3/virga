@@ -29,29 +29,28 @@ class SyncHistoryRepository @Inject constructor(
         ),
     )
 
+    /**
+     * Finalizes the run [runId]. Uses a targeted UPDATE so the `startedAtEpochMs`
+     * recorded by [startRun] is preserved (the caller no longer supplies it, which
+     * previously overwrote it with a slightly-later timestamp).
+     */
     suspend fun finishRun(
         runId: Long,
-        taskId: Long,
-        startedAtEpochMs: Long,
         status: SyncStatus,
         filesTransferred: Int,
         bytesTransferred: Long,
         errorCount: Int,
         errorMessage: String? = null,
         logPath: String? = null,
-    ) = runDao.update(
-        SyncRunEntity(
-            id = runId,
-            taskId = taskId,
-            startedAtEpochMs = startedAtEpochMs,
-            endedAtEpochMs = System.currentTimeMillis(),
-            status = status,
-            filesTransferred = filesTransferred,
-            bytesTransferred = bytesTransferred,
-            errorCount = errorCount,
-            errorMessage = errorMessage,
-            logPath = logPath,
-        ),
+    ) = runDao.finishRun(
+        runId = runId,
+        endedAtEpochMs = System.currentTimeMillis(),
+        status = status,
+        filesTransferred = filesTransferred,
+        bytesTransferred = bytesTransferred,
+        errorCount = errorCount,
+        errorMessage = errorMessage,
+        logPath = logPath,
     )
 
     suspend fun pruneOlderThan(beforeEpochMs: Long) = runDao.pruneOlderThan(beforeEpochMs)

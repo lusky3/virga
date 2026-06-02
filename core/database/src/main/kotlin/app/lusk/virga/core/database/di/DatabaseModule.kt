@@ -24,6 +24,7 @@ object DatabaseModule {
     fun provideDatabase(@ApplicationContext context: Context): VirgaDatabase =
         Room.databaseBuilder(context, VirgaDatabase::class.java, VirgaDatabase.NAME)
             .addMigrations(
+                VirgaDatabase.MIGRATION_1_2,
                 VirgaDatabase.MIGRATION_2_3,
                 VirgaDatabase.MIGRATION_3_4,
                 VirgaDatabase.MIGRATION_4_5,

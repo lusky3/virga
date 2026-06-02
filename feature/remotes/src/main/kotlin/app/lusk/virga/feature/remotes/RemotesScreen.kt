@@ -178,7 +178,9 @@ fun RemotesScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         items(state.remotes, key = { it.name }) { remote ->
-                            LaunchedEffect(remote.name) {
+                            // Key on quotaEpoch too: a pull-to-refresh bumps the epoch
+                            // so this re-fires even though the card stays composed.
+                            LaunchedEffect(remote.name, state.quotaEpoch) {
                                 viewModel.fetchQuota(remote.name)
                             }
                             RemoteCard(
@@ -187,6 +189,7 @@ fun RemotesScreen(
                                 onCreateTask = onCreateTask,
                                 onDelete = { remoteToDelete = remote },
                                 quota = state.quotas[remote.name],
+                                quotaLoading = remote.name in state.quotaLoading,
                             )
                         }
                     }

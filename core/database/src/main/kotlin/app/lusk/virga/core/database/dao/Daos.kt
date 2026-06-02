@@ -8,6 +8,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import androidx.room.Upsert
+import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.database.entity.ConflictEntity
 import app.lusk.virga.core.database.entity.RemoteEntity
 import app.lusk.virga.core.database.entity.SyncRunEntity
@@ -63,6 +64,10 @@ interface SyncTaskDao {
 
     @Delete
     suspend fun delete(task: SyncTaskEntity)
+
+    /** Deletes all tasks targeting [remoteName] — used to clean up after a remote is removed. */
+    @Query("DELETE FROM sync_tasks WHERE remoteName = :remoteName")
+    suspend fun deleteByRemoteName(remoteName: String)
 }
 
 @Dao
@@ -73,14 +78,36 @@ interface SyncRunDao {
     @Query("SELECT * FROM sync_runs WHERE id = :id")
     fun observeById(id: Long): Flow<SyncRunEntity?>
 
-    @Query("SELECT * FROM sync_runs WHERE taskId = :taskId ORDER BY startedAtEpochMs DESC")
-    fun observeForTask(taskId: Long): Flow<List<SyncRunEntity>>
+    @Query("SELECT * FROM sync_runs WHERE taskId = :taskId ORDER BY startedAtEpochMs DESC LIMIT :limit")
+    fun observeForTask(taskId: Long, limit: Int = 200): Flow<List<SyncRunEntity>>
 
     @Insert
     suspend fun insert(run: SyncRunEntity): Long
 
     @Update
     suspend fun update(run: SyncRunEntity)
+
+    /**
+     * Finalizes a run in place. A targeted UPDATE (vs. a full-entity [update]) so the
+     * caller needn't re-supply `startedAtEpochMs` — the value stored by `startRun` is
+     * preserved instead of being overwritten with a second, later clock reading.
+     */
+    @Query(
+        "UPDATE sync_runs SET endedAtEpochMs = :endedAtEpochMs, status = :status, " +
+            "filesTransferred = :filesTransferred, bytesTransferred = :bytesTransferred, " +
+            "errorCount = :errorCount, errorMessage = :errorMessage, logPath = :logPath " +
+            "WHERE id = :runId",
+    )
+    suspend fun finishRun(
+        runId: Long,
+        endedAtEpochMs: Long,
+        status: SyncStatus,
+        filesTransferred: Int,
+        bytesTransferred: Long,
+        errorCount: Int,
+        errorMessage: String?,
+        logPath: String?,
+    )
 
     @Query("DELETE FROM sync_runs WHERE startedAtEpochMs < :beforeEpochMs")
     suspend fun pruneOlderThan(beforeEpochMs: Long)
@@ -163,6 +190,17 @@ interface ConflictDao {
     @Transaction
     suspend fun upsertAllByNaturalKey(conflicts: List<ConflictEntity>) {
         conflicts.forEach { upsertByNaturalKey(it) }
+    }
+
+    /**
+     * Atomically replace a task's unresolved-conflict set: drop the resolved rows
+     * and upsert the freshly-detected ones in one transaction, so a crash between
+     * the two can't leave the task showing zero conflicts when some were just found.
+     */
+    @Transaction
+    suspend fun pruneResolvedAndUpsert(taskId: Long, conflicts: List<ConflictEntity>) {
+        pruneResolved(taskId)
+        if (conflicts.isNotEmpty()) upsertAllByNaturalKey(conflicts)
     }
 
     @Query("UPDATE conflicts SET resolved = 1 WHERE id = :id")

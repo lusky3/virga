@@ -32,6 +32,7 @@ import androidx.lifecycle.compose.dropUnlessResumed
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
+import app.lusk.virga.core.common.notification.NotificationDeepLinks
 import app.lusk.virga.core.designsystem.theme.LocalSharedTransitionScope
 import app.lusk.virga.core.designsystem.theme.VirgaMotion
 import app.lusk.virga.core.designsystem.theme.rememberReduceMotion
@@ -112,7 +113,11 @@ private val topLevelDestinations = listOf(
  * in the guided setup wizard.
  */
 @Composable
-fun VirgaNavHost(startAtWizard: Boolean = false) {
+fun VirgaNavHost(
+    startAtWizard: Boolean = false,
+    openRoute: String? = null,
+    onOpenRouteConsumed: () -> Unit = {},
+) {
     val navigationState = rememberNavigationState(
         startRoute = SyncRoute,
         topLevelRoutes = setOf(SyncRoute, RemotesRoute, SettingsRoute),
@@ -123,6 +128,15 @@ fun VirgaNavHost(startAtWizard: Boolean = false) {
     // the caller requests it (i.e. coming fresh from onboarding completion).
     androidx.compose.runtime.LaunchedEffect(startAtWizard) {
         if (startAtWizard) navigator.navigate(FirstSyncWizardRoute)
+    }
+
+    // Honour a notification deep link (e.g. the watchdog "Settings" action), then
+    // tell the caller to clear it so it doesn't re-fire on the next recomposition.
+    androidx.compose.runtime.LaunchedEffect(openRoute) {
+        if (openRoute == NotificationDeepLinks.ROUTE_SETTINGS) {
+            navigator.navigate(SettingsRoute)
+            onOpenRouteConsumed()
+        }
     }
 
     // The Sync tab's adaptive list-detail scaffold can have its own internal back

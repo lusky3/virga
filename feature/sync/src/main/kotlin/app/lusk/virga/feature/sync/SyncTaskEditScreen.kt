@@ -2,7 +2,6 @@ package app.lusk.virga.feature.sync
 
 import android.net.Uri
 import android.os.Environment
-import android.provider.DocumentsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -443,42 +442,6 @@ private fun MirrorToggleRow(enabled: Boolean, onChange: (Boolean) -> Unit) {
     }
 }
 
-/** Tier-1 throughput presets → rclone {transfers, checkers}. Tuned for mobile. */
-private enum class PerfPreset(val transfers: Int, val checkers: Int, val labelRes: Int) {
-    CONSERVATIVE(2, 4, R.string.sync_edit_perf_conservative),
-    BALANCED(4, 8, R.string.sync_edit_perf_balanced),
-    AGGRESSIVE(16, 32, R.string.sync_edit_perf_aggressive),
-}
-
-private fun presetFor(transfers: Int, checkers: Int): PerfPreset? =
-    PerfPreset.entries.firstOrNull { it.transfers == transfers && it.checkers == checkers }
-
-@Composable
-private fun PerformancePresetRow(form: SyncTaskForm, viewModel: SyncTaskEditViewModel) {
-    val current = presetFor(form.transfers, form.checkers)
-    val entries = PerfPreset.entries
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(stringResource(R.string.sync_edit_perf_label), style = MaterialTheme.typography.labelLarge)
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            entries.forEachIndexed { index, p ->
-                SegmentedButton(
-                    selected = current == p,
-                    onClick = {
-                        viewModel.update { f -> f.copy(transfers = p.transfers, checkers = p.checkers) }
-                    },
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = entries.size),
-                    label = { Text(stringResource(p.labelRes)) },
-                )
-            }
-        }
-        Text(
-            text = stringResource(R.string.sync_edit_perf_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
 @Composable
 private fun DirectionSegmentedRow(
     selected: SyncDirection,
@@ -524,30 +487,5 @@ private fun directionHintRes(dir: SyncDirection): Int = when (dir) {
     SyncDirection.UPLOAD -> R.string.sync_direction_hint_upload
     SyncDirection.DOWNLOAD -> R.string.sync_direction_hint_download
     SyncDirection.BISYNC -> R.string.sync_direction_hint_bisync
-}
-
-/**
- * Converts a SAF tree URI (content://...) to a real filesystem path that rclone can use.
- * Returns null if the path cannot be resolved or does not exist on disk.
- */
-internal fun resolveTreeUriToPath(uri: Uri): String? {
-    val docId = DocumentsContract.getTreeDocumentId(uri) ?: return null
-    val colonIdx = docId.indexOf(':')
-    if (colonIdx < 0) return null
-    val volume = docId.substring(0, colonIdx)
-    val relativePath = docId.substring(colonIdx + 1)
-    val base = if (volume.equals("primary", ignoreCase = true)) {
-        Environment.getExternalStorageDirectory().absolutePath
-    } else {
-        "/storage/$volume"
-    }
-    val resolved = if (relativePath.isEmpty()) File(base) else File(base, relativePath)
-    // Reject path traversal: a malicious DocumentsProvider could return a docId with
-    // ".." segments. Canonicalize (resolves "../" and symlinks) and require the result
-    // to stay within the storage root.
-    val canonical = runCatching { resolved.canonicalPath }.getOrNull() ?: return null
-    val canonicalBase = runCatching { File(base).canonicalPath }.getOrNull() ?: return null
-    if (canonical != canonicalBase && !canonical.startsWith("$canonicalBase/")) return null
-    return if (resolved.exists()) canonical else null
 }
 

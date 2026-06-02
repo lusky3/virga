@@ -19,6 +19,9 @@ android {
 dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:data"))
+    // Read the watchdog on/off preference to decide whether to (re)start the
+    // persistent keep-alive service on boot / heartbeat.
+    implementation(project(":core:datastore"))
     // Direct rclone use (RcloneEngine in SyncWorker/SyncExecutor) — explicit now
     // that core:data no longer re-exports rclone via api().
     implementation(project(":core:rclone"))
@@ -31,6 +34,9 @@ dependencies {
     implementation(libs.androidx.documentfile)
 
     testImplementation(libs.work.testing)
+    // SyncSchedulerTest builds an in-memory Room DB directly (was transitive via
+    // core:data's old api() export — now explicit).
+    testImplementation(project(":core:database"))
     // Integration tests run with Robolectric so they exercise the real
     // androidx.work.WorkManager backed by an in-memory database; this needs
     // the JUnit 4 vintage engine alongside the project's default JUnit 5.

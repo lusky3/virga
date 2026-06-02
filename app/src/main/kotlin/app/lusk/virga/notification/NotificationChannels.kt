@@ -7,6 +7,7 @@ import androidx.core.content.getSystemService
 import app.lusk.virga.core.common.notification.NotificationChannelIds.SYNC_COMPLETE
 import app.lusk.virga.core.common.notification.NotificationChannelIds.SYNC_ERROR
 import app.lusk.virga.core.common.notification.NotificationChannelIds.SYNC_PROGRESS
+import app.lusk.virga.core.common.notification.NotificationChannelIds.WATCHDOG
 
 /**
  * Notification channels. Required since minSdk 26. Registered once at app
@@ -33,6 +34,14 @@ object NotificationChannels {
                     "Sync errors",
                     NotificationManager.IMPORTANCE_HIGH,
                 ).apply { description = "Authentication, permission, or storage problems" },
+                NotificationChannel(
+                    WATCHDOG,
+                    "Background service",
+                    NotificationManager.IMPORTANCE_MIN,
+                ).apply {
+                    description = "Keeps Virga running so scheduled syncs aren't killed"
+                    setShowBadge(false)
+                },
             ),
         )
     }

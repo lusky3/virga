@@ -48,13 +48,19 @@ class SyncWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         val taskId = inputData.getLong(KEY_TASK_ID, -1L)
         if (taskId <= 0) return Result.failure()
-        val task = taskRepository.getTask(taskId) ?: return Result.failure()
+        val task = taskRepository.getTask(taskId) ?: run {
+            // The task was deleted (e.g. its remote was removed) but periodic work
+            // for it may still be scheduled. Cancel it so this zombie stops firing,
+            // and succeed (a failure would just be retried).
+            scheduler.cancel(taskId)
+            return Result.success()
+        }
 
         // SAF sources cannot bisync: rclone needs read/write access to a real path
         // on both sides, which staging cannot provide symmetrically.
         if (task.sourcePath.startsWith("content://") && task.direction == SyncDirection.BISYNC) {
             val msg = "Two-way sync isn't supported for this folder on this device."
-            finishFailed(historyRepository.startRun(taskId), taskId, System.currentTimeMillis(), null, msg)
+            finishFailed(historyRepository.startRun(taskId), null, msg)
             runCatching {
                 NotificationManagerCompat.from(applicationContext)
                     .notify(SyncNotifications.RESULT_NOTIFICATION_ID, notifications.error(task.name, msg, taskId))
@@ -64,7 +70,6 @@ class SyncWorker @AssistedInject constructor(
 
         setForeground(foregroundInfo(notifications.progress(task.name, null, taskId)))
 
-        val startedAt = System.currentTimeMillis()
         val runId = historyRepository.startRun(taskId)
         val metered = applicationContext.getSystemService<ConnectivityManager>()
             ?.isActiveNetworkMetered ?: false
@@ -96,11 +101,18 @@ class SyncWorker @AssistedInject constructor(
             // permission was lost). Staging is empty, so proceeding with an upload
             // mirror would DELETE the cloud destination. Fail loudly and tell the
             // user to re-select the folder instead.
-            if (staged.isStaged && !staged.sourceReadable &&
+            val stagedUploadLike = staged.isStaged &&
                 (task.direction == SyncDirection.UPLOAD || task.direction == SyncDirection.BISYNC)
-            ) {
+            if (stagedUploadLike && !staged.sourceReadable) {
                 failure = VirgaError.Storage(
                     "Can't read the selected folder — re-select it for this task (its access permission was lost).",
+                )
+            } else if (stagedUploadLike && !staged.fullyStaged && (allowDeletes || task.direction == SyncDirection.BISYNC)) {
+                // Some source files couldn't be staged. Running a delete-enabled mirror
+                // (or bisync) against the incomplete copy would delete their counterparts
+                // on the cloud destination — abort instead of risking data loss.
+                failure = VirgaError.Storage(
+                    "Couldn't read every file in the selected folder; stopping so the mirror doesn't delete files on the cloud. Check the folder's access and try again.",
                 )
             } else {
                 // Guard: a 'local'-type rclone remote points at a real filesystem path,
@@ -166,7 +178,7 @@ class SyncWorker @AssistedInject constructor(
                     val msg = writeResult.exceptionOrNull()?.message ?: "Failed to write back to folder"
                     log.line("Failed: $msg")
                     log.flush()
-                    finishFailed(runId, taskId, startedAt, last, msg, log.path)
+                    finishFailed(runId, last, msg, log.path)
                     runCatching {
                         NotificationManagerCompat.from(applicationContext)
                             .notify(SyncNotifications.RESULT_NOTIFICATION_ID, notifications.error(task.name, msg, taskId))
@@ -176,7 +188,7 @@ class SyncWorker @AssistedInject constructor(
             }
             log.line("Completed: ${last?.transferredFiles ?: 0} file(s) transferred")
             log.flush()
-            finishSucceeded(runId, taskId, startedAt, last, log.path)
+            finishSucceeded(runId, last, log.path)
             // After a bisync, scan the destination for rclone conflict files
             // and queue them for user resolution.
             if (task.direction == SyncDirection.BISYNC) {
@@ -192,7 +204,7 @@ class SyncWorker @AssistedInject constructor(
             val msg = failure.message ?: "Sync failed"
             log.line("Failed: $msg")
             log.flush()
-            finishFailed(runId, taskId, startedAt, last, msg, log.path)
+            finishFailed(runId, last, msg, log.path)
             runCatching {
                 NotificationManagerCompat.from(applicationContext)
                     .notify(SyncNotifications.RESULT_NOTIFICATION_ID, notifications.error(task.name, msg, taskId))
@@ -205,15 +217,11 @@ class SyncWorker @AssistedInject constructor(
     /** Record a SUCCESS run from the last observed [progress] snapshot. */
     private suspend fun finishSucceeded(
         runId: Long,
-        taskId: Long,
-        startedAt: Long,
         progress: SyncProgress?,
         logPath: String? = null,
     ) =
         historyRepository.finishRun(
             runId = runId,
-            taskId = taskId,
-            startedAtEpochMs = startedAt,
             status = SyncStatus.SUCCESS,
             filesTransferred = progress?.transferredFiles ?: 0,
             bytesTransferred = progress?.bytesTransferred ?: 0L,
@@ -224,15 +232,11 @@ class SyncWorker @AssistedInject constructor(
     /** Record a FAILED run (+1 error) with [message] from the last [progress] snapshot. */
     private suspend fun finishFailed(
         runId: Long,
-        taskId: Long,
-        startedAt: Long,
         progress: SyncProgress?,
         message: String,
         logPath: String? = null,
     ) = historyRepository.finishRun(
         runId = runId,
-        taskId = taskId,
-        startedAtEpochMs = startedAt,
         status = SyncStatus.FAILED,
         filesTransferred = progress?.transferredFiles ?: 0,
         bytesTransferred = progress?.bytesTransferred ?: 0L,

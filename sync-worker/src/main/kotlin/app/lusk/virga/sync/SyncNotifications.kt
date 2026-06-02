@@ -22,8 +22,8 @@ internal class SyncNotifications(private val context: Context) {
     fun progress(taskName: String, progress: SyncProgress?, taskId: Long): Notification =
         NotificationCompat.Builder(context, NotificationChannelIds.SYNC_PROGRESS)
             .setSmallIcon(android.R.drawable.stat_sys_upload)
-            .setContentTitle("Syncing $taskName")
-            .setContentText(progress?.let(::progressText) ?: "Starting…")
+            .setContentTitle(context.getString(R.string.notif_sync_progress_title, taskName))
+            .setContentText(progress?.let(::progressText) ?: context.getString(R.string.notif_sync_starting))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(launchIntent())
@@ -36,7 +36,7 @@ internal class SyncNotifications(private val context: Context) {
                 if (taskId > 0) {
                     addAction(
                         android.R.drawable.ic_delete,
-                        "Cancel",
+                        context.getString(R.string.notif_action_cancel),
                         actionIntent(SyncActionReceiver.ACTION_CANCEL, taskId, RC_CANCEL),
                     )
                 }
@@ -51,8 +51,12 @@ internal class SyncNotifications(private val context: Context) {
     fun complete(taskName: String, filesTransferred: Int, taskId: Long): Notification =
         NotificationCompat.Builder(context, NotificationChannelIds.SYNC_COMPLETE)
             .setSmallIcon(android.R.drawable.stat_sys_upload_done)
-            .setContentTitle("$taskName synced")
-            .setContentText("$filesTransferred file(s) transferred")
+            .setContentTitle(context.getString(R.string.notif_sync_complete_title, taskName))
+            .setContentText(
+                context.resources.getQuantityString(
+                    R.plurals.notif_files_transferred, filesTransferred, filesTransferred,
+                ),
+            )
             .setAutoCancel(true)
             .setContentIntent(launchIntent())
             .build()
@@ -66,7 +70,7 @@ internal class SyncNotifications(private val context: Context) {
     fun error(taskName: String, message: String, taskId: Long): Notification =
         NotificationCompat.Builder(context, NotificationChannelIds.SYNC_ERROR)
             .setSmallIcon(android.R.drawable.stat_notify_error)
-            .setContentTitle("$taskName failed")
+            .setContentTitle(context.getString(R.string.notif_sync_error_title, taskName))
             .setContentText(message)
             .setAutoCancel(true)
             .setContentIntent(launchIntent())
@@ -74,7 +78,7 @@ internal class SyncNotifications(private val context: Context) {
                 if (taskId > 0) {
                     addAction(
                         android.R.drawable.ic_menu_rotate,
-                        "Retry",
+                        context.getString(R.string.notif_action_retry),
                         actionIntent(SyncActionReceiver.ACTION_RETRY, taskId, RC_RETRY),
                     )
                 }
@@ -115,7 +119,7 @@ internal class SyncNotifications(private val context: Context) {
     private fun progressText(p: SyncProgress): String {
         val pct = (p.fraction * 100).toInt()
         val speed = (p.speedBytesPerSec / 1_000_000).format1() + " MB/s"
-        return "$pct% • ${p.transferredFiles}/${p.totalFiles} files • $speed"
+        return context.getString(R.string.notif_sync_progress, pct, p.transferredFiles, p.totalFiles, speed)
     }
 
     private fun Double.format1(): String = "%.1f".format(this)

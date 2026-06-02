@@ -1,5 +1,6 @@
 package app.lusk.virga.feature.sync
 
+import android.content.Context
 import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.data.ConflictRepository
@@ -48,9 +49,15 @@ class SyncTasksViewModelTest {
     private val progressMonitor: SyncProgressMonitor = mockk(relaxed = true) {
         every { progressFor(any()) } returns flowOf(null)
     }
+    // Resolve the snackbar message resources to their English text so the
+    // message-content assertions below stay meaningful.
+    private val context: Context = mockk(relaxed = true) {
+        every { getString(R.string.sync_tasks_msg_task_duplicated) } returns "Task duplicated"
+        every { getString(R.string.sync_tasks_msg_no_enabled_tasks) } returns "No enabled tasks"
+    }
 
     private fun viewModel() =
-        SyncTasksViewModel(taskRepository, historyRepository, conflictRepository, scheduler, progressMonitor)
+        SyncTasksViewModel(context, taskRepository, historyRepository, conflictRepository, scheduler, progressMonitor)
 
     // --- pre-existing tests -------------------------------------------------
 

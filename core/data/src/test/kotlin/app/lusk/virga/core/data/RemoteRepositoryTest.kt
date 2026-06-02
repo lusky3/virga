@@ -3,6 +3,7 @@ package app.lusk.virga.core.data
 import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.database.dao.RemoteDao
+import app.lusk.virga.core.database.dao.SyncTaskDao
 import app.lusk.virga.core.database.entity.RemoteEntity
 import app.lusk.virga.core.rclone.RcloneEngine
 import app.lusk.virga.core.rclone.config.RcloneConfigManager
@@ -17,13 +18,14 @@ import org.junit.jupiter.api.Test
 class RemoteRepositoryTest {
 
     private val remoteDao = mockk<RemoteDao>(relaxed = true)
+    private val syncTaskDao = mockk<SyncTaskDao>(relaxed = true)
     private val engine = mockk<RcloneEngine>()
     private val configManager = mockk<RcloneConfigManager>()
 
     private lateinit var repo: RemoteRepository
 
     @BeforeEach fun setUp() {
-        repo = RemoteRepository(remoteDao, engine, configManager)
+        repo = RemoteRepository(remoteDao, syncTaskDao, engine, configManager)
     }
 
     // --- refresh ---
@@ -82,6 +84,8 @@ class RemoteRepositoryTest {
         assertThat(result.isSuccess).isTrue()
         coVerify { engine.deleteRemote("old") }
         coVerify { remoteDao.deleteByName("old") }
+        // Tasks pointing at the deleted remote are cleaned up too.
+        coVerify { syncTaskDao.deleteByRemoteName("old") }
     }
 
     @Test fun `deleteRemote returns failure and skips dao when engine fails`() = runTest {

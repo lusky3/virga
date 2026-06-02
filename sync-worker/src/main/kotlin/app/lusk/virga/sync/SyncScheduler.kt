@@ -37,7 +37,10 @@ class SyncScheduler @Inject constructor(
             .build()
         workManager.enqueueUniqueWork(
             uniqueName(taskId) + "_now",
-            ExistingWorkPolicy.REPLACE,
+            // KEEP, not REPLACE: a second "Sync now" (double-tap, or "sync all" while
+            // one is running) must NOT cancel the in-flight transfer and record it as
+            // failed. If a manual sync is already queued/running for this task, keep it.
+            ExistingWorkPolicy.KEEP,
             request,
         )
     }

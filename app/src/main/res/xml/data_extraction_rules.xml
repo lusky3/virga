@@ -11,13 +11,17 @@
         <exclude domain="file" path="rclone.conf.enc" />
         <exclude domain="file" path="datastore/" />
         <include domain="database" path="virga.db" />
-        <include domain="sharedpref" path="." />
+        <!-- No SharedPreferences are used; exclude so a future dependency that
+             quietly creates one can't get its contents backed up / transferred. -->
+        <exclude domain="sharedpref" path="." />
     </cloud-backup>
     <device-transfer>
         <include domain="file" path="." />
         <exclude domain="file" path="rclone.conf.enc" />
         <exclude domain="file" path="datastore/" />
         <include domain="database" path="virga.db" />
-        <include domain="sharedpref" path="." />
+        <!-- No SharedPreferences are used; exclude so a future dependency that
+             quietly creates one can't get its contents backed up / transferred. -->
+        <exclude domain="sharedpref" path="." />
     </device-transfer>
 </data-extraction-rules>

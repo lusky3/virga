@@ -23,13 +23,18 @@
     <string name="settings_battery_hint">Some manufacturers aggressively kill background apps, which can stop scheduled syncs. Exempt Virga from battery optimization and see dontkillmyapp.com for device-specific steps.</string>
     <string name="settings_btn_battery_settings">Battery settings</string>
     <string name="settings_btn_dontkillmyapp">dontkillmyapp.com</string>
+    <string name="settings_toggle_watchdog">Keep Virga running (watchdog)</string>
+    <string name="settings_watchdog_hint">Runs a persistent background service with a quiet ongoing notification so scheduled syncs aren\'t killed on aggressive devices. Uses a little extra battery — leave off unless your syncs keep getting skipped.</string>
     <string name="settings_section_help_about">Help &amp; About</string>
     <string name="settings_item_how_virga_works">How Virga works</string>
     <string name="settings_item_rclone_docs">rclone documentation</string>
+    <string name="settings_item_licenses">Open-source licenses</string>
     <string name="settings_item_about">About</string>
     <string name="settings_about_version">Version %1$s</string>
     <string name="settings_how_virga_works_title">How Virga works</string>
     <string name="settings_how_virga_works_body">Virga schedules sync tasks that run rclone in the background. Each task has a source and destination remote (a cloud drive, local folder, or SD card). Tasks run automatically when their conditions are met — Wi-Fi, charging state, or on a schedule.\n\nRemotes are configured using rclone\'s standard config. Virga stores the rclone config securely on-device. All sync operations run locally; no data passes through Virga\'s servers.</string>
+    <string name="settings_licenses_title">Open-source licenses</string>
+    <string name="settings_licenses_intro">Virga is built with these open-source projects. Tap any item to view it. Thank you to their authors.</string>
     <string name="settings_dialog_ok">OK</string>
     <string name="settings_snack_no_browser">No browser app found</string>
 </resources>

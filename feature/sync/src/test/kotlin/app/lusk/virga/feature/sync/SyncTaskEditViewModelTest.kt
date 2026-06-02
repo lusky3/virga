@@ -110,6 +110,34 @@ class SyncTaskEditViewModelTest {
     }
 
     @Test
+    fun save_existingTask_preservesOriginalCreatedAt() = runTest(mainDispatcher.dispatcher) {
+        val original = SyncTask(
+            id = 7,
+            name = "Photos",
+            sourcePath = "/storage/emulated/0/DCIM",
+            remoteName = "gdrive",
+            remotePath = "Backups",
+            direction = SyncDirection.UPLOAD,
+            intervalMinutes = null,
+            createdAtEpochMs = 1000L,
+        )
+        coEvery { taskRepository.getTask(7) } returns original
+        coEvery { taskRepository.save(any()) } returns 7L
+        val vm = viewModel()
+        vm.load(taskId = 7)
+        advanceUntilIdle()
+
+        vm.update { it.copy(name = "Photos edited") }
+        vm.save {}
+        advanceUntilIdle()
+
+        // Editing must not reset the creation timestamp.
+        coVerify {
+            taskRepository.save(match<SyncTask> { it.id == 7L && it.createdAtEpochMs == 1000L })
+        }
+    }
+
+    @Test
     fun load_negativeIdLeavesBlankForm() = runTest(mainDispatcher.dispatcher) {
         val vm = viewModel()
         vm.load(taskId = -1)

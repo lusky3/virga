@@ -33,6 +33,7 @@ class PreferencesRepository @Inject constructor(
     suspend fun setRequireChargingByDefault(enabled: Boolean) = edit { it[Keys.REQUIRE_CHARGING] = enabled }
     suspend fun setOnboardingComplete(complete: Boolean) = edit { it[Keys.ONBOARDING] = complete }
     suspend fun setShowAdvancedOptions(enabled: Boolean) = edit { it[Keys.SHOW_ADVANCED] = enabled }
+    suspend fun setWatchdogEnabled(enabled: Boolean) = edit { it[Keys.WATCHDOG] = enabled }
 
     suspend fun setDefaultBwLimits(wifi: String?, metered: String?) = edit { prefs ->
         if (wifi.isNullOrBlank()) prefs.remove(Keys.BW_WIFI) else prefs[Keys.BW_WIFI] = wifi
@@ -53,6 +54,7 @@ class PreferencesRepository @Inject constructor(
         defaultBwLimitMetered = this[Keys.BW_METERED] ?: "1M",
         onboardingComplete = this[Keys.ONBOARDING] ?: false,
         showAdvancedOptions = this[Keys.SHOW_ADVANCED] ?: false,
+        watchdogEnabled = this[Keys.WATCHDOG] ?: false,
     )
 
     private object Keys {
@@ -64,5 +66,6 @@ class PreferencesRepository @Inject constructor(
         val BW_METERED = stringPreferencesKey("bw_limit_metered")
         val ONBOARDING = booleanPreferencesKey("onboarding_complete")
         val SHOW_ADVANCED = booleanPreferencesKey("show_advanced_options")
+        val WATCHDOG = booleanPreferencesKey("watchdog_enabled")
     }
 }

@@ -15,6 +15,10 @@ data class AppPreferences(
     val onboardingComplete: Boolean = false,
     /** Reveal Tier 2/3 advanced options in the task editor (default off — beginners). */
     val showAdvancedOptions: Boolean = false,
-    /** BYO OAuth client ids keyed by provider, when the user overrides defaults. */
-    val byoOAuthClientIds: Map<String, String> = emptyMap(),
+    /**
+     * Keep a persistent foreground "watchdog" service running so scheduled syncs
+     * survive aggressive OEM background-killing. Default off — it costs an ongoing
+     * notification and some battery; only power users on hostile ROMs need it.
+     */
+    val watchdogEnabled: Boolean = false,
 )

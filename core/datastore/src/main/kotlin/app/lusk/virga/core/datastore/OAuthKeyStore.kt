@@ -3,10 +3,13 @@ package app.lusk.virga.core.datastore
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -28,8 +31,13 @@ class OAuthKeyStore @Inject constructor(
 ) {
     private fun key(providerId: String) = stringPreferencesKey("oauth_client_id_$providerId")
 
+    // Degrade a corrupt/unreadable prefs file to empty instead of throwing — mirrors
+    // PreferencesRepository, so a bad DataStore can't crash the OAuth flow.
+    private val data: Flow<Preferences> = dataStore.data
+        .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
+
     /** Map of providerId → user client ID, for every provider that has one set. */
-    val clientIds: Flow<Map<String, String>> = dataStore.data.map { prefs ->
+    val clientIds: Flow<Map<String, String>> = data.map { prefs ->
         prefs.asMap().entries
             .mapNotNull { (k, v) ->
                 val name = k.name
@@ -42,7 +50,7 @@ class OAuthKeyStore @Inject constructor(
 
     /** The user-supplied client ID for [providerId], or null if none/blank. */
     suspend fun clientId(providerId: String): String? =
-        dataStore.data.first()[key(providerId)]?.takeIf { it.isNotBlank() }
+        data.first()[key(providerId)]?.takeIf { it.isNotBlank() }
 
     suspend fun setClientId(providerId: String, clientId: String) {
         val trimmed = clientId.trim()

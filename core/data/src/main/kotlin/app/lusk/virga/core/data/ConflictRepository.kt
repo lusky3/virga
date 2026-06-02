@@ -66,12 +66,10 @@ class ConflictRepository @Inject constructor(
                 variant2Size = v2.size,
             )
         }
-        // Drop previously-resolved conflicts for this task before recording the
-        // current set (pruneResolved was otherwise dead code).
-        conflictDao.pruneResolved(task.id)
-        // Natural-key upsert so a re-detected conflict with changed sizes updates
-        // the existing row instead of silently no-opping (@Upsert keys on the id).
-        if (conflicts.isNotEmpty()) conflictDao.upsertAllByNaturalKey(conflicts)
+        // Atomically drop previously-resolved conflicts and record the current set,
+        // so a crash between the two can't (briefly or permanently) show zero
+        // conflicts for this task when a re-detection just found new ones.
+        conflictDao.pruneResolvedAndUpsert(task.id, conflicts)
         conflicts.size
     }
 

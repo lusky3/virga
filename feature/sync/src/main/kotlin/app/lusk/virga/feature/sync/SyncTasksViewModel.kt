@@ -1,5 +1,6 @@
 package app.lusk.virga.feature.sync
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.lusk.virga.core.common.model.SyncStatus
@@ -12,6 +13,7 @@ import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.sync.SyncProgressMonitor
 import app.lusk.virga.sync.SyncScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -51,6 +53,7 @@ data class SyncTasksUiState(
 
 @HiltViewModel
 class SyncTasksViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val taskRepository: SyncTaskRepository,
     private val historyRepository: SyncHistoryRepository,
     private val conflictRepository: ConflictRepository,
@@ -156,7 +159,7 @@ class SyncTasksViewModel @Inject constructor(
 
     fun syncNow(taskId: Long) {
         scheduler.syncNow(taskId)
-        _message.value = "Sync started"
+        _message.value = context.getString(R.string.sync_tasks_msg_sync_started)
     }
 
     fun cancelSync(taskId: Long) = scheduler.cancel(taskId)
@@ -180,14 +183,18 @@ class SyncTasksViewModel @Inject constructor(
     /** Duplicate a task as a new disabled-id copy and open nothing (list refreshes). */
     fun duplicate(task: SyncTask) = viewModelScope.launch {
         taskRepository.save(task.copy(id = 0, name = "${task.name} copy"))
-        _message.value = "Task duplicated"
+        _message.value = context.getString(R.string.sync_tasks_msg_task_duplicated)
     }
 
     /** Run every enabled task now. */
     fun syncAllEnabled() = viewModelScope.launch {
         val enabled = taskRepository.tasks.first().filter { it.enabled }
         enabled.forEach { scheduler.syncNow(it.id) }
-        _message.value = if (enabled.isEmpty()) "No enabled tasks" else "Syncing ${enabled.size} task(s)"
+        _message.value = if (enabled.isEmpty()) {
+            context.getString(R.string.sync_tasks_msg_no_enabled_tasks)
+        } else {
+            context.resources.getQuantityString(R.plurals.sync_tasks_msg_syncing, enabled.size, enabled.size)
+        }
     }
 
     // --- Swipe-to-delete (deferred, undoable) ------------------------------------
@@ -233,7 +240,7 @@ class SyncTasksViewModel @Inject constructor(
     fun bulkRun() {
         val ids = _controls.value.selected
         ids.forEach { scheduler.syncNow(it) }
-        _message.value = "Syncing ${ids.size} task(s)"
+        _message.value = context.resources.getQuantityString(R.plurals.sync_tasks_msg_syncing, ids.size, ids.size)
         clearSelection()
     }
 

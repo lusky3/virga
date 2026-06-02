@@ -9,6 +9,7 @@ import app.lusk.virga.core.datastore.OAuthKeyStore
 import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.common.model.RemoteOption
 import app.lusk.virga.core.common.model.RemoteProvider
+import app.lusk.virga.core.common.model.RemoteQuota
 import app.lusk.virga.core.rclone.oauth.OAuthConfig
 import app.lusk.virga.core.rclone.oauth.OAuthProvider
 import app.lusk.virga.core.rclone.oauth.OAuthProviders
@@ -21,6 +22,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -693,6 +695,70 @@ class RemotesViewModelTest {
         advanceUntilIdle()
 
         assertThat(errMsg).isEqualTo("bad remote")
+    }
+
+    // --- Quota loading / refresh ------------------------------------------------
+
+    @Test
+    fun `fetchQuota shows loading while in flight then clears with quota on success`() =
+        runTest(mainDispatcher.dispatcher) {
+            val gate = CompletableDeferred<Result<RemoteQuota>>()
+            coEvery { repository.about("g") } coAnswers { gate.await() }
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            vm.fetchQuota("g")
+            advanceUntilIdle()
+
+            // In flight: the remote is marked loading and no quota is shown yet.
+            assertThat(vm.uiState.value.quotaLoading).contains("g")
+            assertThat(vm.uiState.value.quotas).doesNotContainKey("g")
+
+            gate.complete(Result.success(RemoteQuota(total = 100, used = 40, free = 60)))
+            advanceUntilIdle()
+
+            assertThat(vm.uiState.value.quotaLoading).doesNotContain("g")
+            assertThat(vm.uiState.value.quotas["g"]).isEqualTo(RemoteQuota(100, 40, 60))
+            collector.cancel()
+        }
+
+    @Test
+    fun `fetchQuota failure clears loading and stores no quota`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.about("g") } returns Result.failure(RuntimeException("offline"))
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.fetchQuota("g")
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.quotaLoading).doesNotContain("g")
+        assertThat(vm.uiState.value.quotas).doesNotContainKey("g")
+        collector.cancel()
+    }
+
+    @Test
+    fun `fetchQuota is deduped until refresh re-enables and re-fetches`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.about("g") } returns Result.success(RemoteQuota(100, 40, 60))
+        coEvery { repository.refresh() } returns Result.success(Unit)
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.fetchQuota("g"); advanceUntilIdle()
+        vm.fetchQuota("g"); advanceUntilIdle()
+        coVerify(exactly = 1) { repository.about("g") }
+
+        // A pull-to-refresh bumps the epoch and clears prior quota, so cards re-fetch.
+        val epochBefore = vm.uiState.value.quotaEpoch
+        vm.refresh(); advanceUntilIdle()
+        assertThat(vm.uiState.value.quotaEpoch).isEqualTo(epochBefore + 1)
+        assertThat(vm.uiState.value.quotas).doesNotContainKey("g")
+
+        vm.fetchQuota("g"); advanceUntilIdle()
+        coVerify(exactly = 2) { repository.about("g") }
+        collector.cancel()
     }
 
     private fun OAuthProvider.unused() = Unit  // silence unused-import warning for OAuthProvider import

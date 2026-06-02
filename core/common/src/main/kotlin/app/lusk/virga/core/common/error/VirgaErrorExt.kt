@@ -13,8 +13,9 @@ fun VirgaError.toUserMessage(): String = when (this) {
     is VirgaError.Storage ->
         "Storage error: ${message.ifBlank { "check available space and permissions" }}"
     is VirgaError.Rclone ->
-        exitCode?.let { "Sync engine error (code $it). Try again." }
-            ?: "Sync engine error. Try again."
+        // Surface the real rclone error (e.g. "directory not found", quota, token
+        // problems) when present; fall back to the generic line otherwise.
+        message.ifBlank { "Sync engine error${exitCode?.let { " (code $it)" } ?: ""}. Try again." }
     is VirgaError.Conflict ->
         "Conflict detected. Open the Conflicts screen to resolve."
     is VirgaError.Unknown ->

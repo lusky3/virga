@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sync progress / result notifications -->
+    <string name="notif_sync_progress_title">Syncing %1$s</string>
+    <string name="notif_sync_starting">Starting…</string>
+    <!-- pct • transferred/total files • speed (e.g. "42% • 3/10 files • 1.5 MB/s") -->
+    <string name="notif_sync_progress">%1$d%% • %2$d/%3$d files • %4$s</string>
+    <string name="notif_sync_complete_title">%1$s synced</string>
+    <string name="notif_sync_error_title">%1$s failed</string>
+    <string name="notif_action_cancel">Cancel</string>
+    <string name="notif_action_retry">Retry</string>
+    <plurals name="notif_files_transferred">
+        <item quantity="one">%1$d file transferred</item>
+        <item quantity="other">%1$d files transferred</item>
+    </plurals>
+
+    <!-- Persistent watchdog notification -->
+    <string name="watchdog_notif_title">Virga is running</string>
+    <string name="watchdog_notif_text">Keeping scheduled syncs reliable on devices that aggressively close background apps. This uses a little extra battery — turn it off if you don\'t need it.</string>
+    <string name="watchdog_action_settings">Settings</string>
+    <string name="watchdog_action_turn_off">Turn off</string>
+</resources>

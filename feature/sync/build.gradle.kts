@@ -22,6 +22,9 @@ dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:designsystem"))
     implementation(project(":core:data"))
+    // PreferencesRepository / AppPreferences are injected/used here (was transitive
+    // via core:data's old api() export — now an explicit dependency).
+    implementation(project(":core:datastore"))
     implementation(project(":sync-worker"))
 
     implementation(libs.bundles.coroutines)

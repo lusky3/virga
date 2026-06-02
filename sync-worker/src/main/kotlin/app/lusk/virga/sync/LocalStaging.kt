@@ -8,6 +8,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -44,6 +45,15 @@ class LocalStaging @Inject constructor(
         val sourceReadable: Boolean = true,
         /** Number of files copied into the staging dir (staged UPLOAD/BISYNC only). */
         val stagedFileCount: Int = 0,
+        /**
+         * For a staged UPLOAD/BISYNC: whether EVERY source file was copied into the
+         * staging dir. False means at least one file couldn't be read (null stream,
+         * IO error, or an unsafe provider-supplied name). A delete-enabled mirror
+         * MUST NOT run against an incomplete stage — rclone would delete the missing
+         * files' counterparts on the cloud destination. Always true for DOWNLOAD /
+         * non-staged sources.
+         */
+        val fullyStaged: Boolean = true,
     )
 
     /** Prepare the local path rclone should operate on. */
@@ -72,14 +82,16 @@ class LocalStaging @Inject constructor(
                         stagedFileCount = 0,
                     )
                 }
-                val count = copyTreeToLocal(tree, stageDir)
+                val tally = CopyTally()
+                copyTreeToLocal(tree, stageDir, tally)
                 return@withContext StagedSource(
                     localPath = stageDir.absolutePath,
                     isStaged = true,
                     treeUriString = sourcePath,
                     cacheDir = stageDir,
                     sourceReadable = true,
-                    stagedFileCount = count,
+                    stagedFileCount = tally.copied,
+                    fullyStaged = tally.errors == 0,
                 )
             }
             // DOWNLOAD: leave stageDir empty; rclone fills it, writeBack copies out.
@@ -99,8 +111,15 @@ class LocalStaging @Inject constructor(
     suspend fun writeBack(staged: StagedSource): Unit = withContext(Dispatchers.IO) {
         val cacheDir = staged.cacheDir ?: return@withContext
         val treeUri = staged.treeUriString ?: return@withContext
-        val tree = DocumentFile.fromTreeUri(context, Uri.parse(treeUri)) ?: return@withContext
-        copyLocalToTree(cacheDir, tree)
+        val tree = DocumentFile.fromTreeUri(context, Uri.parse(treeUri))
+            ?: throw IOException("Can't open the destination folder — re-select it for this task.")
+        val tally = CopyTally()
+        copyLocalToTree(cacheDir, tree, tally)
+        // Fail loudly: silently dropping downloaded files would record a clean sync
+        // while the user's folder is missing data (the cache dir is about to be wiped).
+        if (tally.errors > 0) {
+            throw IOException("Couldn't write ${tally.errors} downloaded file(s) to the folder.")
+        }
     }
 
     /** Delete the staging cache dir. Errors are silently ignored. */
@@ -110,20 +129,33 @@ class LocalStaging @Inject constructor(
 
     // --- private helpers ---
 
-    /** Copies [dir] into [dest] recursively; returns the number of files written. */
-    private fun copyTreeToLocal(dir: DocumentFile, dest: File): Int {
-        var count = 0
+    /** Running totals for a staging copy: files written vs. files that failed/skipped. */
+    private class CopyTally(var copied: Int = 0, var errors: Int = 0)
+
+    /**
+     * Copies [dir] into [dest] recursively, accumulating into [tally]. Any file that
+     * can't be staged — an unsafe provider name, a null input stream, or an IO error —
+     * is counted as an error rather than silently dropped, so the caller can refuse to
+     * run a delete-enabled mirror against an incomplete stage.
+     */
+    private fun copyTreeToLocal(dir: DocumentFile, dest: File, tally: CopyTally) {
         for (child in dir.listFiles()) {
-            val target = safeChild(dest, child.name) ?: continue
+            val target = safeChild(dest, child.name)
+            if (target == null) {
+                // A name we can't safely stage still corresponds to a real source file;
+                // count it so a mirror upload doesn't delete its remote counterpart.
+                tally.errors++
+                continue
+            }
             if (child.isDirectory) {
                 target.mkdirs()
-                count += copyTreeToLocal(child, target)
+                copyTreeToLocal(child, target, tally)
+            } else if (copyDocumentToFile(child.uri, target)) {
+                tally.copied++
             } else {
-                copyDocumentToFile(child.uri, target)
-                count++
+                tally.errors++
             }
         }
-        return count
     }
 
     /**
@@ -144,13 +176,14 @@ class LocalStaging @Inject constructor(
         return if (child.canonicalPath.startsWith(destPrefix)) child else null
     }
 
-    private fun copyDocumentToFile(uri: Uri, dest: File) {
-        context.contentResolver.openInputStream(uri)?.use { input ->
-            dest.outputStream().use { output -> input.copyTo(output) }
-        }
-    }
+    /** Copies one SAF document to [dest]; returns false (no throw) if it can't be read. */
+    private fun copyDocumentToFile(uri: Uri, dest: File): Boolean = runCatching {
+        val stream = context.contentResolver.openInputStream(uri) ?: return false
+        stream.use { input -> dest.outputStream().use { output -> input.copyTo(output) } }
+        true
+    }.getOrDefault(false)
 
-    private fun copyLocalToTree(src: File, treeDir: DocumentFile) {
+    private fun copyLocalToTree(src: File, treeDir: DocumentFile, tally: CopyTally) {
         val children = src.listFiles() ?: return
         // Snapshot the tree's existing entries once. DocumentFile.findFile is an
         // O(n) provider query per call, so calling it per child would be O(n^2)
@@ -159,15 +192,19 @@ class LocalStaging @Inject constructor(
         for (child in children) {
             if (child.isDirectory) {
                 val subDoc = existing[child.name]?.takeIf { it.isDirectory }
-                    ?: treeDir.createDirectory(child.name) ?: continue
-                copyLocalToTree(child, subDoc)
+                    ?: treeDir.createDirectory(child.name)
+                if (subDoc == null) { tally.errors++; continue }
+                copyLocalToTree(child, subDoc, tally)
             } else {
                 val mime = context.contentResolver.getType(Uri.fromFile(child)) ?: "application/octet-stream"
-                val docFile = existing[child.name]
-                    ?: treeDir.createFile(mime, child.name) ?: continue
-                context.contentResolver.openOutputStream(docFile.uri, "wt")?.use { output ->
-                    child.inputStream().use { input -> input.copyTo(output) }
-                }
+                val docFile = existing[child.name] ?: treeDir.createFile(mime, child.name)
+                if (docFile == null) { tally.errors++; continue }
+                val ok = runCatching {
+                    val out = context.contentResolver.openOutputStream(docFile.uri, "wt") ?: return@runCatching false
+                    out.use { output -> child.inputStream().use { input -> input.copyTo(output) } }
+                    true
+                }.getOrDefault(false)
+                if (ok) tally.copied++ else tally.errors++
             }
         }
     }

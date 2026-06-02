@@ -10,6 +10,8 @@ import app.lusk.virga.core.data.FileBrowserRepository
 import app.lusk.virga.core.data.RemoteFolderPickStore
 import app.lusk.virga.core.data.RemoteRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -177,7 +179,12 @@ class FileBrowserViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        viewModelScope.launch { runCatching { fileBrowser.releaseDaemon() } }
+        // viewModelScope is already cancelled by super.onCleared(), so a
+        // viewModelScope.launch here never runs — the rclone daemon would leak.
+        // Release it on a detached scope so cleanup actually executes.
+        CoroutineScope(dispatchers.io + SupervisorJob()).launch {
+            runCatching { fileBrowser.releaseDaemon() }
+        }
     }
 
     private companion object {

@@ -269,5 +269,14 @@
     <string name="wizard_destination_placeholder">e.g. Backups/Photos</string>
     <!-- Step 5: Direction and name -->
     <string name="wizard_direction_heading">Direction and name</string>
+
+    <!-- Task list snackbar messages -->
+    <string name="sync_tasks_msg_sync_started">Sync started</string>
+    <string name="sync_tasks_msg_task_duplicated">Task duplicated</string>
+    <string name="sync_tasks_msg_no_enabled_tasks">No enabled tasks</string>
+    <plurals name="sync_tasks_msg_syncing">
+        <item quantity="one">Syncing %1$d task</item>
+        <item quantity="other">Syncing %1$d tasks</item>
+    </plurals>
 </resources>
 

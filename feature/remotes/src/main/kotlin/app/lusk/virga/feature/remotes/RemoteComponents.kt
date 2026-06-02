@@ -1,62 +1,39 @@
 package app.lusk.virga.feature.remotes
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import app.lusk.virga.core.designsystem.component.VirgaCard
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.lusk.virga.core.common.model.Remote
-import app.lusk.virga.core.common.model.RemoteOption
-import app.lusk.virga.core.common.model.RemoteProvider
 import app.lusk.virga.core.common.model.RemoteQuota
 import app.lusk.virga.core.common.util.formatFileSize
-import app.lusk.virga.core.rclone.oauth.OAuthProvider
 
 /** Curated list of common rclone backend types with friendly display names. */
 internal val RcloneBackendTypes: List<Pair<String, String>> = listOf(
@@ -83,6 +60,7 @@ internal fun RemoteCard(
     onCreateTask: (String) -> Unit,
     onDelete: () -> Unit,
     quota: RemoteQuota? = null,
+    quotaLoading: Boolean = false,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -99,7 +77,7 @@ internal fun RemoteCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(remote.type, style = MaterialTheme.typography.bodySmall)
-                RemoteQuotaRow(quota)
+                RemoteQuotaRow(quota, quotaLoading)
             }
 
             // Overflow menu
@@ -133,736 +111,58 @@ internal fun RemoteCard(
     }
 }
 
-/** Shows a compact "used of total" line with a progress bar. Renders nothing when quota is unavailable. */
-@Composable
-private fun RemoteQuotaRow(quota: RemoteQuota?) {
-    val used = quota?.used ?: return
-    val total = quota.total ?: return
-    if (total <= 0L) return
-
-    val fraction = (used.toFloat() / total).coerceIn(0f, 1f)
-    val label = stringResource(
-        R.string.remotes_quota_used_of_total,
-        formatFileSize(used),
-        formatFileSize(total),
-    )
-    Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
-        Text(
-            label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        LinearProgressIndicator(
-            progress = { fraction },
-            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
-        )
-    }
-}
-
 /**
- * [AddRemoteDialog] manual section: renders typed fields for each [RemoteOption] in
- * [options], or falls back to the freeform textarea when [options] is null.
- *
- * When the user selects the "crypt" backend type, the generic fields are replaced
- * with a dedicated [CryptRemoteForm]: a base-remote picker, optional path, and
- * masked password fields. The OAuth chips and BYO keys section are hidden for crypt
- * because they are irrelevant.
+ * Shows a compact "used of total" line with a progress bar. When the quota is not
+ * yet available but a fetch is in flight ([loading]), shows an animated indeterminate
+ * "thinking" bar in the same spot so the card doesn't reflow when the real value
+ * arrives. Renders nothing when there's no quota and nothing is loading.
  */
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-internal fun AddRemoteDialog(
-    oauthProviders: List<OAuthProvider>,
-    error: String?,
-    customClientIds: Map<String, String>,
-    /**
-     * Called once when the dialog opens so the VM can start loading provider schema.
-     * Safe to call repeatedly — the VM guards against double-loading.
-     */
-    onEnsureProviders: () -> Unit,
-    /**
-     * Returns the non-advanced option list for a backend type, or null when the
-     * schema is not yet loaded or the type is unknown → fall back to freeform.
-     */
-    optionsForBackend: (String) -> List<RemoteOption>?,
-    /**
-     * The loaded provider schema (null until loaded). Passed in only so the typed
-     * fields recompute when the schema arrives AFTER the user already picked a
-     * type — [optionsForBackend] reads a non-observable StateFlow.value, so we
-     * key the lookup on this Compose-observable value.
-     */
-    providersLoaded: List<RemoteProvider>?,
-    /** All currently configured remotes — used by [CryptRemoteForm] to populate the base picker. */
-    existingRemotes: List<Remote> = emptyList(),
-    onDismiss: () -> Unit,
-    onManualConfirm: (name: String, type: String, params: String) -> Unit,
-    onCryptConfirm: (name: String, baseRemote: String, basePath: String, password: String, salt: String) -> Unit = { _, _, _, _, _ -> },
-    onOAuth: (provider: OAuthProvider, name: String) -> Unit,
-    onSaveClientId: (providerId: String, clientId: String) -> Unit,
-    onClearClientId: (providerId: String) -> Unit,
-) {
-    LaunchedEffect(Unit) { onEnsureProviders() }
-
-    var name by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf("") }
-    var params by remember { mutableStateOf("") }
-    var typeMenuExpanded by remember { mutableStateOf(false) }
-
-    val isCrypt = type.trim().equals("crypt", ignoreCase = true)
-
-    // Crypt wizard state — only used when isCrypt is true.
-    var cryptBaseRemote by remember { mutableStateOf("") }
-    var cryptBasePath by remember { mutableStateOf("") }
-    var cryptPassword by remember { mutableStateOf("") }
-    var cryptSalt by remember { mutableStateOf("") }
-
-    // Reset crypt fields when the user switches away from crypt.
-    LaunchedEffect(isCrypt) {
-        if (!isCrypt) {
-            cryptBaseRemote = ""
-            cryptBasePath = ""
-            cryptPassword = ""
-            cryptSalt = ""
-        }
-    }
-
-    val filteredBackends = remember(type) {
-        val q = type.trim().lowercase()
-        if (q.isEmpty()) RcloneBackendTypes
-        else RcloneBackendTypes.filter { (id, label) ->
-            id.contains(q) || label.lowercase().contains(q)
-        }
-    }
-
-    // Typed field values keyed by option name. Reset when the backend type changes.
-    val typedValues = remember { mutableStateMapOf<String, String>() }
-    var showAdvanced by remember { mutableStateOf(false) }
-
-    // Recompute which options to render whenever type changes.
-    val schemaOptions: List<RemoteOption>? = remember(type, providersLoaded) { optionsForBackend(type.trim()) }
-
-    // Reset typed values when the user picks a different backend type.
-    LaunchedEffect(type) {
-        typedValues.clear()
-        showAdvanced = false
-    }
-
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 8.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                stringResource(R.string.remotes_add_dialog_title),
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(bottom = 8.dp),
-            )
-
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text(stringResource(R.string.remotes_add_field_name)) },
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.None,
-                    autoCorrectEnabled = false,
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            // OAuth sign-in chips and BYO keys are irrelevant for crypt remotes.
-            if (!isCrypt) {
-                Text(
-                    stringResource(R.string.remotes_add_sign_in_with),
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    oauthProviders.forEach { provider ->
-                        val custom = provider.id in customClientIds
-                        AssistChip(
-                            onClick = { onOAuth(provider, name) },
-                            enabled = name.isNotBlank(),
-                            label = {
-                                Text(
-                                    if (custom) stringResource(R.string.remotes_byo_chip_custom, provider.displayName)
-                                    else provider.displayName,
-                                )
-                            },
-                        )
-                    }
-                }
-
-                ByoKeysSection(
-                    providers = oauthProviders,
-                    customClientIds = customClientIds,
-                    onSaveClientId = onSaveClientId,
-                    onClearClientId = onClearClientId,
-                )
-
-                HorizontalDivider()
-                Text(
-                    stringResource(R.string.remotes_add_or_manual),
-                    style = MaterialTheme.typography.labelLarge,
-                )
-            }
-
-            // Searchable / editable dropdown for backend type
-            ExposedDropdownMenuBox(
-                expanded = typeMenuExpanded,
-                onExpandedChange = { typeMenuExpanded = it },
-            ) {
-                OutlinedTextField(
-                    value = type,
-                    onValueChange = { type = it; typeMenuExpanded = true },
-                    label = { Text(stringResource(R.string.remotes_add_field_type)) },
-                    trailingIcon = {
-                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeMenuExpanded)
-                    },
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.None,
-                        autoCorrectEnabled = false,
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
-                )
-                if (filteredBackends.isNotEmpty()) {
-                    ExposedDropdownMenu(
-                        expanded = typeMenuExpanded,
-                        onDismissRequest = { typeMenuExpanded = false },
-                    ) {
-                        filteredBackends.forEach { (id, label) ->
-                            DropdownMenuItem(
-                                text = {
-                                    Column {
-                                        Text(id, style = MaterialTheme.typography.bodyMedium)
-                                        Text(
-                                            label,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                },
-                                onClick = {
-                                    type = id
-                                    typeMenuExpanded = false
-                                },
-                                contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Crypt wizard replaces generic typed / freeform fields when type == "crypt".
-            if (isCrypt) {
-                CryptRemoteForm(
-                    existingRemotes = existingRemotes,
-                    selectedBaseRemote = cryptBaseRemote,
-                    onBaseRemoteSelected = { cryptBaseRemote = it },
-                    basePath = cryptBasePath,
-                    onBasePathChange = { cryptBasePath = it },
-                    password = cryptPassword,
-                    onPasswordChange = { cryptPassword = it },
-                    salt = cryptSalt,
-                    onSaltChange = { cryptSalt = it },
-                )
-            } else if (schemaOptions != null) {
-                TypedOptionFields(
-                    options = schemaOptions,
-                    values = typedValues,
-                    showAdvanced = showAdvanced,
-                    onToggleAdvanced = { showAdvanced = !showAdvanced },
-                )
-            } else {
-                OutlinedTextField(
-                    value = params,
-                    onValueChange = { params = it },
-                    label = { Text(stringResource(R.string.remotes_add_field_params)) },
-                    placeholder = { Text(stringResource(R.string.remotes_add_params_placeholder)) },
-                    supportingText = { Text(stringResource(R.string.remotes_add_params_supporting)) },
-                    minLines = 3,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-
-            if (error != null) {
-                Text(
-                    error,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.remotes_add_cancel)) }
-                TextButton(
-                    onClick = {
-                        if (isCrypt) {
-                            onCryptConfirm(name.trim(), cryptBaseRemote, cryptBasePath, cryptPassword, cryptSalt)
-                        } else {
-                            val paramsText = if (schemaOptions != null) {
-                                // Serialise typed values to the same "key=value\n..." format the
-                                // VM's addRemote() parser already understands — no persistence change.
-                                typedValues.entries
-                                    .filter { (_, v) -> v.isNotBlank() }
-                                    .joinToString("\n") { (k, v) -> "$k=$v" }
-                            } else {
-                                params
-                            }
-                            onManualConfirm(name, type, paramsText)
-                        }
-                    },
-                    enabled = if (isCrypt) {
-                        name.isNotBlank() && cryptBaseRemote.isNotBlank() && cryptPassword.isNotBlank()
-                    } else {
-                        name.isNotBlank() && type.isNotBlank()
-                    },
-                ) { Text(stringResource(R.string.remotes_add_create)) }
-            }
-        }
-    }
-}
-
-/**
- * Renders a column of typed input fields for [options]. Non-advanced options are
- * always shown; advanced options appear after the "Show advanced options" expander.
- *
- * Field type mapping (rclone type → Compose widget):
- *  - "bool"                       → Switch in a labelled Row
- *  - "int" | "SizeSuffix" | "Duration" → OutlinedTextField with number keyboard
- *  - isPassword == true           → OutlinedTextField with PasswordVisualTransformation
- *  - options with Examples list   → ExposedDropdownMenu (free-text + suggestions)
- *  - everything else              → plain OutlinedTextField
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TypedOptionFields(
-    options: List<RemoteOption>,
-    values: MutableMap<String, String>,
-    showAdvanced: Boolean,
-    onToggleAdvanced: () -> Unit,
-) {
-    val normalOptions = options.filter { !it.advanced }
-    val advancedOptions = options.filter { it.advanced }
-
-    normalOptions.forEach { opt ->
-        OptionField(opt = opt, values = values)
-    }
-
-    if (advancedOptions.isNotEmpty()) {
-        TextButton(onClick = onToggleAdvanced) {
-            Text(
-                if (showAdvanced) stringResource(R.string.remotes_add_hide_advanced)
-                else stringResource(R.string.remotes_add_show_advanced),
-            )
-        }
-        if (showAdvanced) {
-            advancedOptions.forEach { opt ->
-                OptionField(opt = opt, values = values)
-            }
-        }
-    }
-}
-
-/**
- * Single typed input field for a [RemoteOption]. Chooses the widget based on the
- * option's type and metadata:
- *  - bool → Switch row
- *  - numeric types → number-keyboard OutlinedTextField
- *  - password → password OutlinedTextField
- *  - with Examples → dropdown suggestion OutlinedTextField
- *  - default → plain OutlinedTextField
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun OptionField(
-    opt: RemoteOption,
-    values: MutableMap<String, String>,
-) {
-    val current = values[opt.name] ?: opt.default.orEmpty()
-    val requiredSuffix = if (opt.required) stringResource(R.string.remotes_add_required_hint) else ""
-    val labelText = opt.name + requiredSuffix
+private fun RemoteQuotaRow(quota: RemoteQuota?, loading: Boolean) {
+    val used = quota?.used
+    val total = quota?.total
+    val hasQuota = used != null && total != null && total > 0L
 
     when {
-        opt.type == "bool" -> {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+        hasQuota -> {
+            val fraction = (used.toFloat() / total).coerceIn(0f, 1f)
+            val label = stringResource(
+                R.string.remotes_quota_used_of_total,
+                formatFileSize(used),
+                formatFileSize(total),
+            )
+            Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                LinearProgressIndicator(
+                    progress = { fraction },
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                )
+            }
+        }
+        loading -> {
+            val checkingLabel = stringResource(R.string.remotes_quota_loading)
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+                    .semantics { liveRegion = LiveRegionMode.Polite },
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(labelText, style = MaterialTheme.typography.bodyMedium)
-                    if (opt.help.isNotBlank()) {
-                        Text(
-                            opt.help,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                Switch(
-                    checked = current.equals("true", ignoreCase = true),
-                    onCheckedChange = { values[opt.name] = it.toString() },
+                Text(
+                    checkingLabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            }
-        }
-
-        opt.examples.isNotEmpty() -> {
-            ExamplesDropdownField(
-                opt = opt,
-                current = current,
-                labelText = labelText,
-                onValueChange = { values[opt.name] = it },
-            )
-        }
-
-        opt.isPassword -> {
-            OutlinedTextField(
-                value = current,
-                onValueChange = { values[opt.name] = it },
-                label = { Text(labelText) },
-                supportingText = if (opt.help.isNotBlank()) {
-                    { Text(opt.help, style = MaterialTheme.typography.bodySmall) }
-                } else null,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.None,
-                    autoCorrectEnabled = false,
-                    keyboardType = KeyboardType.Password,
-                ),
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-
-        opt.type in NUMERIC_TYPES -> {
-            OutlinedTextField(
-                value = current,
-                onValueChange = { values[opt.name] = it },
-                label = { Text(labelText) },
-                supportingText = if (opt.help.isNotBlank()) {
-                    { Text(opt.help, style = MaterialTheme.typography.bodySmall) }
-                } else null,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Number,
-                    capitalization = KeyboardCapitalization.None,
-                    autoCorrectEnabled = false,
-                ),
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-
-        else -> {
-            OutlinedTextField(
-                value = current,
-                onValueChange = { values[opt.name] = it },
-                label = { Text(labelText) },
-                supportingText = if (opt.help.isNotBlank()) {
-                    { Text(opt.help, style = MaterialTheme.typography.bodySmall) }
-                } else null,
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.None,
-                    autoCorrectEnabled = false,
-                ),
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-    }
-}
-
-/**
- * An editable field backed by a dropdown list of example values. The user can
- * either pick from the examples or type freely. Labels in the dropdown use the
- * example's help text when available.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ExamplesDropdownField(
-    opt: RemoteOption,
-    current: String,
-    labelText: String,
-    onValueChange: (String) -> Unit,
-) {
-    var menuExpanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(
-        expanded = menuExpanded,
-        onExpandedChange = { menuExpanded = it },
-    ) {
-        OutlinedTextField(
-            value = current,
-            onValueChange = { onValueChange(it); menuExpanded = true },
-            label = { Text(labelText) },
-            supportingText = if (opt.help.isNotBlank()) {
-                { Text(opt.help, style = MaterialTheme.typography.bodySmall) }
-            } else null,
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = menuExpanded) },
-            keyboardOptions = KeyboardOptions(
-                capitalization = KeyboardCapitalization.None,
-                autoCorrectEnabled = false,
-            ),
-            singleLine = true,
-            modifier = Modifier
-                .fillMaxWidth()
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
-        )
-        ExposedDropdownMenu(
-            expanded = menuExpanded,
-            onDismissRequest = { menuExpanded = false },
-        ) {
-            opt.examples.forEach { (value, help) ->
-                DropdownMenuItem(
-                    text = {
-                        Column {
-                            Text(value, style = MaterialTheme.typography.bodyMedium)
-                            if (help.isNotBlank()) {
-                                Text(
-                                    help,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    },
-                    onClick = {
-                        onValueChange(value)
-                        menuExpanded = false
-                    },
-                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                LinearWavyProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp)
+                        .semantics { contentDescription = checkingLabel },
                 )
-            }
-        }
-    }
-}
-
-/**
- * Crypt-specific form fields shown inside [AddRemoteDialog] when the user selects
- * the "crypt" backend type. Presents:
- *  - A dropdown to pick the base remote from existing configured remotes.
- *  - An optional path field for the subfolder on the base remote.
- *  - A password field with show/hide toggle (no plaintext ever leaves this composable).
- *  - An optional salt / password2 field with the same masking.
- *  - A warning that the password cannot be recovered.
- *
- * No password value is logged or persisted here. The caller forwards
- * the values directly to the ViewModel which delegates to [RcloneEngine.createCryptRemote].
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-internal fun CryptRemoteForm(
-    existingRemotes: List<Remote>,
-    selectedBaseRemote: String,
-    onBaseRemoteSelected: (String) -> Unit,
-    basePath: String,
-    onBasePathChange: (String) -> Unit,
-    password: String,
-    onPasswordChange: (String) -> Unit,
-    salt: String,
-    onSaltChange: (String) -> Unit,
-) {
-    var baseMenuExpanded by remember { mutableStateOf(false) }
-    var showPassword by remember { mutableStateOf(false) }
-    var showSalt by remember { mutableStateOf(false) }
-
-    if (existingRemotes.isEmpty()) {
-        Text(
-            stringResource(R.string.remotes_crypt_no_base_remotes),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        return
-    }
-
-    Text(
-        stringResource(R.string.remotes_crypt_title),
-        style = MaterialTheme.typography.titleSmall,
-    )
-
-    ExposedDropdownMenuBox(
-        expanded = baseMenuExpanded,
-        onExpandedChange = { baseMenuExpanded = it },
-    ) {
-        OutlinedTextField(
-            value = selectedBaseRemote,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(stringResource(R.string.remotes_crypt_base_remote_label)) },
-            placeholder = { Text(stringResource(R.string.remotes_crypt_base_remote_placeholder)) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = baseMenuExpanded) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
-        )
-        ExposedDropdownMenu(
-            expanded = baseMenuExpanded,
-            onDismissRequest = { baseMenuExpanded = false },
-        ) {
-            existingRemotes.forEach { remote ->
-                DropdownMenuItem(
-                    text = {
-                        Column {
-                            Text(remote.name, style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                remote.type,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    },
-                    onClick = {
-                        onBaseRemoteSelected(remote.name)
-                        baseMenuExpanded = false
-                    },
-                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
-                )
-            }
-        }
-    }
-
-    OutlinedTextField(
-        value = basePath,
-        onValueChange = onBasePathChange,
-        label = { Text(stringResource(R.string.remotes_crypt_base_path_label)) },
-        placeholder = { Text(stringResource(R.string.remotes_crypt_base_path_placeholder)) },
-        keyboardOptions = KeyboardOptions(
-            capitalization = KeyboardCapitalization.None,
-            autoCorrectEnabled = false,
-        ),
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
-    )
-
-    OutlinedTextField(
-        value = password,
-        onValueChange = onPasswordChange,
-        label = { Text(stringResource(R.string.remotes_crypt_password_label)) },
-        visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-        trailingIcon = {
-            IconButton(onClick = { showPassword = !showPassword }) {
-                Icon(
-                    imageVector = if (showPassword) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                    contentDescription = stringResource(
-                        if (showPassword) R.string.remotes_crypt_hide_password
-                        else R.string.remotes_crypt_show_password,
-                    ),
-                )
-            }
-        },
-        keyboardOptions = KeyboardOptions(
-            capitalization = KeyboardCapitalization.None,
-            autoCorrectEnabled = false,
-            keyboardType = KeyboardType.Password,
-        ),
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
-    )
-
-    OutlinedTextField(
-        value = salt,
-        onValueChange = onSaltChange,
-        label = { Text(stringResource(R.string.remotes_crypt_salt_label)) },
-        visualTransformation = if (showSalt) VisualTransformation.None else PasswordVisualTransformation(),
-        trailingIcon = {
-            IconButton(onClick = { showSalt = !showSalt }) {
-                Icon(
-                    imageVector = if (showSalt) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                    contentDescription = stringResource(
-                        if (showSalt) R.string.remotes_crypt_hide_password
-                        else R.string.remotes_crypt_show_password,
-                    ),
-                )
-            }
-        },
-        keyboardOptions = KeyboardOptions(
-            capitalization = KeyboardCapitalization.None,
-            autoCorrectEnabled = false,
-            keyboardType = KeyboardType.Password,
-        ),
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
-    )
-
-    Text(
-        stringResource(R.string.remotes_crypt_password_warning),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.fillMaxWidth(),
-    )
-}
-
-private val NUMERIC_TYPES = setOf("int", "SizeSuffix", "Duration", "int64")
-
-/**
- * Expandable "bring your own OAuth keys" section. The built-in client IDs are
- * shared across all installs and share one app's rate limits; power users paste
- * their own client ID here (Virga uses PKCE, so no client secret is needed).
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ByoKeysSection(
-    providers: List<OAuthProvider>,
-    customClientIds: Map<String, String>,
-    onSaveClientId: (providerId: String, clientId: String) -> Unit,
-    onClearClientId: (providerId: String) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    var selectedId by remember { mutableStateOf(providers.firstOrNull()?.id.orEmpty()) }
-    // Field text tracks the selected provider's stored value; editing overrides it.
-    var clientIdText by remember(selectedId) { mutableStateOf(customClientIds[selectedId].orEmpty()) }
-
-    TextButton(onClick = { expanded = !expanded }) {
-        Text(stringResource(R.string.remotes_byo_toggle))
-    }
-    if (expanded) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                stringResource(R.string.remotes_byo_explainer),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                providers.forEach { provider ->
-                    FilterChip(
-                        selected = provider.id == selectedId,
-                        onClick = { selectedId = provider.id },
-                        label = { Text(provider.displayName) },
-                    )
-                }
-            }
-            OutlinedTextField(
-                value = clientIdText,
-                onValueChange = { clientIdText = it },
-                label = { Text(stringResource(R.string.remotes_byo_client_id)) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.None,
-                    autoCorrectEnabled = false,
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(
-                    onClick = { onSaveClientId(selectedId, clientIdText) },
-                    enabled = selectedId.isNotBlank(),
-                ) { Text(stringResource(R.string.remotes_byo_save)) }
-                if (selectedId in customClientIds) {
-                    TextButton(onClick = { onClearClientId(selectedId); clientIdText = "" }) {
-                        Text(stringResource(R.string.remotes_byo_clear))
-                    }
-                }
             }
         }
     }

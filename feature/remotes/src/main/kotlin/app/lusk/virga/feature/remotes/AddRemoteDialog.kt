@@ -1,0 +1,378 @@
+package app.lusk.virga.feature.remotes
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.unit.dp
+import app.lusk.virga.core.common.model.Remote
+import app.lusk.virga.core.common.model.RemoteOption
+import app.lusk.virga.core.common.model.RemoteProvider
+import app.lusk.virga.core.rclone.oauth.OAuthProvider
+/**
+ * [AddRemoteDialog] manual section: renders typed fields for each [RemoteOption] in
+ * [options], or falls back to the freeform textarea when [options] is null.
+ *
+ * When the user selects the "crypt" backend type, the generic fields are replaced
+ * with a dedicated [CryptRemoteForm]: a base-remote picker, optional path, and
+ * masked password fields. The OAuth chips and BYO keys section are hidden for crypt
+ * because they are irrelevant.
+ */
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@Composable
+internal fun AddRemoteDialog(
+    oauthProviders: List<OAuthProvider>,
+    error: String?,
+    customClientIds: Map<String, String>,
+    /**
+     * Called once when the dialog opens so the VM can start loading provider schema.
+     * Safe to call repeatedly — the VM guards against double-loading.
+     */
+    onEnsureProviders: () -> Unit,
+    /**
+     * Returns the non-advanced option list for a backend type, or null when the
+     * schema is not yet loaded or the type is unknown → fall back to freeform.
+     */
+    optionsForBackend: (String) -> List<RemoteOption>?,
+    /**
+     * The loaded provider schema (null until loaded). Passed in only so the typed
+     * fields recompute when the schema arrives AFTER the user already picked a
+     * type — [optionsForBackend] reads a non-observable StateFlow.value, so we
+     * key the lookup on this Compose-observable value.
+     */
+    providersLoaded: List<RemoteProvider>?,
+    /** All currently configured remotes — used by [CryptRemoteForm] to populate the base picker. */
+    existingRemotes: List<Remote> = emptyList(),
+    onDismiss: () -> Unit,
+    onManualConfirm: (name: String, type: String, params: String) -> Unit,
+    onCryptConfirm: (name: String, baseRemote: String, basePath: String, password: String, salt: String) -> Unit = { _, _, _, _, _ -> },
+    onOAuth: (provider: OAuthProvider, name: String) -> Unit,
+    onSaveClientId: (providerId: String, clientId: String) -> Unit,
+    onClearClientId: (providerId: String) -> Unit,
+) {
+    LaunchedEffect(Unit) { onEnsureProviders() }
+
+    var name by remember { mutableStateOf("") }
+    var type by remember { mutableStateOf("") }
+    var params by remember { mutableStateOf("") }
+    var typeMenuExpanded by remember { mutableStateOf(false) }
+
+    val isCrypt = type.trim().equals("crypt", ignoreCase = true)
+
+    // Crypt wizard state — only used when isCrypt is true.
+    var cryptBaseRemote by remember { mutableStateOf("") }
+    var cryptBasePath by remember { mutableStateOf("") }
+    var cryptPassword by remember { mutableStateOf("") }
+    var cryptSalt by remember { mutableStateOf("") }
+
+    // Reset crypt fields when the user switches away from crypt.
+    LaunchedEffect(isCrypt) {
+        if (!isCrypt) {
+            cryptBaseRemote = ""
+            cryptBasePath = ""
+            cryptPassword = ""
+            cryptSalt = ""
+        }
+    }
+
+    val filteredBackends = remember(type) {
+        val q = type.trim().lowercase()
+        if (q.isEmpty()) RcloneBackendTypes
+        else RcloneBackendTypes.filter { (id, label) ->
+            id.contains(q) || label.lowercase().contains(q)
+        }
+    }
+
+    // Typed field values keyed by option name. Reset when the backend type changes.
+    val typedValues = remember { mutableStateMapOf<String, String>() }
+    var showAdvanced by remember { mutableStateOf(false) }
+
+    // Recompute which options to render whenever type changes.
+    val schemaOptions: List<RemoteOption>? = remember(type, providersLoaded) { optionsForBackend(type.trim()) }
+
+    // Reset typed values when the user picks a different backend type.
+    LaunchedEffect(type) {
+        typedValues.clear()
+        showAdvanced = false
+    }
+
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 8.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                stringResource(R.string.remotes_add_dialog_title),
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text(stringResource(R.string.remotes_add_field_name)) },
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.None,
+                    autoCorrectEnabled = false,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            // OAuth sign-in chips and BYO keys are irrelevant for crypt remotes.
+            if (!isCrypt) {
+                Text(
+                    stringResource(R.string.remotes_add_sign_in_with),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    oauthProviders.forEach { provider ->
+                        val custom = provider.id in customClientIds
+                        AssistChip(
+                            onClick = { onOAuth(provider, name) },
+                            enabled = name.isNotBlank(),
+                            label = {
+                                Text(
+                                    if (custom) stringResource(R.string.remotes_byo_chip_custom, provider.displayName)
+                                    else provider.displayName,
+                                )
+                            },
+                        )
+                    }
+                }
+
+                ByoKeysSection(
+                    providers = oauthProviders,
+                    customClientIds = customClientIds,
+                    onSaveClientId = onSaveClientId,
+                    onClearClientId = onClearClientId,
+                )
+
+                HorizontalDivider()
+                Text(
+                    stringResource(R.string.remotes_add_or_manual),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+
+            // Searchable / editable dropdown for backend type
+            ExposedDropdownMenuBox(
+                expanded = typeMenuExpanded,
+                onExpandedChange = { typeMenuExpanded = it },
+            ) {
+                OutlinedTextField(
+                    value = type,
+                    onValueChange = { type = it; typeMenuExpanded = true },
+                    label = { Text(stringResource(R.string.remotes_add_field_type)) },
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeMenuExpanded)
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.None,
+                        autoCorrectEnabled = false,
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
+                )
+                if (filteredBackends.isNotEmpty()) {
+                    ExposedDropdownMenu(
+                        expanded = typeMenuExpanded,
+                        onDismissRequest = { typeMenuExpanded = false },
+                    ) {
+                        filteredBackends.forEach { (id, label) ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(id, style = MaterialTheme.typography.bodyMedium)
+                                        Text(
+                                            label,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    type = id
+                                    typeMenuExpanded = false
+                                },
+                                contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Crypt wizard replaces generic typed / freeform fields when type == "crypt".
+            if (isCrypt) {
+                CryptRemoteForm(
+                    existingRemotes = existingRemotes,
+                    selectedBaseRemote = cryptBaseRemote,
+                    onBaseRemoteSelected = { cryptBaseRemote = it },
+                    basePath = cryptBasePath,
+                    onBasePathChange = { cryptBasePath = it },
+                    password = cryptPassword,
+                    onPasswordChange = { cryptPassword = it },
+                    salt = cryptSalt,
+                    onSaltChange = { cryptSalt = it },
+                )
+            } else if (schemaOptions != null) {
+                TypedOptionFields(
+                    options = schemaOptions,
+                    values = typedValues,
+                    showAdvanced = showAdvanced,
+                    onToggleAdvanced = { showAdvanced = !showAdvanced },
+                )
+            } else {
+                OutlinedTextField(
+                    value = params,
+                    onValueChange = { params = it },
+                    label = { Text(stringResource(R.string.remotes_add_field_params)) },
+                    placeholder = { Text(stringResource(R.string.remotes_add_params_placeholder)) },
+                    supportingText = { Text(stringResource(R.string.remotes_add_params_supporting)) },
+                    minLines = 3,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
+            if (error != null) {
+                Text(
+                    error,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.remotes_add_cancel)) }
+                TextButton(
+                    onClick = {
+                        if (isCrypt) {
+                            onCryptConfirm(name.trim(), cryptBaseRemote, cryptBasePath, cryptPassword, cryptSalt)
+                        } else {
+                            val paramsText = if (schemaOptions != null) {
+                                // Serialise typed values to the same "key=value\n..." format the
+                                // VM's addRemote() parser already understands — no persistence change.
+                                typedValues.entries
+                                    .filter { (_, v) -> v.isNotBlank() }
+                                    .joinToString("\n") { (k, v) -> "$k=$v" }
+                            } else {
+                                params
+                            }
+                            onManualConfirm(name, type, paramsText)
+                        }
+                    },
+                    enabled = if (isCrypt) {
+                        name.isNotBlank() && cryptBaseRemote.isNotBlank() && cryptPassword.isNotBlank()
+                    } else {
+                        name.isNotBlank() && type.isNotBlank()
+                    },
+                ) { Text(stringResource(R.string.remotes_add_create)) }
+            }
+        }
+    }
+}
+
+/**
+ * Expandable "bring your own OAuth keys" section. The built-in client IDs are
+ * shared across all installs and share one app's rate limits; power users paste
+ * their own client ID here (Virga uses PKCE, so no client secret is needed).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ByoKeysSection(
+    providers: List<OAuthProvider>,
+    customClientIds: Map<String, String>,
+    onSaveClientId: (providerId: String, clientId: String) -> Unit,
+    onClearClientId: (providerId: String) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var selectedId by remember { mutableStateOf(providers.firstOrNull()?.id.orEmpty()) }
+    // Field text tracks the selected provider's stored value; editing overrides it.
+    var clientIdText by remember(selectedId) { mutableStateOf(customClientIds[selectedId].orEmpty()) }
+
+    TextButton(onClick = { expanded = !expanded }) {
+        Text(stringResource(R.string.remotes_byo_toggle))
+    }
+    if (expanded) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                stringResource(R.string.remotes_byo_explainer),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                providers.forEach { provider ->
+                    FilterChip(
+                        selected = provider.id == selectedId,
+                        onClick = { selectedId = provider.id },
+                        label = { Text(provider.displayName) },
+                    )
+                }
+            }
+            OutlinedTextField(
+                value = clientIdText,
+                onValueChange = { clientIdText = it },
+                label = { Text(stringResource(R.string.remotes_byo_client_id)) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.None,
+                    autoCorrectEnabled = false,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(
+                    onClick = { onSaveClientId(selectedId, clientIdText) },
+                    enabled = selectedId.isNotBlank(),
+                ) { Text(stringResource(R.string.remotes_byo_save)) }
+                if (selectedId in customClientIds) {
+                    TextButton(onClick = { onClearClientId(selectedId); clientIdText = "" }) {
+                        Text(stringResource(R.string.remotes_byo_clear))
+                    }
+                }
+            }
+        }
+    }
+}

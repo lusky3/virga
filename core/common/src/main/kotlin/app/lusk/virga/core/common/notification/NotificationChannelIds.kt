@@ -5,4 +5,7 @@ object NotificationChannelIds {
     const val SYNC_PROGRESS = "sync_progress"
     const val SYNC_COMPLETE = "sync_complete"
     const val SYNC_ERROR = "sync_error"
+
+    /** Min-importance channel for the optional persistent watchdog service. */
+    const val WATCHDOG = "watchdog"
 }

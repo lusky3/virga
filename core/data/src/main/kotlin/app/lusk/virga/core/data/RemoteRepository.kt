@@ -5,6 +5,7 @@ import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.common.model.RemoteProvider
 import app.lusk.virga.core.common.model.RemoteQuota
 import app.lusk.virga.core.database.dao.RemoteDao
+import app.lusk.virga.core.database.dao.SyncTaskDao
 import app.lusk.virga.core.database.entity.RemoteEntity
 import app.lusk.virga.core.rclone.RcloneEngine
 import app.lusk.virga.core.rclone.config.RcloneConfigManager
@@ -20,6 +21,7 @@ import javax.inject.Singleton
 @Singleton
 class RemoteRepository @Inject constructor(
     private val remoteDao: RemoteDao,
+    private val syncTaskDao: SyncTaskDao,
     private val engine: RcloneEngine,
     private val configManager: RcloneConfigManager,
 ) {
@@ -58,6 +60,10 @@ class RemoteRepository @Inject constructor(
         runCatching {
             engine.deleteRemote(name)
             remoteDao.deleteByName(name)
+            // Tasks pointing at the removed remote can no longer function — drop them
+            // so they don't linger as broken rows. Their scheduled WorkManager jobs
+            // self-cancel on the next run (SyncWorker cancels work for a missing task).
+            syncTaskDao.deleteByRemoteName(name)
         }
 
     suspend fun importConfig(confContent: String): Result<Unit> {

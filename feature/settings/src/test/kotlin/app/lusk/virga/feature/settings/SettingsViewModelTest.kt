@@ -65,6 +65,13 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun setWatchdog_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setWatchdog(true)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { repository.setWatchdogEnabled(true) }
+    }
+
+    @Test
     fun setDefaultBwLimits_passesBothValuesThrough() = runTest(mainDispatcher.dispatcher) {
         viewModel().setDefaultBwLimits(wifi = "5M", metered = "500k")
         advanceUntilIdle()

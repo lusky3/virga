@@ -1,6 +1,7 @@
 package app.lusk.virga
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -19,6 +20,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.lusk.virga.core.common.notification.NotificationDeepLinks
 import app.lusk.virga.core.datastore.ThemeMode
 import app.lusk.virga.navigation.VirgaNavHost
 import app.lusk.virga.onboarding.OnboardingScreen
@@ -29,8 +31,28 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
+    /**
+     * In-app destination requested by a notification deep link (e.g. the watchdog
+     * "Settings" action). Snapshot state so updates from [onNewIntent] recompose.
+     *
+     * Consumed by [VirgaNavHost], which is only composed once onboarding is
+     * complete. That's fine: this state persists across the onboarding→app
+     * transition, so the route is honoured as soon as the host appears. And the
+     * only current deep-link source — the watchdog notification — can only exist
+     * after onboarding (the watchdog is enabled from Settings), so a pre-onboarding
+     * deep link isn't a reachable case.
+     */
+    private var pendingRoute by mutableStateOf<String?>(null)
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pendingRoute = intent.getStringExtra(NotificationDeepLinks.EXTRA_OPEN_ROUTE)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
+        pendingRoute = intent?.getStringExtra(NotificationDeepLinks.EXTRA_OPEN_ROUTE)
         // Keep the system splash up until we know whether to show onboarding,
         // so we never flash the wrong UI on cold start.
         var ready = false
@@ -84,7 +106,11 @@ class MainActivity : ComponentActivity() {
 
                 when {
                     complete == null -> Unit // splash still showing
-                    complete == true || dismissed -> VirgaNavHost(startAtWizard = startWizard)
+                    complete == true || dismissed -> VirgaNavHost(
+                        startAtWizard = startWizard,
+                        openRoute = pendingRoute,
+                        onOpenRouteConsumed = { pendingRoute = null },
+                    )
                     else -> OnboardingScreen(onFinished = { startWizard = true; dismissed = true })
                 }
             }

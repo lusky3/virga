@@ -23,6 +23,7 @@
 
     <!-- RemoteCard quota row -->
     <string name="remotes_quota_used_of_total">%1$s of %2$s used</string>
+    <string name="remotes_quota_loading">Checking storage…</string>
 
     <!-- RemoteCard overflow menu -->
     <string name="remotes_card_menu_browse">Browse</string>
