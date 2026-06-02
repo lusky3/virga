@@ -445,6 +445,7 @@ class RcloneEngineImpl @Inject constructor(
         totalFiles = this["totalTransfers"]?.jsonPrimitive?.intOrNull ?: 0,
         etaSeconds = this["eta"]?.jsonPrimitive?.longOrNull,
         errors = this["errors"]?.jsonPrimitive?.intOrNull ?: 0,
+        deletes = this["deletes"]?.jsonPrimitive?.intOrNull ?: 0,
     )
 
     private suspend fun ensureDaemon(): RcloneDaemon = lock.withLock { ensureDaemonLocked() }

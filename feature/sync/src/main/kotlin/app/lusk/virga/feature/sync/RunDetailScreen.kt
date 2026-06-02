@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.ui.LocalNavAnimatedContentScope
 import app.lusk.virga.core.common.util.formatFileSize
@@ -109,7 +110,7 @@ fun RunDetailScreen(
                     .fillMaxSize()
                     .padding(padding)
                     .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
+                    .padding(VirgaSpacing.md),
             )
         }
     }
@@ -124,11 +125,11 @@ private fun RunDetailContent(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(VirgaSpacing.md)) {
         run.logPath?.let { path ->
             FilledTonalButton(onClick = { onViewLog(path) }, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.AutoMirrored.Filled.ListAlt, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(VirgaSpacing.sm))
                 Text(stringResource(R.string.run_detail_view_log))
             }
         }

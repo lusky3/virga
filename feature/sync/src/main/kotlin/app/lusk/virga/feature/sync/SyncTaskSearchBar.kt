@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 
 private data class FilterOption(val filter: TaskFilter, val labelRes: Int)
 
@@ -81,11 +82,11 @@ internal fun SyncTaskSearchBar(
             singleLine = true,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
+                .padding(horizontal = VirgaSpacing.md, vertical = VirgaSpacing.xs),
         )
         LazyRow(
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = VirgaSpacing.md, vertical = VirgaSpacing.xs),
+            horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
         ) {
             items(filterOptions, key = { it.filter.name }) { option ->
                 FilterChip(

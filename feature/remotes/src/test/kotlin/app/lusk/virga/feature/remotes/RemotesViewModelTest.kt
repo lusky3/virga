@@ -27,6 +27,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
@@ -709,7 +710,9 @@ class RemotesViewModelTest {
             advanceUntilIdle()
 
             vm.fetchQuota("g")
-            advanceUntilIdle()
+            // runCurrent (not advanceUntilIdle) so virtual time doesn't jump past
+            // the fetch's timeout window while the gated about() call is suspended.
+            runCurrent()
 
             // In flight: the remote is marked loading and no quota is shown yet.
             assertThat(vm.uiState.value.quotaLoading).contains("g")

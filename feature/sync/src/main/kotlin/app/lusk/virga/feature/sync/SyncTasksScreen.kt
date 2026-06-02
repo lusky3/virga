@@ -1,8 +1,10 @@
 package app.lusk.virga.feature.sync
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -33,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.model.SyncProgress
 import app.lusk.virga.core.common.model.SyncStatus
@@ -50,6 +53,7 @@ fun SyncTasksScreen(
     onEditTask: (Long) -> Unit,
     onOpenHistory: () -> Unit,
     onOpenConflicts: () -> Unit,
+    onOpenStats: () -> Unit = {},
     viewModel: SyncTasksViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -59,6 +63,8 @@ fun SyncTasksScreen(
 
     // Collapse FAB once the user scrolls down.
     val fabExpanded by remember { derivedStateOf { !listState.canScrollBackward } }
+
+    val isFiltered = state.searchQuery.isNotBlank() || state.activeFilter != TaskFilter.ALL
 
     // One-shot VM messages (e.g. "Sync started", "Task duplicated").
     LaunchedEffect(state.message) {
@@ -91,6 +97,10 @@ fun SyncTasksScreen(
     var showBulkDeleteDialog by remember { mutableStateOf(false) }
 
     val inSelectionMode = state.selectedIds.isNotEmpty()
+    // On the first-run empty screen the EmptyState's own "Create sync task" is the
+    // single primary action (§11) — don't also show the FAB. It returns once tasks
+    // exist or a filter is active (the user has tasks, just none matching).
+    val showFab = !inSelectionMode && !(state.tasks.isEmpty() && !state.loading && !isFiltered)
 
     Scaffold(
         topBar = {
@@ -115,7 +125,7 @@ fun SyncTasksScreen(
         },
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
-            if (!inSelectionMode) {
+            if (showFab) {
                 ExtendedFloatingActionButton(
                     onClick = onAddTask,
                     icon = { Icon(Icons.Filled.Add, contentDescription = null) },
@@ -125,10 +135,15 @@ fun SyncTasksScreen(
             }
         },
     ) { padding ->
-        val isFiltered = state.searchQuery.isNotBlank() || state.activeFilter != TaskFilter.ALL
-
         when {
-            !state.loading && state.tasks.isEmpty() && !isFiltered -> {
+            // While loading, render nothing — NOT the task list. Otherwise the
+            // search-field LazyColumn composes for a frame (before we know the list
+            // is empty), grabs focus, and pops the keyboard (which then lingers as
+            // the empty state replaces it). Keeping the search bar out until there
+            // are tasks is what stops the keyboard flash.
+            state.loading -> Unit
+
+            state.tasks.isEmpty() && !isFiltered -> {
                 EmptyState(
                     title = stringResource(R.string.sync_tasks_empty_title),
                     body = stringResource(R.string.sync_tasks_empty_body),
@@ -142,7 +157,7 @@ fun SyncTasksScreen(
                 )
             }
 
-            !state.loading && state.tasks.isEmpty() && isFiltered -> {
+            state.tasks.isEmpty() && isFiltered -> {
                 EmptyState(
                     title = stringResource(R.string.sync_tasks_no_match_title),
                     modifier = Modifier.padding(padding),
@@ -155,8 +170,8 @@ fun SyncTasksScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(padding),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(VirgaSpacing.md),
+                    verticalArrangement = Arrangement.spacedBy(VirgaSpacing.md),
                 ) {
                     if (!inSelectionMode) {
                         item(key = "search_bar") {

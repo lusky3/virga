@@ -78,11 +78,18 @@ gloss when power features are revealed.
 
 ## 3. App icon & logo direction
 
-Current launcher: `app/src/main/res/mipmap-*/ic_launcher`. Direction (not yet built — tracked in Phase 3):
+Launcher: `app/src/main/res/mipmap-anydpi-v26/ic_launcher` (minSdk 26 → adaptive icon only, no density PNGs).
+**Status: built.**
 - A single **virga mark**: a soft downward gradient streak (blue→teal) that fades before a baseline — readable at
-  small sizes, monochrome-safe for the notification small icon and Quick Settings tile.
-- Adaptive icon: foreground = the streak; background = deep brand navy (`VirgaBlueDark #0B3C7A`).
-- Notification small icon **must** be a flat single-color silhouette (Android tints it); never the gradient.
+  small sizes, monochrome-safe for the notification small icon and Quick Settings tile. Drawn as a scalable
+  `VectorDrawable` (`drawable/ic_launcher_foreground.xml`) using the §4.5 `VirgaBlue → VirgaTeal` stops, trailed by
+  three fading teal droplets.
+- Adaptive icon: foreground = the streak; background = deep brand navy (`VirgaBlueDark #0B3C7A`,
+  `@color/ic_launcher_background`). Themed/monochrome layer = a dedicated flat opaque silhouette
+  (`drawable/ic_launcher_monochrome.xml`), not the gradient foreground.
+- Splash (`Theme.Virga`) shows the same mark via `windowSplashScreenAnimatedIcon`.
+- Notification small icon is a flat single-color silhouette (`sync-worker .../drawable/ic_stat_virga.xml`; Android
+  tints it) — used by all sync + watchdog notifications; never the gradient.
 
 ---
 

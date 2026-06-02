@@ -43,6 +43,7 @@ import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.designsystem.component.VirgaCard
 import app.lusk.virga.core.designsystem.component.VirgaCardState
 import app.lusk.virga.core.designsystem.theme.LocalVirgaColors
+import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import app.lusk.virga.core.designsystem.theme.rememberReduceMotion
 
 @Composable
@@ -75,7 +76,7 @@ internal fun SyncTaskCard(
         state = cardState,
         onClick = onClick,
         onLongClick = onLongClick,
-        contentPadding = PaddingValues(start = 8.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
+        contentPadding = PaddingValues(start = VirgaSpacing.sm, end = VirgaSpacing.xs, top = VirgaSpacing.md, bottom = VirgaSpacing.md),
         modifier = Modifier.semantics { onClick(label = "Open task") { false } },
     ) {
         Row(
@@ -84,7 +85,7 @@ internal fun SyncTaskCard(
         ) {
             if (inSelectionMode) {
                 Checkbox(checked = selected, onCheckedChange = { onClick() })
-                Spacer(Modifier.width(4.dp))
+                Spacer(Modifier.width(VirgaSpacing.xs))
             }
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -96,7 +97,7 @@ internal fun SyncTaskCard(
                         modifier = Modifier.weight(1f, fill = false),
                     )
                     if (latestRun != null) {
-                        Spacer(Modifier.width(6.dp))
+                        Spacer(Modifier.width(VirgaSpacing.sm))
                         SyncStatusBadge(status = latestRun.status)
                     }
                 }
@@ -194,7 +195,7 @@ internal fun SyncTaskCard(
 private fun LiveProgressLine(progress: SyncProgress) {
     val running = LocalVirgaColors.current.running
     val reduceMotion = rememberReduceMotion()
-    Spacer(Modifier.height(4.dp))
+    Spacer(Modifier.height(VirgaSpacing.xs))
     when {
         reduceMotion && progress.totalBytes > 0 ->
             LinearProgressIndicator(progress = { progress.fraction }, color = running, modifier = Modifier.fillMaxWidth())
@@ -205,7 +206,7 @@ private fun LiveProgressLine(progress: SyncProgress) {
         else ->
             LinearWavyProgressIndicator(color = running, modifier = Modifier.fillMaxWidth())
     }
-    Spacer(Modifier.height(2.dp))
+    Spacer(Modifier.height(VirgaSpacing.xs))
     val parts = buildList {
         if (progress.totalBytes > 0) add("${(progress.fraction * 100).toInt()}%")
         if (progress.totalFiles > 0) add("${progress.transferredFiles}/${progress.totalFiles} files")
@@ -213,7 +214,7 @@ private fun LiveProgressLine(progress: SyncProgress) {
         progress.etaSeconds?.let { add("ETA ${formatEta(it)}") }
     }
     Text(
-        text = if (parts.isEmpty()) "Starting…" else parts.joinToString(" · "),
+        text = if (parts.isEmpty()) stringResource(R.string.sync_summary_starting) else parts.joinToString(" · "),
         style = MaterialTheme.typography.labelSmall,
         color = running,
         maxLines = 1,
@@ -236,18 +237,12 @@ private fun LastRunLine(run: SyncRun) {
             DateUtils.MINUTE_IN_MILLIS,
         ).toString()
     }
-    val statusLabel = run.status.name.lowercase()
     val sizeLabel = if (run.bytesTransferred > 0) " · ${formatFileSize(run.bytesTransferred)}" else ""
-    val line = "Last: $relTime · $statusLabel · ${run.filesTransferred} files$sizeLabel"
-    val color = if (run.status == SyncStatus.FAILED) {
-        MaterialTheme.colorScheme.error
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
+    val line = stringResource(R.string.sync_task_last_run_line, relTime, run.filesTransferred) + sizeLabel
     Text(
         text = line,
         style = MaterialTheme.typography.labelSmall,
-        color = color,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )

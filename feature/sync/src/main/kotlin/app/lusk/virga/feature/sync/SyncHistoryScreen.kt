@@ -36,6 +36,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.navigation3.ui.LocalNavAnimatedContentScope
@@ -104,8 +105,8 @@ fun SyncHistoryScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(VirgaSpacing.md),
+                    verticalArrangement = Arrangement.spacedBy(VirgaSpacing.md),
                 ) {
                     items(state.rows, key = { it.run.id }) { row ->
                         RunCard(
@@ -133,8 +134,8 @@ private fun TaskAndStatusFilterRow(
     onSelectStatus: (SyncStatus?) -> Unit,
 ) {
     LazyRow(
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = VirgaSpacing.md, vertical = VirgaSpacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
     ) {
         item {
             FilterChip(

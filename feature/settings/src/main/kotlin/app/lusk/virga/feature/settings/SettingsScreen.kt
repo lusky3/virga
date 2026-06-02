@@ -8,15 +8,30 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Gavel
+import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material.icons.outlined.Public
+import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -39,6 +54,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
@@ -47,12 +64,17 @@ import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.datastore.ThemeMode
+import app.lusk.virga.core.designsystem.component.SettingsLinkRow
 import app.lusk.virga.core.designsystem.component.ToggleRow
+import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
+fun SettingsScreen(
+    onOpenStats: () -> Unit = {},
+    viewModel: SettingsViewModel = hiltViewModel(),
+) {
     val prefs by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -70,7 +92,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     }
 
     var showHowItWorksDialog by remember { mutableStateOf(false) }
-    var showLicensesDialog by remember { mutableStateOf(false) }
+    var showLicensesSheet by remember { mutableStateOf(false) }
 
     // Opens an external URL, falling back to a snackbar when no browser is present.
     val openUrl: (String) -> Unit = { url ->
@@ -84,10 +106,10 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     if (showHowItWorksDialog) {
         HowVirgaWorksDialog(onDismiss = { showHowItWorksDialog = false })
     }
-    if (showLicensesDialog) {
-        AcknowledgementsDialog(
+    if (showLicensesSheet) {
+        AcknowledgementsSheet(
             onOpenUrl = openUrl,
-            onDismiss = { showLicensesDialog = false },
+            onDismiss = { showLicensesSheet = false },
         )
     }
 
@@ -102,9 +124,9 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
         Column(
             Modifier
                 .padding(padding)
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = VirgaSpacing.md)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(VirgaSpacing.md),
         ) {
             SectionTitle(stringResource(R.string.settings_section_appearance))
             Text(
@@ -120,6 +142,11 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 label = stringResource(R.string.settings_toggle_dynamic_color),
                 checked = prefs.dynamicColor,
                 onChange = viewModel::setDynamicColor,
+            )
+            Text(
+                stringResource(R.string.settings_dynamic_color_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             HorizontalDivider()
@@ -206,7 +233,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
                 TextButton(onClick = {
                     runCatching {
                         context.startActivity(
@@ -214,52 +241,66 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                         )
                     }
                 }) { Text(stringResource(R.string.settings_btn_battery_settings)) }
-                TextButton(onClick = {
-                    runCatching {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, "https://dontkillmyapp.com".toUri()))
-                    }.onFailure {
-                        scope.launch { snackbarHostState.showSnackbar(noBrowserMsg) }
-                    }
-                }) { Text(stringResource(R.string.settings_btn_dontkillmyapp)) }
+                TextButton(onClick = { openUrl("https://dontkillmyapp.com") }) {
+                    Text(stringResource(R.string.settings_btn_dontkillmyapp))
+                }
             }
 
             HorizontalDivider()
             SectionTitle(stringResource(R.string.settings_section_help_about))
-            TextButton(
+            SettingsLinkRow(
+                label = stringResource(R.string.settings_item_your_stats),
+                onClick = onOpenStats,
+                leadingIcon = Icons.Outlined.BarChart,
+            )
+            // Virga-owned references first (learn → site → policy → project),
+            // then third-party references, then the version row.
+            val opensExternally = stringResource(R.string.settings_opens_externally)
+            SettingsLinkRow(
+                label = stringResource(R.string.settings_item_how_virga_works),
                 onClick = { showHowItWorksDialog = true },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    stringResource(R.string.settings_item_how_virga_works),
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            TextButton(
-                onClick = {
-                    runCatching {
-                        context.startActivity(
-                            Intent(Intent.ACTION_VIEW, "https://rclone.org/docs/".toUri()),
-                        )
-                    }.onFailure {
-                        scope.launch { snackbarHostState.showSnackbar(noBrowserMsg) }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    stringResource(R.string.settings_item_rclone_docs),
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            TextButton(
-                onClick = { showLicensesDialog = true },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    stringResource(R.string.settings_item_licenses),
-                    modifier = Modifier.weight(1f),
-                )
-            }
+                leadingIcon = Icons.Outlined.Lightbulb,
+            )
+            SettingsLinkRow(
+                label = stringResource(R.string.settings_item_website),
+                onClick = { openUrl("https://virga.lusk.app") },
+                leadingIcon = Icons.Outlined.Public,
+                opensExternally = true,
+                externalLinkDescription = opensExternally,
+            )
+            SettingsLinkRow(
+                label = stringResource(R.string.settings_item_privacy_policy),
+                onClick = { openUrl("https://virga.lusk.app/privacy") },
+                leadingIcon = Icons.Outlined.Shield,
+                opensExternally = true,
+                externalLinkDescription = opensExternally,
+            )
+            SettingsLinkRow(
+                label = stringResource(R.string.settings_item_source_code),
+                onClick = { openUrl("https://github.com/lusky3/virga") },
+                leadingIcon = Icons.Outlined.Code,
+                opensExternally = true,
+                externalLinkDescription = opensExternally,
+            )
+            SettingsLinkRow(
+                label = stringResource(R.string.settings_item_report_bug),
+                onClick = { openUrl("https://github.com/lusky3/virga/issues") },
+                leadingIcon = Icons.Outlined.BugReport,
+                opensExternally = true,
+                externalLinkDescription = opensExternally,
+            )
+            SettingsLinkRow(
+                label = stringResource(R.string.settings_item_rclone_docs),
+                onClick = { openUrl("https://rclone.org/docs/") },
+                leadingIcon = Icons.Outlined.Description,
+                opensExternally = true,
+                externalLinkDescription = opensExternally,
+            )
+            SettingsLinkRow(
+                label = stringResource(R.string.settings_item_licenses),
+                onClick = { showLicensesSheet = true },
+                leadingIcon = Icons.Outlined.Gavel,
+            )
             val versionName = remember {
                 runCatching {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -273,12 +314,20 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                     }
                 }.getOrDefault("—")
             }
+            // A divider plus trailing version metadata (and no leading icon or
+            // open-in-new glyph) keep this static row distinct from the tappable
+            // links above it. A spacer the width of the rows' icon column keeps
+            // the "About" label aligned with them without implying tappability.
+            HorizontalDivider()
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 4.dp),
+                    .defaultMinSize(minHeight = 48.dp)
+                    .padding(vertical = VirgaSpacing.sm),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.md),
             ) {
+                Spacer(Modifier.size(24.dp))
                 Text(
                     stringResource(R.string.settings_item_about),
                     modifier = Modifier.weight(1f),
@@ -291,7 +340,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 )
             }
             // Bottom spacing so last item clears nav bar
-            Spacer(Modifier.padding(bottom = 8.dp))
+            Spacer(Modifier.padding(bottom = VirgaSpacing.sm))
         }
     }
 }
@@ -369,28 +418,53 @@ private val AcknowledgedLibraries: List<OssLibrary> = listOf(
     OssLibrary("Bcrypt (favre)", "Apache License 2.0", "https://github.com/patrickfav/bcrypt"),
 )
 
+/**
+ * Open-source acknowledgements. A [ModalBottomSheet] (not an AlertDialog) because
+ * BRAND §11 reserves dialogs for short blocking confirms and routes longer,
+ * scrolling content to a sheet. Each library row is a 48dp tappable link that
+ * opens its homepage, with an explicit accessibility description and an
+ * external-link glyph (BRAND §6, §14).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AcknowledgementsDialog(onOpenUrl: (String) -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.settings_licenses_title)) },
-        text = {
-            Column(
-                Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text(
-                    stringResource(R.string.settings_licenses_intro),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                AcknowledgedLibraries.forEach { lib ->
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable { onOpenUrl(lib.url) }
-                            .padding(vertical = 4.dp),
-                    ) {
+private fun AcknowledgementsSheet(onOpenUrl: (String) -> Unit, onDismiss: () -> Unit) {
+    val opensExternally = stringResource(R.string.settings_opens_externally)
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = VirgaSpacing.lg)
+                .padding(bottom = VirgaSpacing.lg)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
+        ) {
+            Text(
+                stringResource(R.string.settings_licenses_title),
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier
+                    .semantics { heading() }
+                    .padding(bottom = VirgaSpacing.xs),
+            )
+            Text(
+                stringResource(R.string.settings_licenses_intro),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            AcknowledgedLibraries.forEach { lib ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable(role = Role.Button) { onOpenUrl(lib.url) }
+                        .defaultMinSize(minHeight = 48.dp)
+                        .semantics {
+                            contentDescription = "${lib.name}, ${lib.license}. $opensExternally"
+                        }
+                        .padding(vertical = VirgaSpacing.sm),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.md),
+                ) {
+                    Column(Modifier.weight(1f)) {
                         Text(lib.name, style = MaterialTheme.typography.bodyLarge)
                         Text(
                             lib.license,
@@ -398,13 +472,14 @@ private fun AcknowledgementsDialog(onOpenUrl: (String) -> Unit, onDismiss: () ->
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                        contentDescription = null, // the row carries the description
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp),
+                    )
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.settings_dialog_ok))
-            }
-        },
-    )
+        }
+    }
 }

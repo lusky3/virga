@@ -26,11 +26,12 @@
     <string name="onboarding_storage_body_play">Virga reads files from the standard media folders the system exposes to apps. Picking individual folders may prompt for additional access. Tap Next to continue.</string>
     <string name="onboarding_battery_title">Keep syncing in the background</string>
     <string name="onboarding_battery_body">Some manufacturers aggressively kill background apps, which can stop scheduled syncs. Exempt Virga from battery optimization (tap Next) and see dontkillmyapp.com for device-specific steps.</string>
-    <string name="onboarding_first_remote_title">Add your first remote</string>
+    <string name="onboarding_first_remote_title">Add your first cloud account</string>
     <!-- beg-01: define "remote" and "sync task" in plain language before using them -->
-    <string name="onboarding_first_remote_body">A remote is a connection to a cloud account (Google Drive, Dropbox, OneDrive…). A sync task copies files between a folder on your phone and a remote.\n\nOn the Remotes tab, add a cloud provider or import an existing rclone.conf from desktop, then create a sync task. Tap Get started.</string>
+    <string name="onboarding_first_remote_body">A cloud account (called a "remote") connects Virga to Google Drive, Dropbox, OneDrive, and more. A sync task copies files between a folder on your phone and a remote.\n\nOn the Remotes tab, tap Add cloud account to connect a provider, then create a sync task. You can also import an existing rclone.conf file from your desktop. Tap Get started.</string>
 
     <!-- Navigation tab labels (ui-09) -->
+    <string name="nav_tab_home">Home</string>
     <string name="nav_tab_sync">Sync</string>
     <string name="nav_tab_remotes">Remotes</string>
     <string name="nav_tab_settings">Settings</string>

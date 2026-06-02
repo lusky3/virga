@@ -4,7 +4,7 @@
     <string name="remotes_title">Remotes</string>
     <string name="remotes_action_browse">Browse</string>
     <string name="remotes_action_import">Import</string>
-    <string name="remotes_fab_label">Add remote</string>
+    <string name="remotes_fab_label">Add cloud account</string>
     <string name="remotes_oauth_in_progress">Completing sign-in…</string>
     <string name="remotes_cd_oauth_progress">Signing in</string>
     <string name="remotes_cd_loading">Loading remotes</string>
@@ -17,7 +17,7 @@
 
     <!-- DeleteRemoteDialog -->
     <string name="remotes_delete_dialog_title">Delete remote?</string>
-    <string name="remotes_delete_dialog_body">\"%1$s\" will be removed. Any sync tasks that use this remote will stop working until reconfigured.</string>
+    <string name="remotes_delete_dialog_body">\"%1$s\" and all sync tasks that use it will be permanently deleted.</string>
     <string name="remotes_delete_confirm">Delete</string>
     <string name="remotes_delete_cancel">Cancel</string>
 
@@ -32,7 +32,7 @@
     <string name="remotes_card_cd_overflow">More options</string>
 
     <!-- AddRemoteDialog -->
-    <string name="remotes_add_dialog_title">Add remote</string>
+    <string name="remotes_add_dialog_title">Add cloud account</string>
     <string name="remotes_add_field_name">Name</string>
     <string name="remotes_add_sign_in_with">Sign in with</string>
     <string name="remotes_add_or_manual">Or configure manually</string>
@@ -43,7 +43,7 @@
     <string name="remotes_byo_client_id">Your client ID</string>
     <string name="remotes_byo_save">Save key</string>
     <string name="remotes_byo_clear">Clear</string>
-    <string name="remotes_add_field_type">Backend type</string>
+    <string name="remotes_add_field_type">Provider</string>
     <string name="remotes_add_field_params">Parameters (key=value per line)</string>
     <string name="remotes_add_params_placeholder">client_id = abc123\nroot_folder_id = xyz</string>
     <string name="remotes_add_params_supporting">One key = value per line, e.g. client_id = abc123</string>

@@ -21,8 +21,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -58,6 +56,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.model.SyncDirection
+import app.lusk.virga.core.designsystem.component.VirgaCard
+import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -136,10 +136,10 @@ fun FirstSyncWizardScreen(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(16.dp)
+                    .padding(VirgaSpacing.md)
                     .imePadding()
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(VirgaSpacing.md),
             ) {
                 when (state.step) {
                     WizardStep.INTRO -> IntroStep()
@@ -179,7 +179,7 @@ fun FirstSyncWizardScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                        .padding(horizontal = VirgaSpacing.md, vertical = VirgaSpacing.md),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -210,7 +210,7 @@ fun FirstSyncWizardScreen(
                     ) {
                         if (state.saving) {
                             CircularProgressIndicator(
-                                modifier = Modifier.padding(end = 8.dp),
+                                modifier = Modifier.padding(end = VirgaSpacing.sm),
                                 strokeWidth = 2.dp,
                                 color = MaterialTheme.colorScheme.onPrimary,
                             )
@@ -228,30 +228,25 @@ fun FirstSyncWizardScreen(
 
 @Composable
 private fun IntroStep() {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.md)) {
         Text(
             text = stringResource(R.string.wizard_intro_heading),
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.headlineMedium,
         )
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-            ),
-        ) {
+        VirgaCard {
             Row(
-                modifier = Modifier.padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(VirgaSpacing.md),
+                horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.md),
                 verticalAlignment = Alignment.Top,
             ) {
                 Icon(
                     imageVector = Icons.Filled.CloudSync,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
                     text = stringResource(R.string.wizard_intro_body),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
             }
         }
@@ -271,10 +266,10 @@ private fun AccountStep(
     onSelect: (String) -> Unit,
     onAddRemote: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.md)) {
         Text(
             text = stringResource(R.string.wizard_account_heading),
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.headlineMedium,
         )
         Text(
             text = stringResource(R.string.wizard_account_body),
@@ -322,10 +317,10 @@ private fun SourceStep(
     sourcePath: String,
     onPickFolder: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.md)) {
         Text(
             text = stringResource(R.string.wizard_source_heading),
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.headlineMedium,
         )
         Text(
             text = stringResource(R.string.wizard_source_body),
@@ -333,15 +328,11 @@ private fun SourceStep(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (sourcePath.isNotBlank()) {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                ),
-            ) {
+            VirgaCard {
                 Text(
                     text = sourcePath,
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier.padding(VirgaSpacing.md),
                 )
             }
         }
@@ -352,7 +343,7 @@ private fun SourceStep(
             Icon(
                 Icons.Filled.FolderOpen,
                 contentDescription = null,
-                modifier = Modifier.padding(end = 8.dp),
+                modifier = Modifier.padding(end = VirgaSpacing.sm),
             )
             Text(
                 if (sourcePath.isBlank()) stringResource(R.string.wizard_source_choose)
@@ -367,10 +358,10 @@ private fun DestinationStep(
     remotePath: String,
     onRemotePathChange: (String) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.md)) {
         Text(
             text = stringResource(R.string.wizard_destination_heading),
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.headlineMedium,
         )
         Text(
             text = stringResource(R.string.wizard_destination_body),
@@ -397,12 +388,12 @@ private fun DirectionNameStep(
     onNameChange: (String) -> Unit,
 ) {
     val entries = SyncDirection.entries
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.md)) {
         Text(
             text = stringResource(R.string.wizard_direction_heading),
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.headlineMedium,
         )
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.xs)) {
             Text(
                 stringResource(R.string.sync_edit_field_direction),
                 style = MaterialTheme.typography.labelLarge,

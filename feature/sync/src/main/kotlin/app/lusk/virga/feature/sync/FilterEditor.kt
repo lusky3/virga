@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 
 /**
  * Tier-1 include/exclude filter builder (WS2.1). Produces the same newline-joined
@@ -52,7 +53,7 @@ internal fun FilterEditor(filters: String, onFiltersChange: (String) -> Unit) {
         pattern = ""
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
         Text(stringResource(R.string.sync_edit_filters_label), style = MaterialTheme.typography.labelLarge)
         Text(
             stringResource(R.string.sync_edit_filters_hint),
@@ -61,7 +62,7 @@ internal fun FilterEditor(filters: String, onFiltersChange: (String) -> Unit) {
         )
 
         if (rules.isNotEmpty()) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
                 rules.forEachIndexed { index, rule ->
                     InputChip(
                         selected = false,
@@ -88,7 +89,7 @@ internal fun FilterEditor(filters: String, onFiltersChange: (String) -> Unit) {
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SingleChoiceSegmentedButtonRow {

@@ -3,7 +3,6 @@ package app.lusk.virga.feature.explorer
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +16,7 @@ import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.CircularProgressIndicator
@@ -25,12 +25,12 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
@@ -48,13 +48,13 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.common.util.formatFileSize
 import app.lusk.virga.core.designsystem.component.EmptyState
 import app.lusk.virga.core.designsystem.component.rememberLongPressHaptic
+import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -91,7 +91,7 @@ fun FileBrowserScreen(
         viewModel.up()
     }
 
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -171,7 +171,7 @@ fun FileBrowserScreen(
                             truncatedDesc,
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier
-                                .padding(horizontal = 16.dp, vertical = 4.dp)
+                                .padding(horizontal = VirgaSpacing.md, vertical = VirgaSpacing.xs)
                                 .semantics { liveRegion = LiveRegionMode.Polite },
                         )
                     }
@@ -204,7 +204,7 @@ private fun FileBrowserTopBar(
     onSort: (SortConfig) -> Unit,
     onClearSelection: () -> Unit,
 ) {
-    LargeTopAppBar(
+    TopAppBar(
         title = {
             FileBrowserTitle(
                 state = state,
@@ -329,18 +329,13 @@ private fun EmptyFolder() {
 
 @Composable
 private fun ErrorState(message: String, onRetry: () -> Unit) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            val errDesc = stringResource(R.string.explorer_error_label)
-            Text(
-                message,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive; contentDescription = "$errDesc $message" },
-            )
+    val errDesc = stringResource(R.string.explorer_error_label)
+    EmptyState(
+        title = message,
+        icon = Icons.Filled.Error,
+        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive; contentDescription = "$errDesc $message" },
+        action = {
             TextButton(onClick = onRetry) { Text(stringResource(R.string.explorer_btn_retry)) }
-        }
-    }
+        },
+    )
 }

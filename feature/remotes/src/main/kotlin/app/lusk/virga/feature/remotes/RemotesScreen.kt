@@ -17,6 +17,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -47,11 +49,11 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.designsystem.component.EmptyState
+import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import app.lusk.virga.feature.remotes.oauth.launchCustomTab
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -132,7 +134,7 @@ fun RemotesScreen(
                     stringResource(R.string.remotes_oauth_in_progress),
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .padding(horizontal = VirgaSpacing.md, vertical = VirgaSpacing.sm)
                         .semantics { liveRegion = LiveRegionMode.Polite },
                 )
             }
@@ -161,7 +163,7 @@ fun RemotesScreen(
                         title = stringResource(R.string.remotes_empty_title),
                         body = stringResource(R.string.remotes_empty_body),
                         action = {
-                            TextButton(onClick = { manualError = null; showAdd = true }) {
+                            Button(onClick = { manualError = null; showAdd = true }) {
                                 Text(stringResource(R.string.remotes_empty_action_add))
                             }
                             TextButton(onClick = { importLauncher.launch("*/*") }) {
@@ -174,8 +176,8 @@ fun RemotesScreen(
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(VirgaSpacing.md),
+                        verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
                     ) {
                         items(state.remotes, key = { it.name }) { remote ->
                             // Key on quotaEpoch too: a pull-to-refresh bumps the epoch
@@ -206,10 +208,15 @@ fun RemotesScreen(
                 Text(stringResource(R.string.remotes_delete_dialog_body, remote.name))
             },
             confirmButton = {
-                TextButton(onClick = {
-                    viewModel.deleteRemote(remote.name)
-                    remoteToDelete = null
-                }) { Text(stringResource(R.string.remotes_delete_confirm)) }
+                TextButton(
+                    onClick = {
+                        viewModel.deleteRemote(remote.name)
+                        remoteToDelete = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) { Text(stringResource(R.string.remotes_delete_confirm)) }
             },
             dismissButton = {
                 TextButton(onClick = { remoteToDelete = null }) {

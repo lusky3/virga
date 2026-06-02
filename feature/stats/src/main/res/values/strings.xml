@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- StatsScreen -->
+    <string name="stats_title">Stats</string>
+    <string name="stats_cd_back">Go back</string>
+
+    <!-- Empty state -->
+    <string name="stats_empty_title">No stats yet</string>
+    <string name="stats_empty_body">Run your first backup and your lifetime stats will appear here.</string>
+
+    <!-- Hero -->
+    <string name="stats_hero_label">moved all-time</string>
+    <string name="stats_hero_since">Syncing since %1$s</string>
+
+    <!-- Section headers -->
+    <string name="stats_section_transfer">By direction</string>
+    <string name="stats_section_activity">Activity</string>
+
+    <!-- Stat cards -->
+    <string name="stats_uploaded">Uploaded ↑</string>
+    <string name="stats_downloaded">Downloaded ↓</string>
+    <string name="stats_two_way">Two-way ⇄</string>
+    <string name="stats_tasks_run">Tasks run</string>
+    <!-- %1$d succeeded, %2$d failed, %3$d%% success rate -->
+    <string name="stats_tasks_detail">%1$d succeeded · %2$d failed · %3$d%% success</string>
+    <string name="stats_files_synced">Files synced</string>
+    <string name="stats_time_syncing">Time syncing</string>
+    <string name="stats_avg_speed">Average speed</string>
+
+    <!-- Fun strip -->
+    <string name="stats_fun_title">Just for fun</string>
+    <!-- %1$d photos -->
+    <string name="stats_fun_photos">≈ %1$d photos</string>
+    <!-- %1$d hours of music -->
+    <string name="stats_fun_music">≈ %1$d hours of music</string>
+    <!-- %1$d Blu-ray discs -->
+    <string name="stats_fun_blurays">≈ %1$d Blu-ray discs</string>
+    <!-- biggest single backup -->
+    <string name="stats_fun_biggest">Biggest single backup: %1$s</string>
+    <!-- longest run -->
+    <string name="stats_fun_longest">Longest run: %1$s</string>
+    <!-- streak: 🔥 N-day streak (best: M) -->
+    <string name="stats_fun_streak">🔥 %1$d-day streak (best: %2$d)</string>
+
+    <!-- Reset dialog -->
+    <string name="stats_btn_reset">Reset statistics</string>
+    <string name="stats_reset_title">Reset lifetime stats?</string>
+    <string name="stats_reset_body">This will permanently clear all your lifetime sync statistics. Your sync tasks and remotes are not affected.</string>
+    <string name="stats_reset_confirm">Reset</string>
+    <string name="stats_reset_cancel">Cancel</string>
+
+</resources>

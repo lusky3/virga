@@ -17,6 +17,7 @@ import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.common.model.SyncProgress
 import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.data.ConflictRepository
+import app.lusk.virga.core.data.StatsRepository
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
 import app.lusk.virga.core.rclone.RcloneEngine
@@ -39,6 +40,7 @@ class SyncWorker @AssistedInject constructor(
     private val taskRepository: SyncTaskRepository,
     private val historyRepository: SyncHistoryRepository,
     private val conflictRepository: ConflictRepository,
+    private val statsRepository: StatsRepository,
     private val staging: LocalStaging,
     private val scheduler: SyncScheduler,
 ) : CoroutineWorker(appContext, params) {
@@ -60,7 +62,8 @@ class SyncWorker @AssistedInject constructor(
         // on both sides, which staging cannot provide symmetrically.
         if (task.sourcePath.startsWith("content://") && task.direction == SyncDirection.BISYNC) {
             val msg = "Two-way sync isn't supported for this folder on this device."
-            finishFailed(historyRepository.startRun(taskId), null, msg)
+            val earlyStartMs = System.currentTimeMillis()
+            finishFailed(historyRepository.startRun(taskId), null, msg, direction = task.direction, runStartMs = earlyStartMs)
             runCatching {
                 NotificationManagerCompat.from(applicationContext)
                     .notify(SyncNotifications.RESULT_NOTIFICATION_ID, notifications.error(task.name, msg, taskId))
@@ -70,6 +73,7 @@ class SyncWorker @AssistedInject constructor(
 
         setForeground(foregroundInfo(notifications.progress(task.name, null, taskId)))
 
+        val runStartMs = System.currentTimeMillis()
         val runId = historyRepository.startRun(taskId)
         val metered = applicationContext.getSystemService<ConnectivityManager>()
             ?.isActiveNetworkMetered ?: false
@@ -185,7 +189,7 @@ class SyncWorker @AssistedInject constructor(
                     val msg = writeResult.exceptionOrNull()?.message ?: "Failed to write back to folder"
                     log.line("Failed: $msg")
                     log.flush()
-                    finishFailed(runId, last, msg, log.path)
+                    finishFailed(runId, last, msg, log.path, task.direction, runStartMs)
                     runCatching {
                         NotificationManagerCompat.from(applicationContext)
                             .notify(SyncNotifications.RESULT_NOTIFICATION_ID, notifications.error(task.name, msg, taskId))
@@ -195,7 +199,7 @@ class SyncWorker @AssistedInject constructor(
             }
             log.line("Completed: ${last?.transferredFiles ?: 0} file(s) transferred")
             log.flush()
-            finishSucceeded(runId, last, log.path)
+            finishSucceeded(runId, last, log.path, task.direction, runStartMs)
             // After a bisync, scan the destination for rclone conflict files
             // and queue them for user resolution.
             if (task.direction == SyncDirection.BISYNC) {
@@ -211,7 +215,7 @@ class SyncWorker @AssistedInject constructor(
             val msg = failure.message ?: "Sync failed"
             log.line("Failed: $msg")
             log.flush()
-            finishFailed(runId, last, msg, log.path)
+            finishFailed(runId, last, msg, log.path, task.direction, runStartMs)
             runCatching {
                 NotificationManagerCompat.from(applicationContext)
                     .notify(SyncNotifications.RESULT_NOTIFICATION_ID, notifications.error(task.name, msg, taskId))
@@ -226,7 +230,9 @@ class SyncWorker @AssistedInject constructor(
         runId: Long,
         progress: SyncProgress?,
         logPath: String? = null,
-    ) =
+        direction: SyncDirection,
+        runStartMs: Long,
+    ) {
         historyRepository.finishRun(
             runId = runId,
             status = SyncStatus.SUCCESS,
@@ -235,6 +241,18 @@ class SyncWorker @AssistedInject constructor(
             errorCount = progress?.errors ?: 0,
             logPath = logPath,
         )
+        val finishedAt = System.currentTimeMillis()
+        runCatching {
+            statsRepository.recordRun(
+                direction = direction,
+                bytesTransferred = progress?.bytesTransferred ?: 0L,
+                filesTransferred = progress?.transferredFiles ?: 0,
+                success = true,
+                durationMs = maxOf(0L, finishedAt - runStartMs),
+                finishedAtEpochMs = finishedAt,
+            )
+        }
+    }
 
     /** Record a FAILED run (+1 error) with [message] from the last [progress] snapshot. */
     private suspend fun finishFailed(
@@ -242,15 +260,30 @@ class SyncWorker @AssistedInject constructor(
         progress: SyncProgress?,
         message: String,
         logPath: String? = null,
-    ) = historyRepository.finishRun(
-        runId = runId,
-        status = SyncStatus.FAILED,
-        filesTransferred = progress?.transferredFiles ?: 0,
-        bytesTransferred = progress?.bytesTransferred ?: 0L,
-        errorCount = (progress?.errors ?: 0) + 1,
-        errorMessage = message,
-        logPath = logPath,
-    )
+        direction: SyncDirection,
+        runStartMs: Long,
+    ) {
+        historyRepository.finishRun(
+            runId = runId,
+            status = SyncStatus.FAILED,
+            filesTransferred = progress?.transferredFiles ?: 0,
+            bytesTransferred = progress?.bytesTransferred ?: 0L,
+            errorCount = (progress?.errors ?: 0) + 1,
+            errorMessage = message,
+            logPath = logPath,
+        )
+        val finishedAt = System.currentTimeMillis()
+        runCatching {
+            statsRepository.recordRun(
+                direction = direction,
+                bytesTransferred = progress?.bytesTransferred ?: 0L,
+                filesTransferred = progress?.transferredFiles ?: 0,
+                success = false,
+                durationMs = maxOf(0L, finishedAt - runStartMs),
+                finishedAtEpochMs = finishedAt,
+            )
+        }
+    }
 
     private fun foregroundInfo(notification: android.app.Notification): ForegroundInfo =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

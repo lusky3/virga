@@ -3,6 +3,9 @@
     <!-- Launch theme: shows the system splash, then hands off to the Compose UI. -->
     <style name="Theme.Virga" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/ic_launcher_background</item>
+        <!-- The brand virga mark on the navy splash (BRAND.md §3), instead of the
+             system default launcher icon. -->
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
         <item name="postSplashScreenTheme">@style/Theme.Virga.Main</item>
     </style>
 

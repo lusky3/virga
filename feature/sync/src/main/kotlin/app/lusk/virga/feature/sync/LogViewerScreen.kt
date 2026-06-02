@@ -27,6 +27,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.designsystem.component.EmptyState
 
@@ -80,12 +81,12 @@ fun LogViewerScreen(
                 onValueChange = viewModel::setQuery,
                 label = { Text(stringResource(R.string.log_viewer_search)) },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = VirgaSpacing.md, vertical = VirgaSpacing.sm),
             )
             if (!state.loading && state.totalLines == 0) {
                 EmptyState(title = stringResource(R.string.log_viewer_empty))
             } else {
-                LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+                LazyColumn(Modifier.fillMaxSize().padding(horizontal = VirgaSpacing.md)) {
                     items(state.visibleLines) { line ->
                         Text(
                             text = line,

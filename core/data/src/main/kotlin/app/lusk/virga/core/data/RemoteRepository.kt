@@ -30,9 +30,20 @@ class RemoteRepository @Inject constructor(
         rows.map { Remote(name = it.name, type = it.type) }
     }
 
-    /** Pulls the live remote list from rclone and replaces the cached rows atomically. */
+    /**
+     * Pulls the live remote list from rclone and reconciles the cached rows.
+     *
+     * FAIL-SAFE: an empty dump never clears the cache. `config/dump` can come back
+     * empty for non-user reasons — a config that failed to load/decrypt, or a
+     * daemon queried before its config settled — and `replaceAll(emptyList)` would
+     * then *delete the user's configured accounts* (a credential-loss bug we hit in
+     * testing). User-initiated removals go through [deleteRemote] directly, so
+     * refresh only needs to add/update from a non-empty dump; it must never treat
+     * "I read zero remotes" as "the user has zero remotes."
+     */
     suspend fun refresh(): Result<Unit> = runCatching {
         val live = engine.listRemotes()
+        if (live.isEmpty()) return@runCatching
         remoteDao.replaceAll(
             live.map { RemoteEntity(name = it.name, type = it.type, displayName = it.name) },
         )

@@ -43,6 +43,7 @@ fun SyncTasksAdaptiveScreen(
     onOpenHistory: () -> Unit,
     onOpenConflicts: () -> Unit,
     onOpenRun: (Long) -> Unit,
+    onOpenStats: () -> Unit = {},
     /** Reports whether the scaffold currently has its own back to handle, so the
      *  host can stand its exit handler down and avoid a back-handler clash (WS3.5). */
     onDetailBackAvailableChanged: (Boolean) -> Unit = {},
@@ -86,6 +87,7 @@ fun SyncTasksAdaptiveScreen(
                     onEditTask = onEditTask,
                     onOpenHistory = onOpenHistory,
                     onOpenConflicts = onOpenConflicts,
+                    onOpenStats = onOpenStats,
                 )
             }
         },

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import app.lusk.virga.core.database.BuildConfig
 import app.lusk.virga.core.database.VirgaDatabase
+import app.lusk.virga.core.database.dao.AppStatsDao
 import app.lusk.virga.core.database.dao.ConflictDao
 import app.lusk.virga.core.database.dao.RemoteDao
 import app.lusk.virga.core.database.dao.SyncRunDao
@@ -28,6 +29,7 @@ object DatabaseModule {
                 VirgaDatabase.MIGRATION_2_3,
                 VirgaDatabase.MIGRATION_3_4,
                 VirgaDatabase.MIGRATION_4_5,
+                VirgaDatabase.MIGRATION_5_6,
             )
             .apply {
                 // Destructive fallback is a DEBUG-only convenience while the schema
@@ -47,4 +49,5 @@ object DatabaseModule {
     @Provides fun provideSyncTaskDao(db: VirgaDatabase): SyncTaskDao = db.syncTaskDao()
     @Provides fun provideSyncRunDao(db: VirgaDatabase): SyncRunDao = db.syncRunDao()
     @Provides fun provideConflictDao(db: VirgaDatabase): ConflictDao = db.conflictDao()
+    @Provides fun provideAppStatsDao(db: VirgaDatabase): AppStatsDao = db.appStatsDao()
 }

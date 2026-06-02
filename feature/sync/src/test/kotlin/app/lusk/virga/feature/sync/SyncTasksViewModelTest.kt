@@ -5,8 +5,10 @@ import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.data.ConflictRepository
 import app.lusk.virga.core.data.SyncHistoryRepository
+import app.lusk.virga.core.data.StatsRepository
 import app.lusk.virga.core.data.SyncTaskRepository
 import app.lusk.virga.core.common.model.Conflict
+import app.lusk.virga.core.common.model.LifetimeStats
 import app.lusk.virga.core.common.model.SyncRun
 import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.sync.SyncProgressMonitor
@@ -45,6 +47,10 @@ class SyncTasksViewModelTest {
     private val conflictRepository: ConflictRepository = mockk(relaxed = true) {
         every { unresolved } returns conflictsFlow
     }
+    private val statsFlow = MutableStateFlow(LifetimeStats())
+    private val statsRepository: StatsRepository = mockk(relaxed = true) {
+        every { stats } returns statsFlow
+    }
     private val scheduler: SyncScheduler = mockk(relaxed = true)
     private val progressMonitor: SyncProgressMonitor = mockk(relaxed = true) {
         every { progressFor(any()) } returns flowOf(null)
@@ -57,7 +63,70 @@ class SyncTasksViewModelTest {
     }
 
     private fun viewModel() =
-        SyncTasksViewModel(context, taskRepository, historyRepository, conflictRepository, scheduler, progressMonitor)
+        SyncTasksViewModel(context, taskRepository, historyRepository, conflictRepository, statsRepository, scheduler, progressMonitor)
+
+    // --- deriveHomeStatus ---------------------------------------------------
+
+    @Test
+    fun homeStatus_noTasks_isIdle() {
+        assertThat(deriveHomeStatus(emptyList(), emptyMap()))
+            .isEqualTo(HomeStatus.Idle)
+    }
+
+    @Test
+    fun homeStatus_taskWithNoRun_isIdle() {
+        val status = deriveHomeStatus(listOf(task(id = 1)), emptyMap())
+        assertThat(status).isEqualTo(HomeStatus.Idle)
+    }
+
+    @Test
+    fun homeStatus_runningBeatsFailed() {
+        val tasks = listOf(task(id = 1), task(id = 2))
+        val runs = mapOf(
+            1L to run(id = 1, taskId = 1, status = SyncStatus.RUNNING),
+            2L to run(id = 2, taskId = 2, status = SyncStatus.FAILED),
+        )
+        assertThat(deriveHomeStatus(tasks, runs)).isEqualTo(HomeStatus.Running)
+    }
+
+    @Test
+    fun homeStatus_onlyFailed_isNeedsAttentionWithCount() {
+        val tasks = listOf(task(id = 1), task(id = 2), task(id = 3))
+        val runs = mapOf(
+            1L to run(id = 1, taskId = 1, status = SyncStatus.FAILED),
+            2L to run(id = 2, taskId = 2, status = SyncStatus.FAILED),
+            3L to run(id = 3, taskId = 3, status = SyncStatus.SUCCESS),
+        )
+        assertThat(deriveHomeStatus(tasks, runs))
+            .isEqualTo(HomeStatus.NeedsAttention(2))
+    }
+
+    @Test
+    fun homeStatus_success_isUpToDateWithMostRecentEndTime() {
+        val tasks = listOf(task(id = 1), task(id = 2))
+        val runs = mapOf(
+            1L to run(id = 1, taskId = 1, status = SyncStatus.SUCCESS, endedAt = 5_000L),
+            2L to run(id = 2, taskId = 2, status = SyncStatus.SUCCESS, endedAt = 9_000L),
+        )
+        assertThat(deriveHomeStatus(tasks, runs))
+            .isEqualTo(HomeStatus.UpToDate(9_000L))
+    }
+
+    @Test
+    fun homeStatus_successWithoutEndTime_fallsBackToStartTime() {
+        val tasks = listOf(task(id = 1))
+        val runs = mapOf(1L to run(id = 1, taskId = 1, status = SyncStatus.SUCCESS, startedAt = 7_000L))
+        assertThat(deriveHomeStatus(tasks, runs))
+            .isEqualTo(HomeStatus.UpToDate(7_000L))
+    }
+
+    @Test
+    fun homeStatus_cancelledNeverSucceeded_isIdleNotUpToDate() {
+        // H1 regression: a cancelled-only task must NOT report "Everything's backed up".
+        val tasks = listOf(task(id = 1))
+        val runs = mapOf(1L to run(id = 1, taskId = 1, status = SyncStatus.CANCELLED))
+        assertThat(deriveHomeStatus(tasks, runs)).isEqualTo(HomeStatus.Idle)
+    }
 
     // --- pre-existing tests -------------------------------------------------
 
@@ -634,10 +703,12 @@ class SyncTasksViewModelTest {
         taskId: Long,
         status: SyncStatus = SyncStatus.SUCCESS,
         startedAt: Long = 1_000L,
+        endedAt: Long? = null,
     ) = SyncRun(
         id = id,
         taskId = taskId,
         startedAtEpochMs = startedAt,
+        endedAtEpochMs = endedAt,
         status = status,
     )
 

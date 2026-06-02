@@ -11,7 +11,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.snap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,6 +58,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.lusk.virga.R
+import app.lusk.virga.core.designsystem.theme.VirgaMotion
+import app.lusk.virga.core.designsystem.theme.VirgaSpacing
+import app.lusk.virga.core.designsystem.theme.rememberReduceMotion
 import kotlinx.coroutines.launch
 
 /**
@@ -112,7 +115,7 @@ fun OnboardingScreen(
         // safeDrawingPadding keeps the pager content, page indicator, and the
         // Back/Next/Get-started row clear of the status bar and the gesture/3-button
         // navigation bar (the screen is drawn edge-to-edge via enableEdgeToEdge).
-        Column(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp)) {
+        Column(Modifier.fillMaxSize().safeDrawingPadding().padding(VirgaSpacing.lg)) {
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -131,7 +134,7 @@ fun OnboardingScreen(
             PageIndicator(pageCount = pages.size, current = pagerState.currentPage)
 
             Row(
-                Modifier.fillMaxWidth().padding(top = 16.dp),
+                Modifier.fillMaxWidth().padding(top = VirgaSpacing.md),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -283,7 +286,7 @@ private fun PageContent(title: String, body: String, statusHint: String? = null)
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+            .padding(VirgaSpacing.md),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -292,7 +295,7 @@ private fun PageContent(title: String, body: String, statusHint: String? = null)
             body,
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 16.dp),
+            modifier = Modifier.padding(top = VirgaSpacing.md),
         )
         statusHint?.let {
             Text(
@@ -300,7 +303,7 @@ private fun PageContent(title: String, body: String, statusHint: String? = null)
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 8.dp),
+                modifier = Modifier.padding(top = VirgaSpacing.sm),
             )
         }
     }
@@ -325,25 +328,28 @@ private fun PageIndicator(pageCount: Int, current: Int) {
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        val reduceMotion = rememberReduceMotion()
         repeat(pageCount) { i ->
             val isActive = i == current
 
             val dotWidth by animateDpAsState(
                 targetValue = if (isActive) 20.dp else 8.dp,
-                animationSpec = tween(durationMillis = 200),
+                // Use the shared list-enter token (220 ms, decelerate) so dot transitions
+                // stay consistent with other short UI animations. Snap when reduce-motion is on.
+                animationSpec = if (reduceMotion) snap() else VirgaMotion.listEnterTween(),
                 label = "dotWidth",
             )
             val dotColor by animateColorAsState(
                 targetValue = if (isActive) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.outlineVariant,
-                animationSpec = tween(durationMillis = 200),
+                animationSpec = if (reduceMotion) snap() else VirgaMotion.listEnterTween(),
                 label = "dotColor",
             )
 
             Box(
                 Modifier
                     .clearAndSetSemantics {}
-                    .padding(horizontal = 4.dp)
+                    .padding(horizontal = VirgaSpacing.xs)
                     .width(dotWidth)
                     .height(8.dp)
                     .background(color = dotColor, shape = CircleShape),

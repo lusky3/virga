@@ -22,6 +22,7 @@ import app.lusk.virga.core.rclone.oauth.OAuthTokenExchanger
 import app.lusk.virga.core.rclone.oauth.Pkce
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -283,6 +284,11 @@ class RemotesViewModel @Inject constructor(
 
     companion object {
         private const val MAX_IMPORT_BYTES = 256 * 1024
+        /** Cap on a single quota (`operations/about`) fetch. Backends that don't
+         *  support `about` usually error fast, but a slow/unreachable remote (or a
+         *  starting daemon) could otherwise leave the "checking…" bar spinning
+         *  forever — this guarantees it always resolves. */
+        private const val QUOTA_TIMEOUT_MS = 12_000L
     }
 
     fun clearMessage() {
@@ -299,9 +305,11 @@ class RemotesViewModel @Inject constructor(
         if (!quotaAttempted.add(remoteName)) return
         _quotaState.update { it.copy(loading = it.loading + remoteName) }
         viewModelScope.launch {
-            val result = repository.about(remoteName)
+            // Time-box the fetch so an unsupported/slow backend can't spin forever;
+            // a null result (timeout or failure) simply leaves no quota shown.
+            val result = withTimeoutOrNull(QUOTA_TIMEOUT_MS) { repository.about(remoteName) }
             _quotaState.update { s ->
-                val quota = result.getOrNull()
+                val quota = result?.getOrNull()
                 s.copy(
                     quotas = if (quota != null) s.quotas + (remoteName to quota) else s.quotas,
                     loading = s.loading - remoteName,

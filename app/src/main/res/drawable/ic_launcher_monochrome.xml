@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Flat single-colour silhouette of the Virga mark for the themed (monochrome)
+  adaptive icon. The system tints this, so the fill colour is irrelevant — only
+  the shape matters; it must stay fully opaque (no gradient/fade) to read as a
+  strong silhouette (BRAND.md §3).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M47,33 A7,7 0 0 1 61,33 L61,53 A7,7 0 0 1 47,53 Z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M50,67 a4,4 0 1 0 8,0 a4,4 0 1 0 -8,0 Z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M51.4,75 a2.6,2.6 0 1 0 5.2,0 a2.6,2.6 0 1 0 -5.2,0 Z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M52.3,81 a1.7,1.7 0 1 0 3.4,0 a1.7,1.7 0 1 0 -3.4,0 Z" />
+</vector>

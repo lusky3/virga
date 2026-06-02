@@ -43,10 +43,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.model.SyncRun
 import app.lusk.virga.core.common.model.SyncStatus
@@ -123,17 +125,38 @@ fun SyncTaskSummaryScreen(
             onDismissRequest = viewModel::dismissPreview,
             title = { Text(stringResource(R.string.sync_preview_title)) },
             text = {
-                Text(
-                    if (err != null) {
-                        stringResource(R.string.sync_preview_error, err)
-                    } else {
-                        stringResource(
-                            R.string.sync_preview_body,
-                            result.filesToTransfer,
-                            formatFileSize(result.bytesToTransfer),
+                if (err != null) {
+                    Text(stringResource(R.string.sync_preview_error, err))
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
+                        Text(
+                            stringResource(
+                                R.string.sync_preview_body,
+                                result.filesToTransfer,
+                                formatFileSize(result.bytesToTransfer),
+                            ),
                         )
-                    },
-                )
+                        // Name the destructive blast radius before "Run for real" (§13).
+                        // rclone skips (and so usually doesn't count) deletes under
+                        // --dry-run, so show the precise count when it reports one,
+                        // otherwise a qualitative warning for any Mirror task.
+                        if (result.filesToDelete > 0) {
+                            Text(
+                                text = pluralStringResource(
+                                    R.plurals.sync_preview_deletions,
+                                    result.filesToDelete,
+                                    result.filesToDelete,
+                                ),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        } else if (result.mirrors) {
+                            Text(
+                                text = stringResource(R.string.sync_preview_mirror_warning),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
+                }
             },
             confirmButton = {
                 if (err == null) {
@@ -196,8 +219,8 @@ private fun SummaryContent(
 
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(VirgaSpacing.md),
+        verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
     ) {
         item {
             // Run / Cancel + Enabled toggle.
@@ -205,20 +228,20 @@ private fun SummaryContent(
                 if (isActive) {
                     OutlinedButton(onClick = onCancelSync) {
                         Icon(Icons.Filled.Cancel, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(VirgaSpacing.sm))
                         Text(stringResource(R.string.sync_task_cd_cancel))
                     }
                 } else {
                     FilledTonalButton(onClick = onSyncNow) {
                         Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(VirgaSpacing.sm))
                         Text(stringResource(R.string.sync_task_cd_sync_now))
                     }
                     if (previewAvailable) {
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(VirgaSpacing.sm))
                         OutlinedButton(onClick = onPreview, enabled = !previewRunning) {
                             Icon(Icons.Filled.Preview, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
+                            Spacer(Modifier.width(VirgaSpacing.sm))
                             Text(
                                 stringResource(
                                     if (previewRunning) R.string.sync_preview_running
@@ -230,7 +253,7 @@ private fun SummaryContent(
                 }
             }
             if (liveProgress != null) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(VirgaSpacing.md))
                 LiveSyncPanel(progress = liveProgress)
             }
             ToggleRow(
@@ -238,7 +261,7 @@ private fun SummaryContent(
                 checked = task.enabled,
                 onChange = onToggleEnabled,
             )
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            HorizontalDivider(Modifier.padding(vertical = VirgaSpacing.sm))
         }
 
         item {
@@ -262,14 +285,14 @@ private fun SummaryContent(
                 task.bwLimitMetered?.takeIf { it.isNotBlank() }?.let { "metered $it" },
             ).joinToString(", ")
             if (bw.isNotEmpty()) SummaryRow(stringResource(R.string.sync_summary_bandwidth), bw)
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            HorizontalDivider(Modifier.padding(vertical = VirgaSpacing.sm))
         }
 
         item {
             Text(
                 stringResource(R.string.sync_summary_recent_runs),
                 style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.padding(bottom = 4.dp),
+                modifier = Modifier.padding(bottom = VirgaSpacing.xs),
             )
         }
         if (runs.isEmpty()) {
@@ -287,13 +310,13 @@ private fun SummaryContent(
         }
 
         item {
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            HorizontalDivider(Modifier.padding(vertical = VirgaSpacing.sm))
             OutlinedButton(
                 onClick = onDelete,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(Icons.Filled.Delete, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(VirgaSpacing.sm))
                 Text(stringResource(R.string.sync_task_menu_delete))
             }
         }
@@ -302,7 +325,7 @@ private fun SummaryContent(
 
 @Composable
 private fun SummaryRow(label: String, value: String) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+    Row(Modifier.fillMaxWidth().padding(vertical = VirgaSpacing.xs)) {
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,
@@ -329,7 +352,7 @@ private fun LiveSyncPanel(progress: SyncProgress) {
             style = MaterialTheme.typography.titleMedium,
             color = running,
         )
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(VirgaSpacing.sm))
         // Wavy "precipitation" bar (BRAND §12); static determinate under reduce-motion.
         when {
             reduceMotion && progress.totalBytes > 0 ->
@@ -341,7 +364,7 @@ private fun LiveSyncPanel(progress: SyncProgress) {
             else ->
                 LinearWavyProgressIndicator(color = running, modifier = Modifier.fillMaxWidth())
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(VirgaSpacing.xs))
         val parts = buildList {
             if (progress.totalBytes > 0) add("${(progress.fraction * 100).toInt()}%")
             if (progress.totalFiles > 0) add("${progress.transferredFiles}/${progress.totalFiles} files")
@@ -369,11 +392,11 @@ private fun RunRow(run: SyncRun, onClick: () -> Unit) {
     }
     val sizeLabel = if (run.bytesTransferred > 0) " · ${formatFileSize(run.bytesTransferred)}" else ""
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 8.dp),
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = VirgaSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         SyncStatusBadge(status = run.status)
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(VirgaSpacing.sm))
         Text(
             "$relTime · ${run.filesTransferred} files$sizeLabel",
             style = MaterialTheme.typography.bodyMedium,

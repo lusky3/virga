@@ -6,10 +6,12 @@ import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.execSQL
+import app.lusk.virga.core.database.dao.AppStatsDao
 import app.lusk.virga.core.database.dao.ConflictDao
 import app.lusk.virga.core.database.dao.RemoteDao
 import app.lusk.virga.core.database.dao.SyncRunDao
 import app.lusk.virga.core.database.dao.SyncTaskDao
+import app.lusk.virga.core.database.entity.AppStatsEntity
 import app.lusk.virga.core.database.entity.ConflictEntity
 import app.lusk.virga.core.database.entity.RemoteEntity
 import app.lusk.virga.core.database.entity.SyncRunEntity
@@ -21,8 +23,9 @@ import app.lusk.virga.core.database.entity.SyncTaskEntity
         SyncTaskEntity::class,
         SyncRunEntity::class,
         ConflictEntity::class,
+        AppStatsEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -31,6 +34,7 @@ abstract class VirgaDatabase : RoomDatabase() {
     abstract fun syncTaskDao(): SyncTaskDao
     abstract fun syncRunDao(): SyncRunDao
     abstract fun conflictDao(): ConflictDao
+    abstract fun appStatsDao(): AppStatsDao
 
     companion object {
         const val NAME = "virga.db"
@@ -96,6 +100,42 @@ abstract class VirgaDatabase : RoomDatabase() {
                 connection.execSQL("ALTER TABLE sync_tasks ADD COLUMN backupDir TEXT")
                 connection.execSQL("ALTER TABLE sync_tasks ADD COLUMN maxDelete INTEGER")
                 connection.execSQL("ALTER TABLE sync_tasks ADD COLUMN extraConfig TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        /**
+         * v5 → v6: introduce the `app_stats` singleton-row table for lifetime
+         * sync statistics. The row is seeded immediately so DAOs never see a
+         * missing row on fresh-install paths that skip the ensureRow() call.
+         *
+         * Column types match Room's code-gen for [AppStatsEntity]:
+         *   - Long (non-null) → INTEGER NOT NULL DEFAULT 0
+         *   - Int  (non-null) → INTEGER NOT NULL DEFAULT 0
+         *   - Long? (nullable) → INTEGER (no NOT NULL, no DEFAULT — Room stores null)
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `app_stats` (" +
+                        "`id` INTEGER NOT NULL, " +
+                        "`firstSyncEpochMs` INTEGER, " +
+                        "`totalRuns` INTEGER NOT NULL DEFAULT 0, " +
+                        "`successfulRuns` INTEGER NOT NULL DEFAULT 0, " +
+                        "`failedRuns` INTEGER NOT NULL DEFAULT 0, " +
+                        "`totalFilesTransferred` INTEGER NOT NULL DEFAULT 0, " +
+                        "`totalBytesTransferred` INTEGER NOT NULL DEFAULT 0, " +
+                        "`bytesUploaded` INTEGER NOT NULL DEFAULT 0, " +
+                        "`bytesDownloaded` INTEGER NOT NULL DEFAULT 0, " +
+                        "`bytesTwoWay` INTEGER NOT NULL DEFAULT 0, " +
+                        "`totalSyncMillis` INTEGER NOT NULL DEFAULT 0, " +
+                        "`largestRunBytes` INTEGER NOT NULL DEFAULT 0, " +
+                        "`longestRunMillis` INTEGER NOT NULL DEFAULT 0, " +
+                        "`currentStreakDays` INTEGER NOT NULL DEFAULT 0, " +
+                        "`longestStreakDays` INTEGER NOT NULL DEFAULT 0, " +
+                        "`lastSyncDayEpochDay` INTEGER NOT NULL DEFAULT 0, " +
+                        "PRIMARY KEY(`id`))",
+                )
+                connection.execSQL("INSERT OR IGNORE INTO `app_stats` (`id`) VALUES (0)")
             }
         }
     }

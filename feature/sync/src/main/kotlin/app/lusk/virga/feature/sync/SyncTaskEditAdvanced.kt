@@ -42,15 +42,16 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 
 /** Collapsible Advanced section containing BW limits and buffer size. */
 @Composable
 internal fun AdvancedSection(form: SyncTaskForm, viewModel: SyncTaskEditViewModel) {
     var expanded by remember { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
         HorizontalDivider()
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = VirgaSpacing.xs),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -64,7 +65,7 @@ internal fun AdvancedSection(form: SyncTaskForm, viewModel: SyncTaskEditViewMode
             }
         }
         AnimatedVisibility(visible = expanded) {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.md)) {
                 OutlinedTextField(
                     value = form.bwLimitWifi,
                     onValueChange = { viewModel.update { f -> f.copy(bwLimitWifi = it) } },
@@ -218,8 +219,8 @@ internal fun CalendarScheduleEditor(
     onToggleDay: (Int) -> Unit,
     onTimeChange: (hour: Int, minute: Int) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
             WEEKDAY_LABELS.forEachIndexed { index, label ->
                 val iso = index + 1 // 1 = Monday … 7 = Sunday
                 FilterChip(
@@ -234,13 +235,13 @@ internal fun CalendarScheduleEditor(
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.sync_schedule_time_label), style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.width(16.dp))
+            Spacer(Modifier.width(VirgaSpacing.md))
             Stepper(
                 value = "%02d".format(hour),
                 onDecrement = { onTimeChange((hour + 23) % 24, minute) },
                 onIncrement = { onTimeChange((hour + 1) % 24, minute) },
             )
-            Text(":", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 4.dp))
+            Text(":", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = VirgaSpacing.xs))
             Stepper(
                 value = "%02d".format(minute),
                 onDecrement = { onTimeChange(hour, (minute + 55) % 60) },
@@ -291,7 +292,7 @@ internal fun IntervalDropdown(
         labelRes != null -> stringResource(labelRes)
         else -> stringResource(R.string.sync_interval_manual)
     }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.xs)) {
         ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
             OutlinedTextField(
                 value = displayLabel,

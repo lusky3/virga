@@ -55,29 +55,74 @@ class RcloneConfigManager @Inject constructor(
     suspend fun decryptForDaemon(): File = withContext(dispatchers.io) {
         ioLock.withLock {
             if (plaintextConf.exists()) plaintextConf.delete()
+            // Drop a stale recovery probe left by a process kill mid-recovery (it's
+            // ciphertext, not plaintext, but there's no reason to keep a second copy).
+            runCatching { File(encryptedConf.parentFile, "${encryptedConf.name}.tmp").delete() }
             if (!encryptedConf.exists()) {
                 // First run: hand the daemon an empty, writable config.
                 plaintextConf.writeText("")
                 restrictToOwner(plaintextConf)
                 return@withContext plaintextConf
             }
-            encryptedFile(encryptedConf).openFileInput().use { input ->
-                plaintextConf.outputStream().use { output -> input.copyTo(output) }
+            // Decrypt under the file's own name (its AEAD associated data). If that
+            // fails, attempt the one-time recovery for configs written by the old
+            // buggy temp-rename (keyed to the "*.enc.tmp" name) and re-persist them
+            // correctly so the heal happens once.
+            val plain = runCatching {
+                encryptedFile(encryptedConf).openFileInput().use { it.readBytes() }
+            }.recoverCatching {
+                recoverMisnamedCiphertext() ?: throw it
+            }.getOrThrow()
+            try {
+                plaintextConf.writeBytes(plain)
+                // The plaintext briefly holds tokens/passwords; tighten to owner-only so
+                // it isn't group-readable for the daemon's lifetime (defence-in-depth on
+                // top of the per-UID sandbox). The leftover (if the process is hard-killed
+                // mid-session) is deleted by the delete-then-decrypt at the top above.
+                restrictToOwner(plaintextConf)
+            } finally {
+                // Don't leave the decrypted credential bytes lingering in a heap buffer.
+                plain.fill(0)
             }
-            // The plaintext briefly holds tokens/passwords; tighten to owner-only so
-            // it isn't group-readable for the daemon's lifetime (defence-in-depth on
-            // top of the per-UID sandbox). The leftover (if the process is hard-killed
-            // mid-session) is deleted by the delete-then-decrypt at the top above.
-            restrictToOwner(plaintextConf)
             plaintextConf
         }
+    }
+
+    /**
+     * Recovers a config written by the earlier buggy [writeEncryptedAtomically],
+     * which encrypted under the temp name `rclone.conf.enc.tmp` before renaming —
+     * so the stored ciphertext's associated data is that temp name, not the final
+     * one. We decrypt under the old name (via a copy carrying it), and on success
+     * re-encrypt with the correct name so the next open uses the normal path.
+     * Returns the recovered plaintext bytes, or null if this isn't a recoverable
+     * (old-AAD) ciphertext. Must be called holding [ioLock].
+     */
+    private fun recoverMisnamedCiphertext(): ByteArray? {
+        val misnamed = File(encryptedConf.parentFile, "${encryptedConf.name}.tmp")
+        return runCatching {
+            encryptedConf.copyTo(misnamed, overwrite = true)
+            val bytes = encryptedFile(misnamed).openFileInput().use { it.readBytes() }
+            // Guard against healing/returning an empty config: a blank plaintext would
+            // start the daemon with no remotes and could trip a downstream wipe. An
+            // authentic recovered config has content; if it's blank, treat recovery as
+            // failed and leave the stored ciphertext untouched.
+            if (bytes.isEmpty()) return@runCatching null
+            // Heal: rewrite the store under the correct name (AAD) for next time.
+            writeEncryptedAtomically(bytes)
+            bytes
+        }.getOrNull().also { runCatching { misnamed.delete() } }
     }
 
     /** Re-encrypts the (possibly daemon-modified) plaintext config and removes the temp file. */
     suspend fun persistAndCleanup() = withContext(dispatchers.io) {
         ioLock.withLock {
             if (plaintextConf.exists()) {
-                writeEncryptedAtomically(plaintextConf.readBytes())
+                val bytes = plaintextConf.readBytes()
+                try {
+                    writeEncryptedAtomically(bytes)
+                } finally {
+                    bytes.fill(0)
+                }
                 plaintextConf.delete()
             }
         }
@@ -112,11 +157,20 @@ class RcloneConfigManager @Inject constructor(
      * write to a temp file, then atomically replace. The previous ciphertext stays
      * intact until the new one is durable, so a Keystore/disk failure mid-write can't
      * destroy the credential store (the old delete-then-write did exactly that).
-     * Decryptability is path-independent — the master key is Keystore-bound — so the
-     * rename preserves it (same property the legacy-path migration above relies on).
+     *
+     * CRITICAL: [EncryptedFile] uses the file's *name* as the AEAD associated data
+     * (the HKDF `info` for the streaming key), so a ciphertext is only decryptable
+     * by an [EncryptedFile] opened on a file with the **same name** — NOT just the
+     * same Keystore master key. The temp file therefore shares [encryptedConf]'s
+     * name and differs only in directory; renaming a differently-named temp (e.g.
+     * `*.enc.tmp`) over it would derive a different key on read and fail with
+     * "No matching key found for the ciphertext in the stream".
      */
     private fun writeEncryptedAtomically(bytes: ByteArray) {
-        val tmp = File(encryptedConf.parentFile, "${encryptedConf.name}.tmp")
+        val tmpDir = File(encryptedConf.parentFile, "enc-tmp").apply { mkdirs() }
+        // Same file name as the destination → same associated data → decryptable
+        // after the move. Only the parent directory differs.
+        val tmp = File(tmpDir, encryptedConf.name)
         if (tmp.exists()) tmp.delete()
         encryptedFile(tmp).openFileOutput().use { it.write(bytes) }
         runCatching {

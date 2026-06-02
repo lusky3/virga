@@ -51,6 +51,17 @@ class RemoteRepositoryTest {
         assertThat(result.exceptionOrNull()).isInstanceOf(VirgaError.Network::class.java)
     }
 
+    @Test fun `refresh does NOT clear the cache when the live dump is empty`() = runTest {
+        // An empty config/dump (e.g. a config that failed to load) must never wipe
+        // the user's configured remotes — replaceAll(emptyList) would delete them.
+        coEvery { engine.listRemotes() } returns emptyList()
+
+        val result = repo.refresh()
+
+        assertThat(result.isSuccess).isTrue()
+        coVerify(exactly = 0) { remoteDao.replaceAll(any()) }
+    }
+
     // --- addRemote ---
 
     @Test fun `addRemote calls engine_createRemote and then refresh on success`() = runTest {

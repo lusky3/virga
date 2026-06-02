@@ -140,6 +140,28 @@ data class RemoteQuota(
     val free: Long?,
 )
 
+/**
+ * Lifetime sync statistics for the app. Mirrors [AppStatsEntity] as a clean
+ * domain type. All counters default to 0/null so callers get sensible empty
+ * state before the first run is recorded.
+ */
+data class LifetimeStats(
+    val firstSyncEpochMs: Long? = null,
+    val totalRuns: Long = 0,
+    val successfulRuns: Long = 0,
+    val failedRuns: Long = 0,
+    val totalFilesTransferred: Long = 0,
+    val totalBytesTransferred: Long = 0,
+    val bytesUploaded: Long = 0,
+    val bytesDownloaded: Long = 0,
+    val bytesTwoWay: Long = 0,
+    val totalSyncMillis: Long = 0,
+    val largestRunBytes: Long = 0,
+    val longestRunMillis: Long = 0,
+    val currentStreakDays: Int = 0,
+    val longestStreakDays: Int = 0,
+)
+
 /** Aggregate progress for a running sync, derived from rclone `core/stats`. */
 data class SyncProgress(
     val bytesTransferred: Long,
@@ -149,6 +171,9 @@ data class SyncProgress(
     val totalFiles: Int,
     val etaSeconds: Long?,
     val errors: Int,
+    /** Files deleted (mirror / delete-extraneous). In `--dry-run` this is the
+     *  count rclone *would* delete, surfaced in the preview's blast radius. */
+    val deletes: Int = 0,
 ) {
     val fraction: Float
         get() = if (totalBytes > 0) (bytesTransferred.toFloat() / totalBytes).coerceIn(0f, 1f) else 0f

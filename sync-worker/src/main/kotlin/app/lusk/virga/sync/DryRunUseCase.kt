@@ -13,6 +13,16 @@ data class DryRunResult(
     val filesToTransfer: Int,
     val bytesToTransfer: Long,
     val errors: Int,
+    /** Files a real run would DELETE on the destination (mirror / two-way) — the
+     *  blast radius §13 wants surfaced before a destructive run. Note: rclone
+     *  *skips* deletions under `--dry-run`, so its `deletes` stat is usually 0
+     *  even for a Mirror task; treat a non-zero value as a precise count and
+     *  otherwise fall back to [mirrors] for the qualitative warning. */
+    val filesToDelete: Int = 0,
+    /** True when a real run could delete extraneous files on the destination
+     *  (the task mirrors / delete-extraneous). Drives the §13 warning even when
+     *  [filesToDelete] is unavailable from a dry run. */
+    val mirrors: Boolean = false,
     /** Non-null when the dry run itself failed (e.g. remote unreachable). */
     val error: String? = null,
 )
@@ -60,6 +70,8 @@ class DryRunUseCase @Inject constructor(
             filesToTransfer = last?.totalFiles ?: 0,
             bytesToTransfer = last?.totalBytes ?: 0L,
             errors = last?.errors ?: 0,
+            filesToDelete = last?.deletes ?: 0,
+            mirrors = task.deleteExtraneous,
             error = error,
         )
     }

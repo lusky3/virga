@@ -52,17 +52,18 @@ class SyncWidget : GlanceAppWidget() {
             )
         }
         val backUpNowLabel = context.getString(R.string.widget_back_up_now)
+        val appName = context.getString(R.string.app_name)
 
         provideContent {
             GlanceTheme {
-                WidgetContent(summary = summary, backUpNowLabel = backUpNowLabel)
+                WidgetContent(appName = appName, summary = summary, backUpNowLabel = backUpNowLabel)
             }
         }
     }
 }
 
 @Composable
-private fun WidgetContent(summary: String, backUpNowLabel: String) {
+private fun WidgetContent(appName: String, summary: String, backUpNowLabel: String) {
     Column(
         modifier = GlanceModifier
             .fillMaxSize()
@@ -71,7 +72,7 @@ private fun WidgetContent(summary: String, backUpNowLabel: String) {
         verticalAlignment = Alignment.Vertical.CenterVertically,
     ) {
         Text(
-            text = "Virga",
+            text = appName,
             style = TextStyle(
                 color = GlanceTheme.colors.onSurface,
                 fontSize = 16.sp,

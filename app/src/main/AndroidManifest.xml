@@ -54,6 +54,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:theme="@style/Theme.Virga"
+            android:windowSoftInputMode="adjustResize|stateAlwaysHidden"
             tools:ignore="ExportedActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

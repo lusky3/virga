@@ -79,7 +79,7 @@ class WatchdogService : Service() {
          */
         private fun buildNotification(context: Context): Notification {
             return NotificationCompat.Builder(context, NotificationChannelIds.WATCHDOG)
-                .setSmallIcon(android.R.drawable.stat_notify_sync)
+                .setSmallIcon(R.drawable.ic_stat_virga)
                 .setContentTitle(context.getString(R.string.watchdog_notif_title))
                 // No setContentText → the collapsed notification shows just the title.
                 .setStyle(

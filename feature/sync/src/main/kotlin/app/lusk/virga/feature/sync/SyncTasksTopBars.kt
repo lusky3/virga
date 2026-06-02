@@ -42,6 +42,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -151,7 +152,7 @@ internal fun SwipeToDeleteCard(onDelete: () -> Unit, content: @Composable () -> 
                 Modifier
                     .fillMaxSize()
                     .background(bg, MaterialTheme.shapes.medium)
-                    .padding(horizontal = 20.dp),
+                    .padding(horizontal = VirgaSpacing.lg),
                 contentAlignment = Alignment.CenterEnd,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -160,7 +161,7 @@ internal fun SwipeToDeleteCard(onDelete: () -> Unit, content: @Composable () -> 
                         color = onBg,
                         style = MaterialTheme.typography.labelLarge,
                     )
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(VirgaSpacing.sm))
                     Icon(
                         Icons.Filled.Delete,
                         contentDescription = null,

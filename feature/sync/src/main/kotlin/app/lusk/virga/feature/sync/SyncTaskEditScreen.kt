@@ -60,6 +60,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.model.SyncDirection
 import java.io.File
@@ -144,10 +145,10 @@ fun SyncTaskEditScreen(
         Column(
             modifier = Modifier
                 .padding(padding)
-                .padding(16.dp)
+                .padding(VirgaSpacing.md)
                 .imePadding()
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(VirgaSpacing.md),
         ) {
             // Task name. Track focus-then-blur so the "required" error only appears
             // after real user interaction (onFocusChanged fires with isFocused=false
@@ -223,7 +224,7 @@ fun SyncTaskEditScreen(
             TextButton(
                 onClick = { onBrowseDestination(form.remoteName) },
                 enabled = form.remoteName.isNotBlank(),
-                modifier = Modifier.padding(top = 4.dp),
+                modifier = Modifier.padding(top = VirgaSpacing.xs),
             ) {
                 Icon(Icons.Filled.FolderOpen, contentDescription = null)
                 Text(
@@ -231,7 +232,7 @@ fun SyncTaskEditScreen(
                         if (form.remoteName.isBlank()) R.string.sync_edit_browse_dest_needs_remote
                         else R.string.sync_edit_browse_dest,
                     ),
-                    modifier = Modifier.padding(start = 8.dp),
+                    modifier = Modifier.padding(start = VirgaSpacing.sm),
                 )
             }
 
@@ -272,7 +273,7 @@ fun SyncTaskEditScreen(
                         role = Role.Switch,
                         onValueChange = { v -> viewModel.update { f -> f.copy(wifiOnly = v) } },
                     )
-                    .padding(vertical = 4.dp),
+                    .padding(vertical = VirgaSpacing.xs),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -321,7 +322,7 @@ private fun SourcePathField(
     onClear: () -> Unit,
     onChooseFolder: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.xs)) {
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
@@ -338,9 +339,9 @@ private fun SourcePathField(
             } else null,
             modifier = Modifier.fillMaxWidth().semantics { error?.let { error(it) } },
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
             TextButton(onClick = onChooseFolder) {
-                Icon(Icons.Filled.FolderOpen, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                Icon(Icons.Filled.FolderOpen, contentDescription = null, modifier = Modifier.padding(end = VirgaSpacing.xs))
                 Text(stringResource(R.string.sync_edit_source_choose_folder))
             }
         }
@@ -408,7 +409,7 @@ private fun MirrorToggleRow(enabled: Boolean, onChange: (Boolean) -> Unit) {
                 role = Role.Switch,
                 onValueChange = { v -> if (v) showConfirm = true else onChange(false) },
             )
-            .padding(vertical = 4.dp),
+            .padding(vertical = VirgaSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -449,7 +450,7 @@ private fun DirectionSegmentedRow(
     onSelect: (SyncDirection) -> Unit,
 ) {
     val entries = SyncDirection.entries
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.xs)) {
         Text(stringResource(R.string.sync_edit_field_direction), style = MaterialTheme.typography.labelLarge)
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
             entries.forEachIndexed { index, dir ->

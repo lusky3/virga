@@ -1,10 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Virga mark (BRAND.md §3): a soft blue→teal streak that fades before a baseline,
+  trailed by three teal droplets — rain (virga) evaporating before it lands.
+  Foreground of the adaptive icon; background is the brand navy. Content is kept
+  inside the adaptive-icon safe circle (radius ~33 around the 54,54 centre).
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Simple cloud glyph centred in the adaptive-icon safe zone. -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M68,46 C68,40 63,35 57,35 C52,35 48,38 46,42 C45,42 44,42 43,42 C37,42 32,47 32,53 C32,59 37,64 43,64 L70,64 C75,64 79,60 79,55 C79,50 75,46 70,46 C69,46 68,46 68,46 Z" />
+
+    <!-- The streak: a rounded vertical stadium with a vertical blue→teal→fade gradient. -->
+    <path android:pathData="M47,33 A7,7 0 0 1 61,33 L61,53 A7,7 0 0 1 47,53 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="54" android:startY="26"
+                android:endX="54" android:endY="60">
+                <item android:offset="0.0" android:color="#FF1E6FD9" />
+                <item android:offset="0.55" android:color="#FF1FA8A0" />
+                <item android:offset="1.0" android:color="#001FA8A0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Trailing droplets, fading as they fall. -->
+    <path android:fillColor="#FF1FA8A0"
+        android:pathData="M50,67 a4,4 0 1 0 8,0 a4,4 0 1 0 -8,0 Z" />
+    <path android:fillColor="#CC1FA8A0"
+        android:pathData="M51.4,75 a2.6,2.6 0 1 0 5.2,0 a2.6,2.6 0 1 0 -5.2,0 Z" />
+    <path android:fillColor="#991FA8A0"
+        android:pathData="M52.3,81 a1.7,1.7 0 1 0 3.4,0 a1.7,1.7 0 1 0 -3.4,0 Z" />
 </vector>

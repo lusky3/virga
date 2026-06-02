@@ -69,4 +69,88 @@ class DryRunUseCaseTest {
         assertThat(useCase.isAvailableFor(task)).isTrue()
         assertThat(useCase.isAvailableFor(task.copy(sourcePath = "content://tree/primary"))).isFalse()
     }
+
+    // ---------------------------------------------------------------------------
+    // filesToDelete and mirrors fields
+    // ---------------------------------------------------------------------------
+
+    @Test
+    fun preview_filesToDelete_comesFromFinalProgressDeletes() = runBlocking {
+        val engine = mockk<RcloneEngine>(relaxed = true)
+        val executor = mockk<SyncExecutor>()
+        // Emit two progress snapshots; only the last one should drive the result.
+        every { executor.run(any(), any(), any(), any(), any()) } returns flowOf(
+            SyncProgress(
+                bytesTransferred = 0L,
+                totalBytes = 1024L,
+                speedBytesPerSec = 0.0,
+                transferredFiles = 0,
+                totalFiles = 3,
+                etaSeconds = null,
+                errors = 0,
+                deletes = 0,
+            ),
+            SyncProgress(
+                bytesTransferred = 0L,
+                totalBytes = 1024L,
+                speedBytesPerSec = 0.0,
+                transferredFiles = 0,
+                totalFiles = 3,
+                etaSeconds = null,
+                errors = 0,
+                deletes = 5,
+            ),
+        )
+        val mirrorTask = task.copy(deleteExtraneous = true)
+
+        val result = DryRunUseCase(executor, engine).preview(mirrorTask)
+
+        assertThat(result.filesToDelete).isEqualTo(5)
+    }
+
+    @Test
+    fun preview_mirrors_isTrueWhenTaskDeletesExtraneous() = runBlocking {
+        val engine = mockk<RcloneEngine>(relaxed = true)
+        val executor = mockk<SyncExecutor>()
+        every { executor.run(any(), any(), any(), any(), any()) } returns flowOf(
+            SyncProgress(
+                bytesTransferred = 0L,
+                totalBytes = 512L,
+                speedBytesPerSec = 0.0,
+                transferredFiles = 0,
+                totalFiles = 2,
+                etaSeconds = null,
+                errors = 0,
+                deletes = 3,
+            ),
+        )
+        val mirrorTask = task.copy(deleteExtraneous = true)
+
+        val result = DryRunUseCase(executor, engine).preview(mirrorTask)
+
+        assertThat(result.mirrors).isTrue()
+    }
+
+    @Test
+    fun preview_mirrors_isFalseWhenTaskDoesNotDeleteExtraneous() = runBlocking {
+        val engine = mockk<RcloneEngine>(relaxed = true)
+        val executor = mockk<SyncExecutor>()
+        every { executor.run(any(), any(), any(), any(), any()) } returns flowOf(
+            SyncProgress(
+                bytesTransferred = 0L,
+                totalBytes = 512L,
+                speedBytesPerSec = 0.0,
+                transferredFiles = 0,
+                totalFiles = 2,
+                etaSeconds = null,
+                errors = 0,
+                deletes = 0,
+            ),
+        )
+        val additiveCopyTask = task.copy(deleteExtraneous = false)
+
+        val result = DryRunUseCase(executor, engine).preview(additiveCopyTask)
+
+        assertThat(result.mirrors).isFalse()
+    }
 }

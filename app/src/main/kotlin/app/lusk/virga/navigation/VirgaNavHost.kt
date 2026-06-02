@@ -13,6 +13,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Icon
@@ -40,6 +41,7 @@ import app.lusk.virga.R
 import app.lusk.virga.feature.explorer.FileBrowserScreen
 import app.lusk.virga.feature.remotes.RemotesScreen
 import app.lusk.virga.feature.settings.SettingsScreen
+import app.lusk.virga.feature.stats.StatsScreen
 import app.lusk.virga.feature.sync.ConflictsScreen
 import app.lusk.virga.feature.sync.FirstSyncWizardScreen
 import app.lusk.virga.feature.sync.LogViewerScreen
@@ -47,10 +49,12 @@ import app.lusk.virga.feature.sync.RunDetailScreen
 import app.lusk.virga.feature.sync.SyncHistoryScreen
 import app.lusk.virga.feature.sync.SyncTaskEditScreen
 import app.lusk.virga.feature.sync.SyncTaskSummaryScreen
+import app.lusk.virga.feature.sync.HomeScreen
 import app.lusk.virga.feature.sync.SyncTasksAdaptiveScreen
 import kotlinx.serialization.Serializable
 
 /** Type-safe Navigation 3 routes. Each is a [NavKey] so it can live in a back stack. */
+@Serializable object HomeRoute : NavKey
 @Serializable object SyncRoute : NavKey
 @Serializable object RemotesRoute : NavKey
 @Serializable object SettingsRoute : NavKey
@@ -86,6 +90,9 @@ import kotlinx.serialization.Serializable
 /** Guided first-sync wizard for cold-install users (WS1.2). */
 @Serializable object FirstSyncWizardRoute : NavKey
 
+/** Lifetime statistics screen. */
+@Serializable object StatsRoute : NavKey
+
 private data class TopLevel(
     val route: NavKey,
     val labelRes: Int,
@@ -93,6 +100,7 @@ private data class TopLevel(
 )
 
 private val topLevelDestinations = listOf(
+    TopLevel(HomeRoute, R.string.nav_tab_home, Icons.Filled.Home),
     TopLevel(SyncRoute, R.string.nav_tab_sync, Icons.Filled.CloudSync),
     TopLevel(RemotesRoute, R.string.nav_tab_remotes, Icons.Filled.Storage),
     TopLevel(SettingsRoute, R.string.nav_tab_settings, Icons.Filled.Settings),
@@ -120,8 +128,8 @@ fun VirgaNavHost(
     onOpenRouteConsumed: () -> Unit = {},
 ) {
     val navigationState = rememberNavigationState(
-        startRoute = SyncRoute,
-        topLevelRoutes = setOf(SyncRoute, RemotesRoute, SettingsRoute),
+        startRoute = HomeRoute,
+        topLevelRoutes = setOf(HomeRoute, SyncRoute, RemotesRoute, SettingsRoute),
     )
     val navigator = remember { Navigator(navigationState) }
 
@@ -154,6 +162,14 @@ fun VirgaNavHost(
     var syncDetailCanGoBack by remember { mutableStateOf(false) }
 
     val entryProvider = entryProvider {
+        entry<HomeRoute> {
+            HomeScreen(
+                onOpenStats = dropUnlessResumed { navigator.navigate(StatsRoute) },
+                onAddTask = dropUnlessResumed { navigator.navigate(TaskEditRoute(0)) },
+                onOpenSync = dropUnlessResumed { navigator.navigate(SyncRoute) },
+                onOpenRemotes = dropUnlessResumed { navigator.navigate(RemotesRoute) },
+            )
+        }
         entry<SyncRoute> {
             SyncTasksAdaptiveScreen(
                 onAddTask = dropUnlessResumed { navigator.navigate(TaskEditRoute(0)) },
@@ -163,6 +179,7 @@ fun VirgaNavHost(
                 onOpenHistory = dropUnlessResumed { navigator.navigate(HistoryRoute) },
                 onOpenConflicts = dropUnlessResumed { navigator.navigate(ConflictsRoute) },
                 onOpenRun = { id -> navigator.navigate(RunDetailRoute(id)) },
+                onOpenStats = dropUnlessResumed { navigator.navigate(StatsRoute) },
                 onDetailBackAvailableChanged = { syncDetailCanGoBack = it },
             )
         }
@@ -237,7 +254,12 @@ fun VirgaNavHost(
                 },
             )
         }
-        entry<SettingsRoute> { SettingsScreen() }
+        entry<SettingsRoute> {
+            SettingsScreen(onOpenStats = dropUnlessResumed { navigator.navigate(StatsRoute) })
+        }
+        entry<StatsRoute> {
+            StatsScreen(onBack = dropUnlessResumed { navigator.goBack() })
+        }
     }
 
     // Resolve tab labels in the composable scope; the navigationSuiteItems

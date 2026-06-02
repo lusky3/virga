@@ -25,6 +25,7 @@ object SyncProgressData {
     private const val TOTAL_FILES = "p_total_files"
     private const val ETA = "p_eta"
     private const val ERRORS = "p_errors"
+    private const val DELETES = "p_deletes"
     private const val PHASE = "p_phase"
 
     /** A run is still "listing" until rclone reports any totals to transfer. */
@@ -39,6 +40,7 @@ object SyncProgressData {
         TOTAL_FILES to p.totalFiles,
         ETA to (p.etaSeconds ?: -1L),
         ERRORS to p.errors,
+        DELETES to p.deletes,
         PHASE to phaseOf(p).name,
     )
 
@@ -54,6 +56,7 @@ object SyncProgressData {
             totalFiles = data.getInt(TOTAL_FILES, 0),
             etaSeconds = if (eta < 0) null else eta,
             errors = data.getInt(ERRORS, 0),
+            deletes = data.getInt(DELETES, 0),
         )
     }
 }

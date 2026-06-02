@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.util.formatFileSize
+import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import app.lusk.virga.core.data.ConflictChoice
 import app.lusk.virga.core.common.model.Conflict
 import app.lusk.virga.core.designsystem.component.EmptyState
@@ -132,8 +133,8 @@ fun ConflictsScreen(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(VirgaSpacing.md),
+                verticalArrangement = Arrangement.spacedBy(VirgaSpacing.md),
             ) {
                 items(state.conflicts, key = { it.id }) { conflict ->
                     ConflictCard(
@@ -226,10 +227,10 @@ private fun ConflictCard(
         onClick = { if (inSelectionMode) onCheckChange() },
         onLongClick = onLongClick,
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (inSelectionMode) {
-                    Checkbox(checked = isSelected, onCheckedChange = { onCheckChange() }, modifier = Modifier.padding(end = 8.dp))
+                    Checkbox(checked = isSelected, onCheckedChange = { onCheckChange() }, modifier = Modifier.padding(end = VirgaSpacing.sm))
                 }
                 Text(
                     conflict.basePath,
@@ -259,16 +260,18 @@ private fun ConflictCard(
             } else {
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
                 ) {
                     OutlinedButton(
                         onClick = { onChoice(ConflictChoice.KEEP_VARIANT_1) },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                         modifier = Modifier
                             .heightIn(min = 48.dp)
                             .semantics { onClick(label = "Keep local — deletes remote version", action = null) },
                     ) { Text(stringResource(R.string.conflicts_btn_keep_local)) }
                     OutlinedButton(
                         onClick = { onChoice(ConflictChoice.KEEP_VARIANT_2) },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                         modifier = Modifier
                             .heightIn(min = 48.dp)
                             .semantics { onClick(label = "Keep remote — overwrites local version", action = null) },
@@ -288,7 +291,7 @@ private fun ConflictCard(
 @Composable
 private fun VariantRow(label: String, path: String, size: Long) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("$label:", modifier = Modifier.padding(end = 8.dp), style = MaterialTheme.typography.labelMedium)
+        Text("$label:", modifier = Modifier.padding(end = VirgaSpacing.sm), style = MaterialTheme.typography.labelMedium)
         Column(Modifier.weight(1f)) {
             Text(path, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(formatFileSize(size), style = MaterialTheme.typography.labelSmall)

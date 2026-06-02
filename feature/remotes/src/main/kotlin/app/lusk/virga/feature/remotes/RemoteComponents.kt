@@ -13,7 +13,6 @@ import app.lusk.virga.core.designsystem.component.VirgaCard
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -30,10 +29,11 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.common.model.RemoteQuota
 import app.lusk.virga.core.common.util.formatFileSize
+import app.lusk.virga.core.designsystem.component.RemoteProviderMark
+import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 
 /** Curated list of common rclone backend types with friendly display names. */
 internal val RcloneBackendTypes: List<Pair<String, String>> = listOf(
@@ -69,14 +69,20 @@ internal fun RemoteCard(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(Modifier.weight(1f)) {
+            val friendlyType = RcloneBackendTypes.firstOrNull { it.first == remote.type }?.second
+                ?: remote.type
+            RemoteProviderMark(
+                type = remote.type,
+                contentDescription = friendlyType,
+            )
+            Column(Modifier.weight(1f).padding(start = VirgaSpacing.sm)) {
                 Text(
                     remote.name,
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(remote.type, style = MaterialTheme.typography.bodySmall)
+                Text(friendlyType, style = MaterialTheme.typography.bodyMedium)
                 RemoteQuotaRow(quota, quotaLoading)
             }
 
@@ -132,15 +138,15 @@ private fun RemoteQuotaRow(quota: RemoteQuota?, loading: Boolean) {
                 formatFileSize(used),
                 formatFileSize(total),
             )
-            Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+            Column(Modifier.fillMaxWidth().padding(top = VirgaSpacing.xs)) {
                 Text(
                     label,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                LinearProgressIndicator(
+                LinearWavyProgressIndicator(
                     progress = { fraction },
-                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = VirgaSpacing.xs),
                 )
             }
         }
@@ -149,18 +155,18 @@ private fun RemoteQuotaRow(quota: RemoteQuota?, loading: Boolean) {
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp)
+                    .padding(top = VirgaSpacing.xs)
                     .semantics { liveRegion = LiveRegionMode.Polite },
             ) {
                 Text(
                     checkingLabel,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 LinearWavyProgressIndicator(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 2.dp)
+                        .padding(top = VirgaSpacing.xs)
                         .semantics { contentDescription = checkingLabel },
                 )
             }

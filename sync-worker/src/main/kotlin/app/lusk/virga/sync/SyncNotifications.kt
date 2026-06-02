@@ -18,7 +18,7 @@ internal class SyncNotifications(private val context: Context) {
      */
     fun progress(taskName: String, progress: SyncProgress?, taskId: Long): Notification =
         NotificationCompat.Builder(context, NotificationChannelIds.SYNC_PROGRESS)
-            .setSmallIcon(android.R.drawable.stat_sys_upload)
+            .setSmallIcon(R.drawable.ic_stat_virga)
             .setContentTitle(context.getString(R.string.notif_sync_progress_title, taskName))
             .setContentText(progress?.let(::progressText) ?: context.getString(R.string.notif_sync_starting))
             .setOngoing(true)
@@ -43,7 +43,7 @@ internal class SyncNotifications(private val context: Context) {
     /** Completion notification for [taskName]. Tapping opens the task's summary. */
     fun complete(taskName: String, filesTransferred: Int, taskId: Long): Notification =
         NotificationCompat.Builder(context, NotificationChannelIds.SYNC_COMPLETE)
-            .setSmallIcon(android.R.drawable.stat_sys_upload_done)
+            .setSmallIcon(R.drawable.ic_stat_virga)
             .setContentTitle(context.getString(R.string.notif_sync_complete_title, taskName))
             .setContentText(
                 context.resources.getQuantityString(
@@ -57,7 +57,7 @@ internal class SyncNotifications(private val context: Context) {
     /** Error notification for [taskName]. Includes a Retry action; tapping opens the task's summary. */
     fun error(taskName: String, message: String, taskId: Long): Notification =
         NotificationCompat.Builder(context, NotificationChannelIds.SYNC_ERROR)
-            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setSmallIcon(R.drawable.ic_stat_virga)
             .setContentTitle(context.getString(R.string.notif_sync_error_title, taskName))
             .setContentText(message)
             .setAutoCancel(true)

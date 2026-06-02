@@ -34,8 +34,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.unit.dp
 import app.lusk.virga.core.common.model.Remote
+import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import app.lusk.virga.core.common.model.RemoteOption
 import app.lusk.virga.core.common.model.RemoteProvider
 import app.lusk.virga.core.rclone.oauth.OAuthProvider
@@ -136,14 +136,14 @@ internal fun AddRemoteDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 8.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(horizontal = VirgaSpacing.lg, vertical = VirgaSpacing.sm)
+                .padding(bottom = VirgaSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
         ) {
             Text(
                 stringResource(R.string.remotes_add_dialog_title),
                 style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(bottom = 8.dp),
+                modifier = Modifier.padding(bottom = VirgaSpacing.sm),
             )
 
             OutlinedTextField(
@@ -163,7 +163,7 @@ internal fun AddRemoteDialog(
                     stringResource(R.string.remotes_add_sign_in_with),
                     style = MaterialTheme.typography.labelLarge,
                 )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
                     oauthProviders.forEach { provider ->
                         val custom = provider.id in customClientIds
                         AssistChip(
@@ -222,9 +222,9 @@ internal fun AddRemoteDialog(
                             DropdownMenuItem(
                                 text = {
                                     Column {
-                                        Text(id, style = MaterialTheme.typography.bodyMedium)
+                                        Text(label, style = MaterialTheme.typography.bodyMedium)
                                         Text(
-                                            label,
+                                            id,
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -336,13 +336,13 @@ private fun ByoKeysSection(
         Text(stringResource(R.string.remotes_byo_toggle))
     }
     if (expanded) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
             Text(
                 stringResource(R.string.remotes_byo_explainer),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
                 providers.forEach { provider ->
                     FilterChip(
                         selected = provider.id == selectedId,
@@ -362,7 +362,7 @@ private fun ByoKeysSection(
                 ),
                 modifier = Modifier.fillMaxWidth(),
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
                 TextButton(
                     onClick = { onSaveClientId(selectedId, clientIdText) },
                     enabled = selectedId.isNotBlank(),

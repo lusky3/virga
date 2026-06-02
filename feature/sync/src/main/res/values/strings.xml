@@ -18,6 +18,19 @@
     <string name="sync_summary_recent_runs">Recent runs</string>
     <string name="sync_summary_no_runs">No runs yet.</string>
 
+    <!-- HomeScreen -->
+    <string name="home_title">Home</string>
+    <string name="home_action_backup_now">Back up now</string>
+    <string name="home_action_create_task">Create sync task</string>
+    <plurals name="home_summary_tasks">
+        <item quantity="one">%1$d sync task</item>
+        <item quantity="other">%1$d sync tasks</item>
+    </plurals>
+    <plurals name="home_summary_remotes">
+        <item quantity="one">%1$d cloud account</item>
+        <item quantity="other">%1$d cloud accounts</item>
+    </plurals>
+
     <!-- SyncTasksScreen -->
     <string name="sync_tasks_title">Sync tasks</string>
     <string name="sync_tasks_empty_title">No sync tasks yet</string>
@@ -51,6 +64,8 @@
     <string name="sync_task_menu_history">View history</string>
     <string name="sync_task_menu_delete">Delete</string>
     <string name="sync_task_path_summary">%1$s → %2$s:%3$s</string>
+    <!-- Last-run metrics line shown on task cards (no status word — SyncStatusBadge carries that) -->
+    <string name="sync_task_last_run_line">Last: %1$s · %2$d files</string>
     <string name="sync_task_schedule_summary">%1$s • %2$s</string>
 
     <!-- Search / filter / sort -->
@@ -241,6 +256,11 @@
     <string name="sync_preview_running">Previewing\u2026</string>
     <string name="sync_preview_title">Preview (dry run)</string>
     <string name="sync_preview_body">%1$d file(s) and %2$s would transfer. Nothing has changed yet.</string>
+    <plurals name="sync_preview_deletions">
+        <item quantity="one">%1$d file on the destination would be permanently deleted.</item>
+        <item quantity="other">%1$d files on the destination would be permanently deleted.</item>
+    </plurals>
+    <string name="sync_preview_mirror_warning">This is a Mirror sync: a real run permanently deletes files on the destination that aren\'t on your phone.</string>
     <string name="sync_preview_error">Preview failed: %1$s</string>
     <string name="sync_preview_run_for_real">Run for real</string>
     <string name="sync_preview_close">Close</string>
@@ -269,6 +289,20 @@
     <string name="wizard_destination_placeholder">e.g. Backups/Photos</string>
     <!-- Step 5: Direction and name -->
     <string name="wizard_direction_heading">Direction and name</string>
+
+    <!-- HomeHeader status hero and stat-glance (BRAND §2 voice: calm, reassuring) -->
+    <string name="home_hero_running">Backing up…</string>
+    <string name="home_hero_up_to_date">Everything\'s backed up</string>
+    <string name="home_hero_last_backup">Last backup %1$s</string>
+    <string name="home_hero_idle">Ready to back up</string>
+    <!-- Stat-glance row: %1$s = formatted size, %2$d = run count -->
+    <string name="home_glance_label">%1$s moved · %2$d runs</string>
+    <!-- Accessibility content description for the stat-glance button -->
+    <string name="home_glance_cd">%1$s moved across %2$d runs. Tap to view lifetime statistics.</string>
+    <plurals name="home_hero_needs_attention">
+        <item quantity="one">%1$d task needs attention</item>
+        <item quantity="other">%1$d tasks need attention</item>
+    </plurals>
 
     <!-- Task list snackbar messages -->
     <string name="sync_tasks_msg_sync_started">Sync started</string>

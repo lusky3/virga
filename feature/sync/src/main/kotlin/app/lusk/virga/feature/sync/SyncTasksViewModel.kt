@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.data.ConflictRepository
+import app.lusk.virga.core.data.StatsRepository
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
 import app.lusk.virga.core.common.model.SyncProgress
@@ -25,6 +26,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/**
+ * Overall home status derived from tasks + latest runs (BRAND §10).
+ *
+ * Priority: Running > NeedsAttention > UpToDate/Idle. All variants are pure
+ * data — no Android types — so they are unit-testable without instrumentation.
+ */
 /** Task list filter presets. */
 enum class TaskFilter { ALL, ENABLED, FAILING, SCHEDULED }
 
@@ -49,6 +56,12 @@ data class SyncTasksUiState(
     val unresolvedConflictCount: Int = 0,
     /** True when any task has a RUNNING/QUEUED run (drives sync-all → cancel-all). */
     val anyRunActive: Boolean = false,
+    /** Derived overall status for the home header hero (BRAND §10). */
+    val homeStatus: HomeStatus = HomeStatus.Idle,
+    /** Total bytes transferred across all lifetime runs (from StatsRepository). */
+    val lifetimeBytes: Long = 0L,
+    /** Total run count across all lifetime runs (from StatsRepository). */
+    val lifetimeRuns: Long = 0L,
 )
 
 @HiltViewModel
@@ -57,6 +70,7 @@ class SyncTasksViewModel @Inject constructor(
     private val taskRepository: SyncTaskRepository,
     private val historyRepository: SyncHistoryRepository,
     private val conflictRepository: ConflictRepository,
+    private val statsRepository: StatsRepository,
     private val scheduler: SyncScheduler,
     private val progressMonitor: SyncProgressMonitor,
 ) : ViewModel() {
@@ -76,12 +90,17 @@ class SyncTasksViewModel @Inject constructor(
 
     val uiState: StateFlow<SyncTasksUiState> =
         combine(
-            taskRepository.tasks,
-            historyRepository.recentRuns,
-            conflictRepository.unresolved,
-            _controls,
-            _message,
-        ) { tasks, runs, conflicts, controls, msg ->
+            combine(
+                taskRepository.tasks,
+                historyRepository.recentRuns,
+                conflictRepository.unresolved,
+            ) { tasks, runs, conflicts -> Triple(tasks, runs, conflicts) },
+            combine(
+                _controls,
+                _message,
+                statsRepository.stats,
+            ) { controls, msg, stats -> Triple(controls, msg, stats) },
+        ) { (tasks, runs, conflicts), (controls, msg, stats) ->
             val latestRuns = runs
                 .groupBy { it.taskId }
                 .mapValues { (_, v) -> v.maxBy { it.startedAtEpochMs } }
@@ -106,12 +125,16 @@ class SyncTasksViewModel @Inject constructor(
                 anyRunActive = latestRuns.values.any {
                     it.status == SyncStatus.RUNNING || it.status == SyncStatus.QUEUED
                 },
+                homeStatus = deriveHomeStatus(tasks, latestRuns),
+                lifetimeBytes = stats.totalBytesTransferred,
+                lifetimeRuns = stats.totalRuns,
             )
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = SyncTasksUiState(),
         )
+
 
     private fun matchesFilter(
         task: SyncTask,

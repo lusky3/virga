@@ -8,6 +8,7 @@
     <string name="settings_theme_light">Light</string>
     <string name="settings_theme_dark">Dark</string>
     <string name="settings_toggle_dynamic_color">Match my wallpaper colors</string>
+    <string name="settings_dynamic_color_hint">Tints Virga to match your device wallpaper. Off keeps Virga\'s own blue-and-teal look.</string>
     <string name="settings_section_sync_defaults">Sync defaults</string>
     <string name="settings_toggle_wifi_only">Wi-Fi only by default</string>
     <string name="settings_toggle_require_charging">Require charging by default</string>
@@ -25,11 +26,17 @@
     <string name="settings_btn_dontkillmyapp">dontkillmyapp.com</string>
     <string name="settings_toggle_watchdog">Keep Virga running (watchdog)</string>
     <string name="settings_watchdog_hint">Runs a persistent background service with a quiet ongoing notification so scheduled syncs aren\'t killed on aggressive devices. Uses a little extra battery — leave off unless your syncs keep getting skipped.</string>
+    <string name="settings_item_your_stats">Your stats</string>
     <string name="settings_section_help_about">Help &amp; About</string>
     <string name="settings_item_how_virga_works">How Virga works</string>
+    <string name="settings_item_website">Virga website</string>
     <string name="settings_item_rclone_docs">rclone documentation</string>
     <string name="settings_item_licenses">Open-source licenses</string>
+    <string name="settings_item_source_code">Source code</string>
+    <string name="settings_item_report_bug">Report a bug</string>
+    <string name="settings_item_privacy_policy">Privacy policy</string>
     <string name="settings_item_about">About</string>
+    <string name="settings_opens_externally">Opens in your browser</string>
     <string name="settings_about_version">Version %1$s</string>
     <string name="settings_how_virga_works_title">How Virga works</string>
     <string name="settings_how_virga_works_body">Virga schedules sync tasks that run rclone in the background. Each task has a source and destination remote (a cloud drive, local folder, or SD card). Tasks run automatically when their conditions are met — Wi-Fi, charging state, or on a schedule.\n\nRemotes are configured using rclone\'s standard config. Virga stores the rclone config securely on-device. All sync operations run locally; no data passes through Virga\'s servers.</string>

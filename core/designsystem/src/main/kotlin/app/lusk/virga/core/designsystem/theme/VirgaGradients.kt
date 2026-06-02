@@ -4,6 +4,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 
 /**
  * Hero gradients (BRAND §4.5) — the "atmosphere", used sparingly.
@@ -34,4 +35,17 @@ object VirgaGradients {
     @Composable
     @ReadOnlyComposable
     fun hero(): Brush = if (isSystemInDarkTheme()) heroDark else heroLight
+
+    /**
+     * Scrim laid OVER [hero] (behind hero text) so [onHero] content clears WCAG-AA
+     * everywhere on the gradient — the lighter teal end is only ~2.9:1 against
+     * white without it (BRAND §4.5 + §4.7). Apply as a second background on the
+     * hero surface, then draw text in [onHero].
+     */
+    val heroScrim: Brush = Brush.verticalGradient(
+        listOf(Color.Black.copy(alpha = 0.18f), Color.Black.copy(alpha = 0.55f)),
+    )
+
+    /** The content color for text/icons on a [hero] surface (with [heroScrim]). */
+    val onHero: Color = Color.White
 }
