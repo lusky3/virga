@@ -1,3 +1,33 @@
+// Force-upgrade vulnerable *build-tooling* transitive dependencies that arrive
+// through the Android Gradle Plugin's classpath (Dependabot flags these against
+// settings.gradle.kts). None of them ship in the APK — they run only on the
+// build machine — but pinning patched versions clears the alerts.
+//
+// Caveat: these versions are newer than the set AGP 9.2.1 was tested against.
+// Verified green via `./gradlew assembleFossRelease test connectedCheck`. Revisit
+// this list on every AGP bump — a newer AGP may render entries redundant or, in
+// the worst case, ship an incompatible API that needs the pin relaxed.
+buildscript {
+    configurations.classpath {
+        resolutionStrategy.eachDependency {
+            when (requested.group) {
+                "io.netty" ->
+                    // netty enforces a single aligned version across all its
+                    // modules; pin them together to the latest 4.1.x patch.
+                    useVersion("4.1.133.Final")
+                "org.bouncycastle" -> useVersion("1.84")
+            }
+            when (requested.module.toString()) {
+                "com.squareup.wire:wire-runtime" -> useVersion("6.3.0")
+                "org.bitbucket.b_c:jose4j" -> useVersion("0.9.6")
+                "org.jdom:jdom2" -> useVersion("2.0.6.1")
+                "org.apache.commons:commons-lang3" -> useVersion("3.20.0")
+                "org.apache.httpcomponents:httpclient" -> useVersion("4.5.14")
+            }
+        }
+    }
+}
+
 // Top-level build file. Plugins are declared here (apply false) and applied
 // in each module so the Gradle plugin classpath is resolved once.
 plugins {
