@@ -317,7 +317,11 @@ class SyncTaskEditViewModel @Inject constructor(
                 transfers = form.transfers,
                 checkers = form.checkers,
                 filters = form.filters,
-                deleteExtraneous = form.deleteExtraneous,
+                // Normalize Mirror to match the UI: it's inert (write-back never deletes)
+                // for a DOWNLOAD into a SAF folder, so don't persist a misleading `true`
+                // there. Mirrors the disabled-toggle condition in SyncTaskEditScreen.
+                deleteExtraneous = form.deleteExtraneous &&
+                    !(form.direction == SyncDirection.DOWNLOAD && form.sourcePath.startsWith("content://")),
                 checksum = form.checksum,
                 backupDir = form.backupDir.trim().ifBlank { null },
                 maxDelete = form.maxDelete,

@@ -147,11 +147,10 @@ interface ConflictDao {
     @Query(
         """
         UPDATE conflicts SET
-            taskId = :taskId,
             variant1Path = :v1Path, variant2Path = :v2Path,
             variant1Size = :v1Size, variant2Size = :v2Size,
             detectedAtEpochMs = :detectedAt, resolved = 0
-        WHERE remoteName = :remoteName AND basePath = :basePath
+        WHERE taskId = :taskId AND remoteName = :remoteName AND basePath = :basePath
         """,
     )
     suspend fun updateByNaturalKey(
@@ -166,7 +165,7 @@ interface ConflictDao {
     )
 
     /**
-     * Idempotent on the (remoteName, basePath) natural key. @Upsert updates by
+     * Idempotent on the (taskId, remoteName, basePath) natural key. @Upsert updates by
      * PRIMARY KEY, but a re-detected conflict carries id=0, so @Upsert silently
      * no-ops the UPDATE against the existing row (its real id is non-zero).
      * Insert-or-ignore then update-by-natural-key makes re-detection actually

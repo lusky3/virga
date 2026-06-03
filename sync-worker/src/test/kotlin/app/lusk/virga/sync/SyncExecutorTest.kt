@@ -39,6 +39,7 @@ class SyncExecutorTest {
         override suspend fun acquireDaemon() = error("unused")
         override suspend fun releaseDaemon() = Unit
         override suspend fun stopDaemonIfIdle() = Unit
+        override suspend fun cleanupStaleConfigIfIdle() = Unit
         override suspend fun isDaemonHealthy() = true
         override suspend fun listRemotes(): List<Remote> = emptyList()
         override suspend fun createRemote(name: String, type: String, params: Map<String, String>) = Unit

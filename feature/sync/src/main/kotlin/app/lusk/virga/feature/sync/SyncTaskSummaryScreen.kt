@@ -130,8 +130,9 @@ fun SyncTaskSummaryScreen(
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
                         Text(
-                            stringResource(
-                                R.string.sync_preview_body,
+                            pluralStringResource(
+                                R.plurals.sync_preview_body,
+                                result.filesToTransfer,
                                 result.filesToTransfer,
                                 formatFileSize(result.bytesToTransfer),
                             ),

@@ -8,11 +8,13 @@ import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.rclone.RcloneDaemon
 import dagger.hilt.android.qualifiers.ApplicationContext
 import at.favre.lib.crypto.bcrypt.BCrypt
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
 import java.security.SecureRandom
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -78,7 +80,10 @@ class RcloneDaemonManager @Inject constructor(
         Thread({
             try {
                 stderr.forEachLine { line ->
-                    if (boundPort.get() == null) {
+                    // Only extract the port from the actual serving-banner line, not
+                    // any incidental 127.0.0.1:<n> that rclone might log earlier —
+                    // latching the wrong port would point the RC client at nothing.
+                    if (boundPort.get() == null && line.contains(SERVING_BANNER)) {
                         SERVING_REGEX.find(line)?.groupValues?.get(1)?.toIntOrNull()?.let {
                             boundPort.set(it)
                         }
@@ -97,27 +102,44 @@ class RcloneDaemonManager @Inject constructor(
             start()
         }
 
-        val deadline = System.currentTimeMillis() + STARTUP_TIMEOUT_MS
-        while (boundPort.get() == null && System.currentTimeMillis() < deadline && process.isAlive) {
-            Thread.sleep(50)
-        }
-        val port = boundPort.get()
-        if (port == null) {
+        try {
+            // Cancellable wait via delay() (not Thread.sleep): if the caller's
+            // coroutine is cancelled during a cold start, the wait unwinds promptly
+            // and the catch below tears down the process we already launched, instead
+            // of blocking an IO thread for up to STARTUP_TIMEOUT_MS uninterruptibly.
+            val deadline = System.currentTimeMillis() + STARTUP_TIMEOUT_MS
+            while (boundPort.get() == null && System.currentTimeMillis() < deadline && process.isAlive) {
+                delay(50)
+            }
+            val port = boundPort.get()
+                ?: throw VirgaError.Rclone(
+                    message = "rclone daemon did not start within ${STARTUP_TIMEOUT_MS}ms",
+                )
+            RcloneDaemon(process = process, port = port, user = user, pass = pass, htpasswdFile = htpasswdFile)
+        } catch (t: Throwable) {
+            // Timeout, cancellation, or any other failure after launch: don't leak
+            // the child process or its credential file.
             process.destroyForcibly()
             htpasswdFile.delete()
-            throw VirgaError.Rclone(message = "rclone daemon did not start within ${STARTUP_TIMEOUT_MS}ms")
+            throw t
         }
-        RcloneDaemon(process = process, port = port, user = user, pass = pass, htpasswdFile = htpasswdFile)
     }
 
     suspend fun stop(daemon: RcloneDaemon) = withContext(dispatchers.io) {
         daemon.process.destroy()
-        if (!daemon.process.waitForCompat(GRACEFUL_STOP_MS)) {
+        // waitFor(timeout) blocks until the process has fully exited (and flushed its
+        // file descriptors), unlike a spin on isAlive which returns at process-exit
+        // observability — so a token rclone refreshed during shutdown is durable on
+        // disk before persistAndCleanup re-encrypts the config.
+        if (!daemon.process.waitFor(GRACEFUL_STOP_MS, TimeUnit.MILLISECONDS)) {
             daemon.process.destroyForcibly()
         }
-        // SEC-H1: the htpasswd file lived for the daemon's lifetime; remove it
-        // now that the process is gone so no credential hash lingers on disk.
-        daemon.htpasswdFile?.delete()
+        // SEC-H1: the htpasswd file lived for the daemon's lifetime; remove it now that
+        // the process is gone so no credential hash lingers. A failed delete is purged
+        // by the next daemon start (writeHtpasswdFile), but log it for observability.
+        if (daemon.htpasswdFile?.delete() == false) {
+            Log.w(TAG, "Failed to delete htpasswd file ${daemon.htpasswdFile.name}; next start will purge it")
+        }
         Unit
     }
 
@@ -150,20 +172,13 @@ class RcloneDaemonManager @Inject constructor(
         return bytes.joinToString("") { "%02x".format(it) }
     }
 
-    private fun Process.waitForCompat(timeoutMs: Long): Boolean {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < deadline) {
-            if (!isAlive) return true
-            Thread.sleep(25)
-        }
-        return !isAlive
-    }
-
     private companion object {
         const val STARTUP_TIMEOUT_MS = 15_000L
         const val GRACEFUL_STOP_MS = 3_000L
         const val TAG = "RcloneDaemon"
-        // Matches both plain and json-log forms containing the URL with the port.
+        // rclone logs this banner (plain and json-log forms) when the RC server is
+        // up; the loopback port is extracted only from that line.
+        const val SERVING_BANNER = "Serving remote control on"
         val SERVING_REGEX = Regex("""127\.0\.0\.1:(\d+)""")
     }
 }

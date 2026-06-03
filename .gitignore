@@ -38,3 +38,6 @@ google-services-*.json
 ruvector.db
 proxmox-jobs.sqlite3*
 agentdb.rvf*
+
+# Play Store listing assets (screenshots/graphics) — kept out of the public repo
+docs/play-store/

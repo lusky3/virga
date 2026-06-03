@@ -26,6 +26,7 @@ class SettingsViewModel @Inject constructor(
     fun setRequireCharging(enabled: Boolean) = viewModelScope.launch { preferences.setRequireChargingByDefault(enabled) }
     fun setShowAdvancedOptions(enabled: Boolean) = viewModelScope.launch { preferences.setShowAdvancedOptions(enabled) }
     fun setWatchdog(enabled: Boolean) = viewModelScope.launch { preferences.setWatchdogEnabled(enabled) }
+    fun setCrashReporting(enabled: Boolean) = viewModelScope.launch { preferences.setCrashReportingEnabled(enabled) }
     fun setDefaultBwLimits(wifi: String?, metered: String?) =
         viewModelScope.launch { preferences.setDefaultBwLimits(wifi, metered) }
 }

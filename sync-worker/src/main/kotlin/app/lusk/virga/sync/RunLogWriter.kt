@@ -1,5 +1,6 @@
 package app.lusk.virga.sync
 
+import app.lusk.virga.core.common.util.Redaction
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -27,24 +28,18 @@ internal class RunLogWriter(filesDir: File, runId: Long) {
         sb.append(clock.format(Date())).append("  ").append(message).append('\n')
     }
 
-    /** Writes the accumulated log to disk, redacting token-like substrings. */
-    fun flush() {
-        runCatching {
-            dir.mkdirs()
-            file.writeText(redact(sb.toString()))
-        }
-    }
+    /**
+     * Writes the accumulated log to disk, redacting token-like substrings.
+     * Returns true on success so the caller only records [path] on the run when a
+     * file actually exists — otherwise the log viewer would point at a missing file.
+     */
+    fun flush(): Boolean = runCatching {
+        dir.mkdirs()
+        // Defensive secret redaction (shared with the crash reporter via Redaction).
+        file.writeText(Redaction.secrets(sb.toString()))
+    }.isSuccess
 
     private companion object {
         const val LOG_DIR = "run_logs"
-
-        // Defensive: collapse anything resembling a token/secret value to a marker.
-        private val SECRET_REGEX = Regex(
-            "(?i)(token|access_token|refresh_token|client_secret|password)\\s*[=:]\\s*\\S+",
-        )
-
-        fun redact(text: String): String = SECRET_REGEX.replace(text) { m ->
-            "${m.groupValues[1]}=<redacted>"
-        }
     }
 }

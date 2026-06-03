@@ -42,6 +42,28 @@ class AppStatsDaoTest {
             nowEpochMs = day * 86_400_000L, syncDayEpochDay = day, isSuccess = true,
         )
 
+    /** Records a failed run on [day]. */
+    private suspend fun failure(day: Long) =
+        dao.record(
+            successDelta = 0, failDelta = 1, files = 0, bytes = 0,
+            up = 0, down = 0, twoWay = 0, durationMs = 500,
+            nowEpochMs = day * 86_400_000L, syncDayEpochDay = day, isSuccess = false,
+        )
+
+    @Test
+    fun firstSync_anchors_to_first_successful_run_not_a_failed_one() = runTest {
+        failure(day = 100)
+        // A failed first attempt must NOT set the "Syncing since" anchor…
+        assertThat(dao.getOnce()!!.firstSyncEpochMs).isNull()
+        assertThat(dao.getOnce()!!.failedRuns).isEqualTo(1)
+
+        success(day = 101)
+        // …the first SUCCESSFUL run does, and a later failure can't overwrite it.
+        assertThat(dao.getOnce()!!.firstSyncEpochMs).isEqualTo(101 * 86_400_000L)
+        failure(day = 102)
+        assertThat(dao.getOnce()!!.firstSyncEpochMs).isEqualTo(101 * 86_400_000L)
+    }
+
     @Test
     fun additive_counters_accumulate_and_records_take_max() = runTest {
         success(day = 100, bytes = 500, durationMs = 2_000, up = 500)

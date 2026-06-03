@@ -31,12 +31,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -294,8 +291,15 @@ fun SyncTaskEditScreen(
             PerformancePresetRow(form = form, viewModel = viewModel)
 
             // Mirror (Tier 1, destructive) — delete-extraneous, safety-railed.
+            // Inert for a DOWNLOAD into a SAF (content://) folder: the write-back
+            // into the picked tree is create/overwrite-only and never deletes local
+            // entries, so Mirror can't be honored there. Disable it (and force it off)
+            // rather than letting the user enable a toggle that silently does nothing.
+            val mirrorInert = form.direction == SyncDirection.DOWNLOAD &&
+                form.sourcePath.startsWith("content://")
             MirrorToggleRow(
-                enabled = form.deleteExtraneous,
+                enabled = form.deleteExtraneous && !mirrorInert,
+                inert = mirrorInert,
                 onChange = { v -> viewModel.update { f -> f.copy(deleteExtraneous = v) } },
             )
 
@@ -391,57 +395,7 @@ private fun RemoteDropdown(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-/**
- * Tier-1 Mirror toggle (WS2.2, BRAND §13). Off by default. Turning it ON is
- * destructive (delete-extraneous), so it routes through an error-tinted
- * acknowledgement that names the consequence before the flag is set; turning it
- * OFF is immediate.
- */
-@Composable
-private fun MirrorToggleRow(enabled: Boolean, onChange: (Boolean) -> Unit) {
-    var showConfirm by remember { mutableStateOf(false) }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .toggleable(
-                value = enabled,
-                role = Role.Switch,
-                onValueChange = { v -> if (v) showConfirm = true else onChange(false) },
-            )
-            .padding(vertical = VirgaSpacing.xs),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(stringResource(R.string.sync_edit_mirror_label), style = MaterialTheme.typography.bodyLarge)
-            Text(
-                stringResource(R.string.sync_edit_mirror_sub),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Switch(checked = enabled, onCheckedChange = null)
-    }
-    if (showConfirm) {
-        AlertDialog(
-            onDismissRequest = { showConfirm = false },
-            icon = { Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text(stringResource(R.string.sync_edit_mirror_confirm_title)) },
-            text = { Text(stringResource(R.string.sync_edit_mirror_confirm_body)) },
-            confirmButton = {
-                TextButton(
-                    onClick = { showConfirm = false; onChange(true) },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                ) { Text(stringResource(R.string.sync_edit_mirror_confirm_enable)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showConfirm = false }) {
-                    Text(stringResource(R.string.sync_edit_mirror_confirm_cancel))
-                }
-            },
-        )
-    }
-}
+// MirrorToggleRow lives in SyncTaskEditMirror.kt (extracted to keep this file < 500 lines).
 
 @Composable
 private fun DirectionSegmentedRow(

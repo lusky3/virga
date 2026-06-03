@@ -389,6 +389,19 @@ class RemotesViewModel @Inject constructor(
         _launchUrl.value = null
     }
 
+    /**
+     * Maps a provider-supplied OAuth2 `error` code (RFC 6749 §4.1.2.1) to a friendly,
+     * localized message. Unknown values are surfaced whitespace-collapsed and length-
+     * capped rather than echoing arbitrary provider text verbatim into the UI.
+     */
+    private fun friendlyOAuthError(raw: String): String = when (raw.trim().lowercase()) {
+        "access_denied" -> context.getString(R.string.remotes_oauth_err_access_denied)
+        "invalid_scope" -> context.getString(R.string.remotes_oauth_err_invalid_scope)
+        "server_error" -> context.getString(R.string.remotes_oauth_err_server_error)
+        "temporarily_unavailable" -> context.getString(R.string.remotes_oauth_err_temporarily_unavailable)
+        else -> raw.replace(Regex("\\s+"), " ").trim().take(120)
+    }
+
     private suspend fun onOAuthResult(result: OAuthResult) {
         when (result) {
             is OAuthResult.Error -> {
@@ -401,7 +414,10 @@ class RemotesViewModel @Inject constructor(
                     transient.update {
                         it.copy(
                             oauthInProgress = false,
-                            message = context.getString(R.string.remotes_msg_sign_in_failed, result.message),
+                            message = context.getString(
+                                R.string.remotes_msg_sign_in_failed,
+                                friendlyOAuthError(result.message),
+                            ),
                         )
                     }
                 } else {

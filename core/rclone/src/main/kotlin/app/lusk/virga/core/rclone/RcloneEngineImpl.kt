@@ -1,10 +1,10 @@
 package app.lusk.virga.core.rclone
 
+import android.util.Log
 import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.common.model.Remote
-import app.lusk.virga.core.common.model.RemoteOption
 import app.lusk.virga.core.common.model.RemoteProvider
 import app.lusk.virga.core.common.model.RemoteQuota
 import app.lusk.virga.core.common.model.SyncDirection
@@ -12,27 +12,25 @@ import app.lusk.virga.core.common.model.SyncProgress
 import app.lusk.virga.core.rclone.api.RcApiClient
 import app.lusk.virga.core.rclone.config.RcloneConfigManager
 import app.lusk.virga.core.rclone.daemon.RcloneDaemonManager
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.add
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -84,6 +82,12 @@ class RcloneEngineImpl @Inject constructor(
         }
     }
 
+    override suspend fun cleanupStaleConfigIfIdle() = lock.withLock {
+        // Purge plaintext orphaned by a killed worker. Lease-aware: only when idle, so
+        // a concurrently-launched worker's in-use config is never deleted.
+        if (leases == 0 && daemon == null) configManager.cleanup()
+    }
+
     /**
      * Start-or-reuse the daemon. MUST be called while holding [lock]: the
      * check-then-act on [daemon] (read health, decrypt config, start, assign)
@@ -115,43 +119,16 @@ class RcloneEngineImpl @Inject constructor(
     }
 
     /**
-     * Calls `config/providers` and maps the JSON into [RemoteProvider] / [RemoteOption]
-     * domain models. Every field is parsed defensively; missing keys use safe defaults
-     * so a future rclone schema change does not break the UI, it just shows less info.
-     *
-     * Returns an empty list on any failure — the UI falls back to the freeform textarea.
+     * Calls `config/providers` and maps it via [parseProviders]. Returns an empty
+     * list on any failure — the UI falls back to the freeform textarea.
      */
     override suspend fun providers(): List<RemoteProvider> = runCatching {
-        val d = ensureDaemon()
-        val root = rc(d, "config/providers")
-        val providerArray = root["providers"]?.jsonArray ?: return@runCatching emptyList()
-        providerArray.map { elem ->
-            val obj = elem.jsonObject
-            val name = obj["Name"]?.jsonPrimitive?.contentOrNull.orEmpty()
-            val desc = obj["Description"]?.jsonPrimitive?.contentOrNull.orEmpty()
-            val opts = obj["Options"]?.jsonArray?.map { optElem ->
-                val o = optElem.jsonObject
-                val examples = o["Examples"]?.jsonArray?.mapNotNull { ex ->
-                    val exObj = ex.jsonObject
-                    val v = exObj["Value"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-                    val h = exObj["Help"]?.jsonPrimitive?.contentOrNull.orEmpty()
-                    v to h
-                } ?: emptyList()
-                RemoteOption(
-                    name = o["Name"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                    help = o["Help"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                    type = o["Type"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                    required = o["Required"]?.jsonPrimitive?.booleanOrNull ?: false,
-                    isPassword = o["IsPassword"]?.jsonPrimitive?.booleanOrNull ?: false,
-                    default = o["DefaultStr"]?.jsonPrimitive?.contentOrNull
-                        ?: o["Default"]?.jsonPrimitive?.contentOrNull,
-                    examples = examples,
-                    advanced = o["Advanced"]?.jsonPrimitive?.booleanOrNull ?: false,
-                )
-            } ?: emptyList()
-            RemoteProvider(name = name, description = desc, options = opts)
-        }
-    }.getOrElse { emptyList() }
+        parseProviders(rc(ensureDaemon(), "config/providers"))
+    }.getOrElse {
+        // Degrade to the freeform textarea (documented UX); log so a persistently failing daemon isn't invisible.
+        Log.w(TAG, "config/providers failed; falling back to freeform remote entry", it)
+        emptyList()
+    }
 
     override suspend fun listRemotes(): List<Remote> {
         val config = getConfig()
@@ -238,12 +215,44 @@ class RcloneEngineImpl @Inject constructor(
     override suspend fun importConfig(confContent: String) = lock.withLock {
         // Atomic under [lock]: stop the daemon and replace the config without a gap
         // where a concurrent ensureDaemon could start with the OLD config and then
-        // clobber the import on its next persist. Discard (not persist) the old
-        // plaintext — we're overwriting it with the imported config.
+        // clobber the import on its next persist.
+        //
+        // Refuse to mutate while a sync holds a lease — stopping the daemon here would
+        // kill the in-flight transfer. The UI surfaces this message.
+        if (leases > 0) {
+            throw VirgaError.Rclone(message = "Stop running syncs before importing a config.")
+        }
+        // Validate-then-commit: user-supplied bytes (storage-picker file = trust
+        // boundary). Snapshot current config as raw CIPHERTEXT (no plaintext in memory)
+        // for rollback, then write the import and start the daemon to validate.
+        val snapshot = configManager.snapshotCiphertext()
         daemon?.let { daemonManager.stop(it) }
         daemon = null
         configManager.cleanup()
         configManager.import(confContent)
+
+        // Dump to validate. CRUCIAL: distinguish "parsed zero remotes" (bad file) from a
+        // transient daemon/RC failure — collapsing both to "invalid" would roll back a
+        // perfectly good import. Tear the validation daemon down + discard plaintext after.
+        val dump = runCatching { rc(ensureDaemonLocked(), "config/dump") }
+        daemon?.let { daemonManager.stop(it) }
+        daemon = null
+        configManager.cleanup()
+
+        val remotes = dump.getOrElse { e ->
+            Log.w(TAG, "Import validation could not start the daemon / dump config", e)
+            configManager.restoreCiphertext(snapshot)
+            throw VirgaError.Rclone(
+                message = "Couldn't validate the imported config — the sync engine failed to start. " +
+                    "Your previous config was kept. Try again.",
+            )
+        }
+        if (remotes.isEmpty()) {
+            configManager.restoreCiphertext(snapshot)
+            throw VirgaError.Rclone(
+                message = "Imported file is not a valid rclone config (no remotes found).",
+            )
+        }
     }
 
     override suspend fun listDir(
@@ -380,95 +389,90 @@ class RcloneEngineImpl @Inject constructor(
             ?: throw VirgaError.Rclone(message = "rclone did not return a job id")
         val group = "job/$jobId"
 
-        // Stall guard: if the async job never reports finished AND makes no
-        // progress (bytes + transferred files unchanged) for STALL_TIMEOUT_MS,
-        // abort instead of polling forever — otherwise a wedged job would leave
-        // the worker (and its sync_run row) stuck RUNNING indefinitely.
+        // Stall guard: abort if the job never finishes AND none of bytes / transferred
+        // files / deletes / checks advance for STALL_TIMEOUT_MS — otherwise a wedged job
+        // would leave the worker (and its sync_run row) stuck RUNNING indefinitely.
+        // Tracking `checks` (not just transferred bytes) is what keeps rclone's long
+        // listing/compare/deletion phases — which move no bytes — from being mistaken
+        // for a stall. A truly hung (unresponsive) daemon is also caught by the RC
+        // call's readTimeout. MAX_VALUE means "clock not yet armed"; the -1 sentinels
+        // differ from rclone's zeroed first stats, so the clock arms on the first poll.
         var lastBytes = -1L
         var lastTransfers = -1
-        var lastProgressAtMs = System.currentTimeMillis()
+        var lastDeletes = -1
+        var lastChecks = -1
+        var lastProgressAtMs = Long.MAX_VALUE
 
-        while (true) {
-            val status = rc(d, "job/status", buildJsonObject { put("jobid", jobId) })
-            val finished = status["finished"]?.jsonPrimitive?.booleanOrNull ?: false
-            if (finished) {
-                val success = status["success"]?.jsonPrimitive?.booleanOrNull ?: false
-                if (!success) {
-                    val err = status["error"]?.jsonPrimitive?.contentOrNull ?: "sync failed"
-                    throw classifyJobError(err)
+        // Track whether the rclone job reached a terminal state. If we exit the
+        // loop for any other reason (collector cancellation, stall-guard abort,
+        // an exception), the async job is still running on the shared daemon, so
+        // we must explicitly stop it — daemon teardown only happens when the LAST
+        // lease is released, which doesn't occur under concurrent "sync all".
+        var jobFinished = false
+        try {
+            while (true) {
+                val status = rc(d, "job/status", buildJsonObject { put("jobid", jobId) })
+                val finished = status["finished"]?.jsonPrimitive?.booleanOrNull ?: false
+                if (finished) {
+                    jobFinished = true
+                    val success = status["success"]?.jsonPrimitive?.booleanOrNull ?: false
+                    if (!success) {
+                        val err = status["error"]?.jsonPrimitive?.contentOrNull ?: "sync failed"
+                        throw classifyJobError(err)
+                    }
+                    // Fetch final stats once on completion for accurate counters.
+                    emit(rc(d, "core/stats", buildJsonObject { put("group", group) }).toSyncProgress())
+                    break
                 }
-                // Fetch final stats once on completion for accurate counters.
-                emit(rc(d, "core/stats", buildJsonObject { put("group", group) }).toSyncProgress())
-                break
+                // Fetch stats only while running (drives the throttled UI update).
+                val stats = rc(d, "core/stats", buildJsonObject { put("group", group) })
+                val progress = stats.toSyncProgress()
+                val checks = stats["checks"]?.jsonPrimitive?.intOrNull ?: 0
+                if (progress.bytesTransferred != lastBytes ||
+                    progress.transferredFiles != lastTransfers ||
+                    progress.deletes != lastDeletes ||
+                    checks != lastChecks
+                ) {
+                    lastBytes = progress.bytesTransferred
+                    lastTransfers = progress.transferredFiles
+                    lastDeletes = progress.deletes
+                    lastChecks = checks
+                    lastProgressAtMs = System.currentTimeMillis()
+                } else if (System.currentTimeMillis() - lastProgressAtMs > STALL_TIMEOUT_MS) {
+                    throw VirgaError.Rclone(
+                        message = "Sync stalled — no progress for ${STALL_TIMEOUT_MS / 1000}s.",
+                    )
+                }
+                emit(progress)
+                delay(POLL_INTERVAL_MS)
             }
-            // Fetch stats only while running (drives the throttled UI update).
-            val stats = rc(d, "core/stats", buildJsonObject { put("group", group) })
-            val progress = stats.toSyncProgress()
-            if (progress.bytesTransferred != lastBytes || progress.transferredFiles != lastTransfers) {
-                lastBytes = progress.bytesTransferred
-                lastTransfers = progress.transferredFiles
-                lastProgressAtMs = System.currentTimeMillis()
-            } else if (System.currentTimeMillis() - lastProgressAtMs > STALL_TIMEOUT_MS) {
-                throw VirgaError.Rclone(
-                    message = "Sync stalled — no progress for ${STALL_TIMEOUT_MS / 1000}s.",
-                )
+        } finally {
+            // Abort the rclone job if it didn't finish on its own. NonCancellable so
+            // the stop survives the very cancellation that triggered this finally.
+            if (!jobFinished) {
+                withContext(NonCancellable) {
+                    runCatching { rc(d, "job/stop", buildJsonObject { put("jobid", jobId) }) }
+                }
             }
-            emit(progress)
-            delay(POLL_INTERVAL_MS)
         }
     }.flowOn(dispatchers.io)
-
-    /**
-     * Classifies a finished-job error string. Transient transport failures become
-     * [VirgaError.Network] so the worker retries (the previous blanket
-     * [VirgaError.Rclone] never retried). Everything else stays [VirgaError.Rclone]
-     * carrying the original rclone text, which [toUserMessage] now surfaces verbatim
-     * (e.g. "directory not found", quota, or token errors) instead of a generic line.
-     * Only textual markers are matched — bare HTTP-code substrings would false-match
-     * byte counts.
-     */
-    private fun classifyJobError(err: String): VirgaError {
-        val lower = err.lowercase()
-        val transient = listOf(
-            "timeout", "timed out", "deadline exceeded", "connection reset",
-            "connection refused", "no such host", "temporarily", "try again",
-            "too many requests", "i/o timeout", "broken pipe",
-        )
-        return if (transient.any { it in lower }) VirgaError.Network(err) else VirgaError.Rclone(message = err)
-    }
-
-    private fun JsonObject.toSyncProgress(): SyncProgress = SyncProgress(
-        bytesTransferred = this["bytes"]?.jsonPrimitive?.longOrNull ?: 0L,
-        totalBytes = this["totalBytes"]?.jsonPrimitive?.longOrNull ?: 0L,
-        speedBytesPerSec = this["speed"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
-        transferredFiles = this["transfers"]?.jsonPrimitive?.intOrNull ?: 0,
-        totalFiles = this["totalTransfers"]?.jsonPrimitive?.intOrNull ?: 0,
-        etaSeconds = this["eta"]?.jsonPrimitive?.longOrNull,
-        errors = this["errors"]?.jsonPrimitive?.intOrNull ?: 0,
-        deletes = this["deletes"]?.jsonPrimitive?.intOrNull ?: 0,
-    )
 
     private suspend fun ensureDaemon(): RcloneDaemon = lock.withLock { ensureDaemonLocked() }
 
     /**
-     * Run a config-mutating block, then atomically tear down the daemon (so it
-     * releases the stale plaintext config it has open) and either re-encrypt the
-     * new config on success or discard the decrypted plaintext on failure. The
-     * teardown + persist/cleanup run in a finally so a failed config/create can
-     * never leave decrypted OAuth tokens on disk, and the daemon never keeps
-     * serving a config that no longer exists.
-     */
-    /**
-     * Runs a config-mutating RC call ([block]) and then re-persists + reloads the
-     * config (stop daemon → encrypt the daemon-written plaintext). The whole thing
-     * holds [lock] so no concurrent [ensureDaemon] can interleave during the mutation
-     * (which previously left a window where a reader got a daemon being torn down).
-     * [block] receives the daemon directly — it must NOT re-acquire [lock] (the Mutex
-     * is non-reentrant), which is why callers use the passed `d` rather than
-     * [ensureDaemon].
+     * Runs a config-mutating RC call ([block]) then atomically tears down the daemon
+     * and either re-encrypts the daemon-written plaintext on success or discards it
+     * on failure (finally), so a failed config/create can never leave decrypted OAuth
+     * tokens on disk. Holds [lock] for the whole mutation so no concurrent
+     * [ensureDaemon] interleaves; [block] receives the daemon directly and must NOT
+     * re-acquire [lock] (the Mutex is non-reentrant).
      */
     private suspend fun mutatingConfig(block: suspend (RcloneDaemon) -> Unit) {
         lock.withLock {
+            // Refuse while a sync holds a lease — the end-of-mutation teardown would kill it.
+            if (leases > 0) {
+                throw VirgaError.Rclone(message = "Stop running syncs before modifying remotes.")
+            }
             val d = ensureDaemonLocked()
             var ok = false
             try {
@@ -485,63 +489,10 @@ class RcloneEngineImpl @Inject constructor(
     private suspend fun rc(d: RcloneDaemon, command: String, params: JsonObject = JsonObject(emptyMap())): JsonObject =
         apiClient.call(d.baseUrl, d.user, d.pass, command, params)
 
-    /** Splits "remote:path/to/file" into ("remote:", "path/to/file"). */
-    private fun splitFs(spec: String): Pair<String, String> {
-        val idx = spec.indexOf(':')
-        if (idx < 0) return spec to ""
-        val fs = spec.substring(0, idx + 1)
-        val remote = spec.substring(idx + 1)
-        return fs to remote
-    }
-
     private companion object {
+        const val TAG = "RcloneEngine"
         const val POLL_INTERVAL_MS = 750L
         // Max time an in-flight job may make zero progress before we abort it.
         const val STALL_TIMEOUT_MS = 120_000L
-    }
-}
-
-private fun kotlinx.serialization.json.JsonObjectBuilder.putConfig(
-    bwLimit: String?,
-    transfers: Int,
-    checkers: Int,
-    bufferSize: String,
-    dryRun: Boolean,
-    checksum: Boolean = false,
-    backupDir: String? = null,
-    maxDelete: Int? = null,
-    extraConfig: Map<String, Any> = emptyMap(),
-) {
-    putJsonObject("_config") {
-        put("Transfers", transfers)
-        put("Checkers", checkers)
-        put("BufferSize", bufferSize)
-        if (dryRun) put("DryRun", true)
-        if (!bwLimit.isNullOrBlank()) put("BwLimit", bwLimit)
-        // WS3.1 Tier-2 options
-        if (checksum) put("CheckSum", true)
-        if (!backupDir.isNullOrBlank()) put("BackupDir", backupDir)
-        if (maxDelete != null) put("MaxDelete", maxDelete)
-        // Merge power-user extra config entries. The Map<String, Any> contract
-        // guarantees values are Boolean, Number, or String (enforced by
-        // ExtraConfigParser before this point). Applied LAST, so an explicit
-        // extraConfig entry (e.g. "CheckSum=false") intentionally overrides the
-        // matching typed toggle above — the raw box is the power-user escape hatch.
-        extraConfig.forEach { (key, value) ->
-            when (value) {
-                is Boolean -> put(key, JsonPrimitive(value))
-                is Number -> put(key, JsonPrimitive(value))
-                else -> put(key, JsonPrimitive(value.toString()))
-            }
-        }
-    }
-}
-
-private fun kotlinx.serialization.json.JsonObjectBuilder.putFilters(filters: List<String>) {
-    if (filters.isEmpty()) return
-    putJsonObject("_filter") {
-        putJsonArray("FilterRule") {
-            filters.forEach { add(it) }
-        }
     }
 }

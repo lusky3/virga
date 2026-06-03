@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -34,6 +35,8 @@ class PreferencesRepository @Inject constructor(
     suspend fun setOnboardingComplete(complete: Boolean) = edit { it[Keys.ONBOARDING] = complete }
     suspend fun setShowAdvancedOptions(enabled: Boolean) = edit { it[Keys.SHOW_ADVANCED] = enabled }
     suspend fun setWatchdogEnabled(enabled: Boolean) = edit { it[Keys.WATCHDOG] = enabled }
+    suspend fun setLastSeenChangelogVersionCode(code: Int) = edit { it[Keys.LAST_SEEN_CHANGELOG] = code }
+    suspend fun setCrashReportingEnabled(enabled: Boolean) = edit { it[Keys.CRASH_REPORTING] = enabled }
 
     suspend fun setDefaultBwLimits(wifi: String?, metered: String?) = edit { prefs ->
         if (wifi.isNullOrBlank()) prefs.remove(Keys.BW_WIFI) else prefs[Keys.BW_WIFI] = wifi
@@ -55,6 +58,8 @@ class PreferencesRepository @Inject constructor(
         onboardingComplete = this[Keys.ONBOARDING] ?: false,
         showAdvancedOptions = this[Keys.SHOW_ADVANCED] ?: false,
         watchdogEnabled = this[Keys.WATCHDOG] ?: false,
+        lastSeenChangelogVersionCode = this[Keys.LAST_SEEN_CHANGELOG] ?: 0,
+        crashReportingEnabled = this[Keys.CRASH_REPORTING] ?: false,
     )
 
     private object Keys {
@@ -67,5 +72,7 @@ class PreferencesRepository @Inject constructor(
         val ONBOARDING = booleanPreferencesKey("onboarding_complete")
         val SHOW_ADVANCED = booleanPreferencesKey("show_advanced_options")
         val WATCHDOG = booleanPreferencesKey("watchdog_enabled")
+        val LAST_SEEN_CHANGELOG = intPreferencesKey("last_seen_changelog_version_code")
+        val CRASH_REPORTING = booleanPreferencesKey("crash_reporting_enabled")
     }
 }

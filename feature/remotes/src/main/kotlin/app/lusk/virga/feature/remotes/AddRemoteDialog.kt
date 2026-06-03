@@ -83,6 +83,13 @@ internal fun AddRemoteDialog(
     LaunchedEffect(Unit) { onEnsureProviders() }
 
     var name by remember { mutableStateOf("") }
+    // rclone permits a broad set of remote-name characters (letters, digits, spaces,
+    // _ . - +, …) — only ':' and '/' are genuinely dangerous, as they corrupt the
+    // "remote:path" spec downstream. Validate by EXCLUDING just those two rather than
+    // an allow-list, so legitimate names like "My Drive" aren't rejected. Blank is
+    // "not yet invalid" (no error until typed).
+    val nameValid = name.isBlank() || name.trim().none { it == ':' || it == '/' }
+    val nameUsable = name.isNotBlank() && nameValid
     var type by remember { mutableStateOf("") }
     var params by remember { mutableStateOf("") }
     var typeMenuExpanded by remember { mutableStateOf(false) }
@@ -150,6 +157,12 @@ internal fun AddRemoteDialog(
                 value = name,
                 onValueChange = { name = it },
                 label = { Text(stringResource(R.string.remotes_add_field_name)) },
+                isError = !nameValid,
+                supportingText = if (!nameValid) {
+                    { Text(stringResource(R.string.remotes_add_name_invalid)) }
+                } else {
+                    null
+                },
                 keyboardOptions = KeyboardOptions(
                     capitalization = KeyboardCapitalization.None,
                     autoCorrectEnabled = false,
@@ -304,9 +317,9 @@ internal fun AddRemoteDialog(
                         }
                     },
                     enabled = if (isCrypt) {
-                        name.isNotBlank() && cryptBaseRemote.isNotBlank() && cryptPassword.isNotBlank()
+                        nameUsable && cryptBaseRemote.isNotBlank() && cryptPassword.isNotBlank()
                     } else {
-                        name.isNotBlank() && type.isNotBlank()
+                        nameUsable && type.isNotBlank()
                     },
                 ) { Text(stringResource(R.string.remotes_add_create)) }
             }

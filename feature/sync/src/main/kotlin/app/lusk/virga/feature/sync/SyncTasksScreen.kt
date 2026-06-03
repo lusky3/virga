@@ -32,6 +32,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -247,8 +248,8 @@ fun SyncTasksScreen(
         val count = state.selectedIds.size
         AlertDialog(
             onDismissRequest = { showBulkDeleteDialog = false },
-            title = { Text(stringResource(R.string.sync_task_bulk_delete_title, count)) },
-            text = { Text(stringResource(R.string.sync_task_bulk_delete_body)) },
+            title = { Text(stringResource(R.string.sync_task_bulk_delete_title)) },
+            text = { Text(pluralStringResource(R.plurals.sync_task_bulk_delete_body, count, count)) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.confirmBulkDelete()

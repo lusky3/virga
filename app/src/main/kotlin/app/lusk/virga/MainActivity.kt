@@ -13,6 +13,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -45,7 +46,7 @@ class MainActivity : ComponentActivity() {
     private var pendingRoute by mutableStateOf<String?>(null)
 
     /** Task id for a [NotificationDeepLinks.ROUTE_TASK] deep link (e.g. a sync notification). */
-    private var pendingTaskId by mutableStateOf(-1L)
+    private var pendingTaskId by mutableLongStateOf(-1L)
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)

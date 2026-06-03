@@ -265,16 +265,27 @@ private fun requestStorageAccess(
  * Opens battery optimization settings.
  * Returns true if the intent was dispatched successfully.
  */
+// BatteryLife: the direct ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS is gated to the
+// FOSS/sideload flavor (allowed there); the Play flavor strips the permission
+// (play/AndroidManifest.xml) and only opens the general settings list, so the Play APK
+// is policy-compliant. Lint can't model the runtime flavor branch, hence the suppression.
+@Suppress("BatteryLife")
 private fun openBatterySettings(context: Context): Boolean =
     runCatching {
-        // Targeted "Allow <app> to ignore battery optimizations?" dialog rather
-        // than the full per-app optimization list. Requires the
-        // REQUEST_IGNORE_BATTERY_OPTIMIZATIONS permission (declared in the manifest).
-        context.startActivity(
-            Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                data = "package:${context.packageName}".toUri()
-            },
-        )
+        // The targeted "Allow <app> to ignore battery optimizations?" dialog
+        // (ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS + its permission) is restricted
+        // by Play policy to app categories a general sync app doesn't qualify for, so
+        // only the FOSS/sideload build uses it. The Play build (and the fallback for
+        // both) opens the general optimization-settings list, which is always allowed.
+        if (app.lusk.virga.BuildConfig.DISTRIBUTION == "foss") {
+            context.startActivity(
+                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = "package:${context.packageName}".toUri()
+                },
+            )
+        } else {
+            context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+        }
     }.recoverCatching {
         // Fall back to the optimization list if the targeted dialog is unavailable.
         context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))

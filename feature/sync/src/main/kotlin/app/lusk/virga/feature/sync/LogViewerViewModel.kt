@@ -19,6 +19,10 @@ data class LogViewerUiState(
     val visibleLines: List<String> = emptyList(),
     val totalLines: Int = 0,
     val loading: Boolean = true,
+    // True when the log file couldn't be read (missing/pruned/permission) — distinct
+    // from a successfully-read but empty log, so the UI can say so instead of showing
+    // a blank "no output" that reads as "the sync produced nothing".
+    val readFailed: Boolean = false,
 )
 
 /**
@@ -31,6 +35,7 @@ class LogViewerViewModel @Inject constructor() : ViewModel() {
     private val allLines = MutableStateFlow<List<String>>(emptyList())
     private val query = MutableStateFlow("")
     private val loaded = MutableStateFlow(false)
+    private val readFailed = MutableStateFlow(false)
     private var initialized = false
 
     /** Idempotent: reads the log file once. Safe from a `LaunchedEffect`. */
@@ -38,10 +43,15 @@ class LogViewerViewModel @Inject constructor() : ViewModel() {
         if (initialized) return
         initialized = true
         viewModelScope.launch {
-            val text = withContext(Dispatchers.IO) {
-                runCatching { File(path).readText() }.getOrDefault("")
+            val result = withContext(Dispatchers.IO) {
+                runCatching { File(path).readText() }
             }
-            allLines.value = if (text.isEmpty()) emptyList() else text.trimEnd('\n').lines()
+            result.onSuccess { text ->
+                allLines.value = if (text.isEmpty()) emptyList() else text.trimEnd('\n').lines()
+            }.onFailure {
+                allLines.value = emptyList()
+                readFailed.value = true
+            }
             loaded.value = true
         }
     }
@@ -51,12 +61,13 @@ class LogViewerViewModel @Inject constructor() : ViewModel() {
     fun rawText(): String = allLines.value.joinToString("\n")
 
     val uiState: StateFlow<LogViewerUiState> =
-        combine(allLines, query, loaded) { lines, q, isLoaded ->
+        combine(allLines, query, loaded, readFailed) { lines, q, isLoaded, failed ->
             LogViewerUiState(
                 query = q,
                 visibleLines = if (q.isBlank()) lines else lines.filter { it.contains(q, ignoreCase = true) },
                 totalLines = lines.size,
                 loading = !isLoaded,
+                readFailed = failed,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LogViewerUiState())
 }

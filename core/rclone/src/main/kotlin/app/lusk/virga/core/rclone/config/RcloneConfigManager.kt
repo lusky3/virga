@@ -142,6 +142,35 @@ class RcloneConfigManager @Inject constructor(
         }
     }
 
+    /**
+     * Snapshots the raw *ciphertext* of the stored config for rollback, or null if no
+     * config exists yet. Reads the encrypted bytes directly — it does NOT decrypt — so
+     * no plaintext credentials ever enter memory (unlike [exportPlaintext]). Restore
+     * with [restoreCiphertext]; since the file name is unchanged, the AEAD associated
+     * data still matches and the restored bytes remain decryptable.
+     */
+    suspend fun snapshotCiphertext(): ByteArray? = withContext(dispatchers.io) {
+        ioLock.withLock { if (encryptedConf.exists()) encryptedConf.readBytes() else null }
+    }
+
+    /** Restores a [snapshotCiphertext] snapshot. A null snapshot clears the config. */
+    suspend fun restoreCiphertext(snapshot: ByteArray?) = withContext(dispatchers.io) {
+        ioLock.withLock {
+            if (snapshot == null) {
+                if (encryptedConf.exists()) encryptedConf.delete()
+            } else {
+                // Crash-safe: stage the raw ciphertext in a same-name temp then atomically
+                // move it over, so an interrupted restore can't leave a truncated store.
+                // (Raw bytes — they are ALREADY encrypted under this file's name, so no
+                // re-encryption; the shared name preserves the AEAD associated data.)
+                val tmp = File(File(encryptedConf.parentFile, "enc-tmp").apply { mkdirs() }, encryptedConf.name)
+                if (tmp.exists()) tmp.delete()
+                tmp.writeBytes(snapshot)
+                atomicMoveOver(tmp)
+            }
+        }
+    }
+
     /** Exports the decrypted config text (for the user to back up — with a warning in UI). */
     suspend fun exportPlaintext(): String = withContext(dispatchers.io) {
         ioLock.withLock {
@@ -173,6 +202,11 @@ class RcloneConfigManager @Inject constructor(
         val tmp = File(tmpDir, encryptedConf.name)
         if (tmp.exists()) tmp.delete()
         encryptedFile(tmp).openFileOutput().use { it.write(bytes) }
+        atomicMoveOver(tmp)
+    }
+
+    /** Atomically replaces [encryptedConf] with [tmp] (falling back to a same-volume rename). */
+    private fun atomicMoveOver(tmp: File) {
         runCatching {
             Files.move(
                 tmp.toPath(),

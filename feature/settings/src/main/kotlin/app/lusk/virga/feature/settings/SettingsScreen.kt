@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Gavel
 import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material.icons.outlined.NewReleases
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.AlertDialog
@@ -59,6 +60,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -73,6 +75,11 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsScreen(
     onOpenStats: () -> Unit = {},
+    onOpenWhatsNew: () -> Unit = {},
+    // Whether a crash-reporting backend (Sentry DSN) was configured at build time. The
+    // app module owns BuildConfig and passes this in, so feature:settings stays
+    // BuildConfig-free; the opt-in toggle is hidden entirely when unavailable.
+    crashReportingAvailable: Boolean = false,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val prefs by viewModel.state.collectAsStateWithLifecycle()
@@ -80,6 +87,7 @@ fun SettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val noBrowserMsg = stringResource(R.string.settings_snack_no_browser)
+    val noBatterySettingsMsg = stringResource(R.string.settings_snack_no_battery_settings)
 
     // Draft state for bandwidth fields — committed on focus-loss rather than
     // requiring an explicit Save button. reset() keys on the persisted value so
@@ -239,11 +247,22 @@ fun SettingsScreen(
                         context.startActivity(
                             Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
                         )
+                    }.onFailure {
+                        scope.launch { snackbarHostState.showSnackbar(noBatterySettingsMsg) }
                     }
                 }) { Text(stringResource(R.string.settings_btn_battery_settings)) }
                 TextButton(onClick = { openUrl("https://dontkillmyapp.com") }) {
                     Text(stringResource(R.string.settings_btn_dontkillmyapp))
                 }
+            }
+
+            // Privacy (crash-reporting opt-in) — only shown when a backend is configured
+            // for this build; default OFF. Extracted to SettingsPrivacySection.kt.
+            if (crashReportingAvailable) {
+                PrivacySection(
+                    enabled = prefs.crashReportingEnabled,
+                    onChange = viewModel::setCrashReporting,
+                )
             }
 
             HorizontalDivider()
@@ -252,6 +271,11 @@ fun SettingsScreen(
                 label = stringResource(R.string.settings_item_your_stats),
                 onClick = onOpenStats,
                 leadingIcon = Icons.Outlined.BarChart,
+            )
+            SettingsLinkRow(
+                label = stringResource(R.string.settings_item_whats_new),
+                onClick = onOpenWhatsNew,
+                leadingIcon = Icons.Outlined.NewReleases,
             )
             // Virga-owned references first (learn → site → policy → project),
             // then third-party references, then the version row.
@@ -318,28 +342,18 @@ fun SettingsScreen(
             // open-in-new glyph) keep this static row distinct from the tappable
             // links above it. A spacer the width of the rows' icon column keeps
             // the "About" label aligned with them without implying tappability.
+            // Quiet centered footer (was an awkward left "About" / right version row).
             HorizontalDivider()
-            Row(
+            Text(
+                text = stringResource(R.string.settings_about_footer, versionName),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .defaultMinSize(minHeight = 48.dp)
-                    .padding(vertical = VirgaSpacing.sm),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.md),
-            ) {
-                Spacer(Modifier.size(24.dp))
-                Text(
-                    stringResource(R.string.settings_item_about),
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Text(
-                    stringResource(R.string.settings_about_version, versionName),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            // Bottom spacing so last item clears nav bar
+                    .padding(vertical = VirgaSpacing.lg),
+            )
+            // Bottom spacing so the footer clears the nav bar.
             Spacer(Modifier.padding(bottom = VirgaSpacing.sm))
         }
     }
@@ -373,7 +387,7 @@ private fun ThemeSegmentedRow(selected: ThemeMode, onSelect: (ThemeMode) -> Unit
 }
 
 @Composable
-private fun SectionTitle(text: String) {
+internal fun SectionTitle(text: String) {
     Text(
         text,
         style = MaterialTheme.typography.titleMedium,

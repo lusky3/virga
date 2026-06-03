@@ -97,7 +97,11 @@ data class SyncTaskEntity(
             onDelete = ForeignKey.CASCADE,
         ),
     ],
-    indices = [Index("taskId"), Index(value = ["remoteName", "basePath"], unique = true)],
+    // taskId is part of the unique key so two tasks targeting overlapping subtrees
+    // of the same remote keep independent conflict rows (a base path can otherwise
+    // ping-pong ownership between tasks). The composite's leftmost column also
+    // indexes the FK, so no separate Index("taskId") is needed.
+    indices = [Index(value = ["taskId", "remoteName", "basePath"], unique = true)],
 )
 data class ConflictEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

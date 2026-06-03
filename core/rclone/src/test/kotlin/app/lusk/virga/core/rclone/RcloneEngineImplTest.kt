@@ -8,10 +8,12 @@ import app.lusk.virga.core.rclone.config.RcloneConfigManager
 import app.lusk.virga.core.rclone.daemon.RcloneDaemonManager
 import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
+import android.util.Log
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonPrimitive
@@ -49,6 +51,10 @@ class RcloneEngineImplTest {
     private lateinit var fakeDaemon: RcloneDaemon
 
     @BeforeEach fun setUp() {
+        // android.util.Log is not available on the plain JVM test classpath; stub the
+        // overloads the engine uses (providers()/importConfig() log on failure).
+        mockkStatic(Log::class)
+        every { Log.w(any<String>(), any<String>(), any<Throwable>()) } returns 0
         engine = RcloneEngineImpl(daemonManager, configManager, apiClient, dispatchers)
         fakeDaemon = RcloneDaemon(
             process = mockk { every { isAlive } returns true },
@@ -549,16 +555,86 @@ class RcloneEngineImplTest {
 
     // --- importConfig ---
 
-    @Test fun `importConfig replaces config without re-persisting the old one`() = runTest(testDispatcher) {
+    @Test fun `importConfig validates then commits a config with remotes`() = runTest(testDispatcher) {
+        coEvery { configManager.snapshotCiphertext() } returns "old-ciphertext".toByteArray()
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
         coEvery { daemonManager.stop(any()) } returns Unit
         coEvery { configManager.cleanup() } returns Unit
         coEvery { configManager.import(any()) } returns Unit
+        // Validation: the freshly imported config parses to one remote.
+        coEvery { apiClient.call(any(), any(), any(), "config/dump", any()) } returns buildJsonObject {
+            put("gdrive", buildJsonObject { put("type", "drive") })
+        }
 
         engine.importConfig("[gdrive]\ntype=drive\n")
 
-        coVerify { configManager.import("[gdrive]\ntype=drive\n") }
-        // Must NOT re-encrypt the old plaintext over the freshly imported config
-        // (the old delete-then-write could clobber the import under a concurrent start).
-        coVerify(exactly = 0) { configManager.persistAndCleanup() }
+        coVerify(exactly = 1) { configManager.import("[gdrive]\ntype=drive\n") }
+        // Success → never rolls back the ciphertext snapshot.
+        coVerify(exactly = 0) { configManager.restoreCiphertext(any()) }
+    }
+
+    @Test fun `importConfig rolls back to ciphertext snapshot when imported file has no remotes`() = runTest(testDispatcher) {
+        val snapshot = "old-ciphertext".toByteArray()
+        coEvery { configManager.snapshotCiphertext() } returns snapshot
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(any()) } returns Unit
+        coEvery { configManager.cleanup() } returns Unit
+        coEvery { configManager.import(any()) } returns Unit
+        coEvery { configManager.restoreCiphertext(any()) } returns Unit
+        // Validation: the imported text parses to zero remotes → reject + roll back.
+        coEvery { apiClient.call(any(), any(), any(), "config/dump", any()) } returns buildJsonObject {}
+
+        assertThrows<VirgaError.Rclone> { engine.importConfig("not a config") }
+
+        coVerify { configManager.import("not a config") }
+        coVerify { configManager.restoreCiphertext(snapshot) }
+    }
+
+    @Test fun `importConfig rolls back without false-rejecting when the validation daemon fails to start`() =
+        runTest(testDispatcher) {
+            val snapshot = "old-ciphertext".toByteArray()
+            coEvery { configManager.snapshotCiphertext() } returns snapshot
+            coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+            // Daemon start fails transiently — NOT a verdict on the imported file.
+            coEvery { daemonManager.start(any()) } throws VirgaError.Rclone(message = "daemon did not start")
+            coEvery { daemonManager.stop(any()) } returns Unit
+            coEvery { configManager.cleanup() } returns Unit
+            coEvery { configManager.import(any()) } returns Unit
+            coEvery { configManager.restoreCiphertext(any()) } returns Unit
+
+            val error = assertThrows<VirgaError.Rclone> { engine.importConfig("[gdrive]\ntype=drive\n") }
+
+            // Restores the snapshot and reports a retryable engine error, NOT "invalid file".
+            coVerify { configManager.restoreCiphertext(snapshot) }
+            assertThat(error.message).contains("failed to start")
+        }
+
+    // --- config mutations are refused while a sync holds a lease ---
+
+    @Test fun `createRemote is refused while a sync holds a lease`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        engine.acquireDaemon() // leases = 1 (simulates an in-flight sync)
+
+        assertThrows<VirgaError.Rclone> { engine.createRemote("r", "drive", emptyMap()) }
+        // Refused before touching the config store / tearing the daemon down.
+        coVerify(exactly = 0) { daemonManager.stop(any()) }
+    }
+
+    @Test fun `importConfig is refused while a sync holds a lease`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        engine.acquireDaemon() // leases = 1
+
+        assertThrows<VirgaError.Rclone> { engine.importConfig("[gdrive]\ntype=drive\n") }
+        // The refused import must not snapshot, overwrite, or roll back the store.
+        coVerify(exactly = 0) { configManager.snapshotCiphertext() }
+        coVerify(exactly = 0) { configManager.import(any()) }
     }
 }

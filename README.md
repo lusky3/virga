@@ -37,7 +37,6 @@ DataStore, WorkManager, Coroutines/Flow.
 | `core:database` | Room entities/DAOs (remotes, tasks, runs) |
 | `core:datastore` | App preferences (DataStore) |
 | `core:rclone` | rclone binary mgmt, RC daemon lifecycle, RC API client, engine, encrypted config |
-| `core:storage` | Storage volume enumeration, MANAGE_EXTERNAL_STORAGE |
 | `core:data` | Repositories tying the data sources together |
 | `sync-worker` | WorkManager worker, foreground service, scheduler, boot receiver |
 | `feature:sync` | Sync task list + editor, sync history, conflict resolution |

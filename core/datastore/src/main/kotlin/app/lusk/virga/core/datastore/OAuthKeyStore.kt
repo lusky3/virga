@@ -29,7 +29,9 @@ import javax.inject.Singleton
 class OAuthKeyStore @Inject constructor(
     private val dataStore: DataStore<Preferences>,
 ) {
-    private fun key(providerId: String) = stringPreferencesKey("oauth_client_id_$providerId")
+    // Built from the same PREFIX the read path (clientIds) strips, so the write and
+    // read sides can't drift if the prefix is ever renamed.
+    private fun key(providerId: String) = stringPreferencesKey(PREFIX + providerId)
 
     // Degrade a corrupt/unreadable prefs file to empty instead of throwing — mirrors
     // PreferencesRepository, so a bad DataStore can't crash the OAuth flow.

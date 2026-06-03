@@ -188,8 +188,7 @@ class SyncWorker @AssistedInject constructor(
                 if (writeResult.isFailure) {
                     val msg = writeResult.exceptionOrNull()?.message ?: "Failed to write back to folder"
                     log.line("Failed: $msg")
-                    log.flush()
-                    finishFailed(runId, last, msg, log.path, task.direction, runStartMs)
+                    finishFailed(runId, last, msg, log.path.takeIf { log.flush() }, task.direction, runStartMs)
                     runCatching {
                         NotificationManagerCompat.from(applicationContext)
                             .notify(SyncNotifications.RESULT_NOTIFICATION_ID, notifications.error(task.name, msg, taskId))
@@ -198,8 +197,7 @@ class SyncWorker @AssistedInject constructor(
                 }
             }
             log.line("Completed: ${last?.transferredFiles ?: 0} file(s) transferred")
-            log.flush()
-            finishSucceeded(runId, last, log.path, task.direction, runStartMs)
+            finishSucceeded(runId, last, log.path.takeIf { log.flush() }, task.direction, runStartMs)
             // After a bisync, scan the destination for rclone conflict files
             // and queue them for user resolution.
             if (task.direction == SyncDirection.BISYNC) {
@@ -214,8 +212,7 @@ class SyncWorker @AssistedInject constructor(
         } else {
             val msg = failure.message ?: "Sync failed"
             log.line("Failed: $msg")
-            log.flush()
-            finishFailed(runId, last, msg, log.path, task.direction, runStartMs)
+            finishFailed(runId, last, msg, log.path.takeIf { log.flush() }, task.direction, runStartMs)
             runCatching {
                 NotificationManagerCompat.from(applicationContext)
                     .notify(SyncNotifications.RESULT_NOTIFICATION_ID, notifications.error(task.name, msg, taskId))
@@ -251,7 +248,7 @@ class SyncWorker @AssistedInject constructor(
                 durationMs = maxOf(0L, finishedAt - runStartMs),
                 finishedAtEpochMs = finishedAt,
             )
-        }
+        }.onFailure { Log.w(TAG, "Failed to record lifetime stats for successful run", it) }
     }
 
     /** Record a FAILED run (+1 error) with [message] from the last [progress] snapshot. */
@@ -282,7 +279,7 @@ class SyncWorker @AssistedInject constructor(
                 durationMs = maxOf(0L, finishedAt - runStartMs),
                 finishedAtEpochMs = finishedAt,
             )
-        }
+        }.onFailure { Log.w(TAG, "Failed to record lifetime stats for failed run", it) }
     }
 
     private fun foregroundInfo(notification: android.app.Notification): ForegroundInfo =

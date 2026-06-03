@@ -12,9 +12,13 @@
         <exclude domain="file" path="datastore/" />
         <exclude domain="file" path="run_logs/" />
         <include domain="database" path="virga.db" />
-        <!-- No SharedPreferences are used; exclude so a future dependency that
-             quietly creates one can't get its contents backed up / transferred. -->
-        <exclude domain="sharedpref" path="." />
+        <!-- No SharedPreferences are backed up/transferred: with explicit <include>
+             rules present, only included domains are eligible, and sharedpref is
+             deliberately never included — so a future dependency that quietly creates
+             one can't leak its contents. (An explicit sharedpref <exclude> can't be
+             used here: lint's FullBackupContent rejects an exclude with no matching
+             include, and it would be redundant anyway.) -->
+
     </cloud-backup>
     <device-transfer>
         <include domain="file" path="." />
@@ -22,8 +26,12 @@
         <exclude domain="file" path="datastore/" />
         <exclude domain="file" path="run_logs/" />
         <include domain="database" path="virga.db" />
-        <!-- No SharedPreferences are used; exclude so a future dependency that
-             quietly creates one can't get its contents backed up / transferred. -->
-        <exclude domain="sharedpref" path="." />
+        <!-- No SharedPreferences are backed up/transferred: with explicit <include>
+             rules present, only included domains are eligible, and sharedpref is
+             deliberately never included — so a future dependency that quietly creates
+             one can't leak its contents. (An explicit sharedpref <exclude> can't be
+             used here: lint's FullBackupContent rejects an exclude with no matching
+             include, and it would be redundant anyway.) -->
+
     </device-transfer>
 </data-extraction-rules>

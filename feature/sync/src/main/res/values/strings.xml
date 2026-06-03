@@ -20,6 +20,14 @@
 
     <!-- HomeScreen -->
     <string name="home_title">Home</string>
+    <!-- Update banner -->
+    <string name="home_banner_update_title">Update available</string>
+    <string name="home_banner_update_action">Update</string>
+    <string name="home_banner_update_dismiss_cd">Dismiss update banner</string>
+    <!-- Changelog banner -->
+    <string name="home_banner_changelog_title">What\'s new in %1$s</string>
+    <string name="home_banner_changelog_view">View all changes</string>
+    <string name="home_banner_changelog_dismiss_cd">Dismiss changelog banner</string>
     <string name="home_action_backup_now">Back up now</string>
     <string name="home_action_create_task">Create sync task</string>
     <plurals name="home_summary_tasks">
@@ -53,7 +61,10 @@
     <string name="sync_task_cd_edit">Edit task: %1$s</string>
     <string name="sync_task_selection_count">%1$d selected</string>
     <string name="sync_task_bulk_delete_title">Delete selected tasks?</string>
-    <string name="sync_task_bulk_delete_body">%1$d tasks will be removed and their schedules cancelled. This cannot be undone.</string>
+    <plurals name="sync_task_bulk_delete_body">
+        <item quantity="one">%1$d task will be removed and its schedule cancelled. This cannot be undone.</item>
+        <item quantity="other">%1$d tasks will be removed and their schedules cancelled. This cannot be undone.</item>
+    </plurals>
     <string name="sync_task_delete_dialog_title">Delete sync task?</string>
     <string name="sync_task_delete_dialog_body">\"%1$s\" will be removed and its schedule cancelled. This cannot be undone.</string>
     <string name="sync_task_delete_confirm">Delete</string>
@@ -65,7 +76,14 @@
     <string name="sync_task_menu_delete">Delete</string>
     <string name="sync_task_path_summary">%1$s → %2$s:%3$s</string>
     <!-- Last-run metrics line shown on task cards (no status word — SyncStatusBadge carries that) -->
-    <string name="sync_task_last_run_line">Last: %1$s · %2$d files</string>
+    <plurals name="sync_task_last_run_line">
+        <item quantity="one">Last: %1$s · %2$d file</item>
+        <item quantity="other">Last: %1$s · %2$d files</item>
+    </plurals>
+    <!-- a11y: spoken when focusing a sync task card -->
+    <string name="sync_task_open_cd">Open task</string>
+    <!-- a11y: status-badge description, %1$s = the localized status label -->
+    <string name="sync_status_cd">Status: %1$s</string>
     <string name="sync_task_schedule_summary">%1$s • %2$s</string>
 
     <!-- Search / filter / sort -->
@@ -92,7 +110,6 @@
     <string name="sync_history_status_queued">queued</string>
     <string name="sync_history_status_cancelled">cancelled</string>
     <string name="sync_history_status_idle">idle</string>
-    <string name="sync_history_files_transferred">%1$d files</string>
     <string name="sync_history_error_count">%1$d error(s)</string>
     <string name="sync_history_filter_all">All tasks</string>
     <string name="sync_history_filter_failed">Failed only</string>
@@ -188,7 +205,14 @@
     <string name="conflicts_bulk_keep_local">Keep all local</string>
     <string name="conflicts_bulk_keep_remote">Keep all remote</string>
     <string name="conflicts_bulk_keep_both">Keep both (all)</string>
-    <string name="conflicts_bulk_body">Apply to %1$d conflict(s):\n%2$s</string>
+    <plurals name="conflicts_bulk_body">
+        <item quantity="one">Apply to %1$d conflict:\n%2$s</item>
+        <item quantity="other">Apply to %1$d conflicts:\n%2$s</item>
+    </plurals>
+    <!-- a11y: richer screen-reader action labels for the conflict resolution buttons -->
+    <string name="conflicts_keep_local_cd">Keep local — deletes remote version</string>
+    <string name="conflicts_keep_remote_cd">Keep remote — overwrites local version</string>
+    <string name="conflicts_keep_both_cd">Keep both versions</string>
     <string name="conflicts_dialog_keep_local_title">Keep local version?</string>
     <string name="conflicts_dialog_keep_local_body">The remote (cloud) version will be permanently deleted.</string>
     <string name="conflicts_dialog_keep_remote_title">Keep remote version?</string>
@@ -227,6 +251,7 @@
     <!-- Mirror toggle (Tier 1, destructive) -->
     <string name="sync_edit_mirror_label">Mirror (make destination match source)</string>
     <string name="sync_edit_mirror_sub">Deletes files at the destination that are not in the source.</string>
+    <string name="sync_edit_mirror_inert_download">Not available when downloading into a picked folder — files are added or updated, never deleted.</string>
     <string name="sync_edit_mirror_confirm_title">Enable Mirror?</string>
     <string name="sync_edit_mirror_confirm_body">With Mirror on, the next sync will DELETE files at the destination that are not in the source, including files already there that this task did not add. This cannot be undone. Consider a dry-run first.</string>
     <string name="sync_edit_mirror_confirm_enable">Enable Mirror</string>
@@ -238,6 +263,7 @@
     <string name="log_viewer_search">Search log</string>
     <string name="log_viewer_share">Share log</string>
     <string name="log_viewer_empty">No log for this run.</string>
+    <string name="log_viewer_unavailable">Log unavailable — it may have been cleaned up.</string>
     <string name="run_detail_view_log">View log</string>
     <!-- WS3.1 Tier-2 rclone options -->
     <string name="sync_edit_field_checksum">Compare by checksum</string>
@@ -255,7 +281,10 @@
     <string name="sync_preview_action">Preview changes</string>
     <string name="sync_preview_running">Previewing\u2026</string>
     <string name="sync_preview_title">Preview (dry run)</string>
-    <string name="sync_preview_body">%1$d file(s) and %2$s would transfer. Nothing has changed yet.</string>
+    <plurals name="sync_preview_body">
+        <item quantity="one">%1$d file and %2$s would transfer. Nothing has changed yet.</item>
+        <item quantity="other">%1$d files and %2$s would transfer. Nothing has changed yet.</item>
+    </plurals>
     <plurals name="sync_preview_deletions">
         <item quantity="one">%1$d file on the destination would be permanently deleted.</item>
         <item quantity="other">%1$d files on the destination would be permanently deleted.</item>

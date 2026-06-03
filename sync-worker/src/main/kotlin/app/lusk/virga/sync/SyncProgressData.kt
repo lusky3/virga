@@ -26,9 +26,11 @@ object SyncProgressData {
     private const val ETA = "p_eta"
     private const val ERRORS = "p_errors"
     private const val DELETES = "p_deletes"
-    private const val PHASE = "p_phase"
 
-    /** A run is still "listing" until rclone reports any totals to transfer. */
+    /**
+     * A run is still "listing" until rclone reports any totals to transfer. Recomputed
+     * from totals by consumers ([SyncProgressMonitor]); not persisted in the bundle.
+     */
     fun phaseOf(p: SyncProgress): SyncPhase =
         if (p.totalBytes > 0 || p.totalFiles > 0) SyncPhase.TRANSFERRING else SyncPhase.LISTING
 
@@ -41,7 +43,6 @@ object SyncProgressData {
         ETA to (p.etaSeconds ?: -1L),
         ERRORS to p.errors,
         DELETES to p.deletes,
-        PHASE to phaseOf(p).name,
     )
 
     /** Returns null if [data] carries no progress (e.g. work not yet running). */

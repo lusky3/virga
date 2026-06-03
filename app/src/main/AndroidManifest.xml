@@ -38,6 +38,13 @@
         android:theme="@style/Theme.Virga"
         android:enableOnBackInvokedCallback="true">
 
+        <!-- Crash reporting is OPT-IN. Disable the Sentry SDK's ContentProvider
+             auto-init so it never starts on its own; CrashReporter initializes it
+             manually only after the user enables the Settings toggle (and only when a
+             DSN is configured). This keeps the FOSS build free of unsolicited network
+             calls by default. -->
+        <meta-data android:name="io.sentry.auto-init" android:value="false" />
+
         <!-- SEC-L: production builds are intentionally NOT profileable. The
              androidx.baselineprofile plugin creates dedicated, profileable
              `nonMinifiedRelease` / `benchmarkRelease` variants for the

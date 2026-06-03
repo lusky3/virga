@@ -83,7 +83,9 @@ fun LogViewerScreen(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = VirgaSpacing.md, vertical = VirgaSpacing.sm),
             )
-            if (!state.loading && state.totalLines == 0) {
+            if (!state.loading && state.readFailed) {
+                EmptyState(title = stringResource(R.string.log_viewer_unavailable))
+            } else if (!state.loading && state.totalLines == 0) {
                 EmptyState(title = stringResource(R.string.log_viewer_empty))
             } else {
                 LazyColumn(Modifier.fillMaxSize().padding(horizontal = VirgaSpacing.md)) {

@@ -3,6 +3,7 @@ package app.lusk.virga.navigation
 import android.app.Activity
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.SharedTransitionScope
@@ -29,6 +30,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.dropUnlessResumed
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
@@ -51,6 +54,8 @@ import app.lusk.virga.feature.sync.SyncTaskEditScreen
 import app.lusk.virga.feature.sync.SyncTaskSummaryScreen
 import app.lusk.virga.feature.sync.HomeScreen
 import app.lusk.virga.feature.sync.SyncTasksAdaptiveScreen
+import app.lusk.virga.update.HomeBannersViewModel
+import app.lusk.virga.update.WhatsNewScreen
 import kotlinx.serialization.Serializable
 
 /** Type-safe Navigation 3 routes. Each is a [NavKey] so it can live in a back stack. */
@@ -92,6 +97,9 @@ import kotlinx.serialization.Serializable
 
 /** Lifetime statistics screen. */
 @Serializable object StatsRoute : NavKey
+
+/** Full changelog listing, navigated to from the Home changelog banner or Settings. */
+@Serializable object WhatsNewRoute : NavKey
 
 private data class TopLevel(
     val route: NavKey,
@@ -163,11 +171,25 @@ fun VirgaNavHost(
 
     val entryProvider = entryProvider {
         entry<HomeRoute> {
+            val banners: HomeBannersViewModel = hiltViewModel()
+            val bannersState by banners.state.collectAsStateWithLifecycle()
+            val activity = LocalActivity.current
             HomeScreen(
                 onOpenStats = dropUnlessResumed { navigator.navigate(StatsRoute) },
-                onAddTask = dropUnlessResumed { navigator.navigate(TaskEditRoute(0)) },
+                // Switch to the Sync tab and open the create flow there (so Back
+                // lands on the Sync list, not Home) — same flow as Sync's CTA.
+                onAddTask = dropUnlessResumed {
+                    navigator.navigate(SyncRoute)
+                    navigator.navigate(FirstSyncWizardRoute)
+                },
                 onOpenSync = dropUnlessResumed { navigator.navigate(SyncRoute) },
                 onOpenRemotes = dropUnlessResumed { navigator.navigate(RemotesRoute) },
+                changelog = bannersState.changelog,
+                onDismissChangelog = banners::dismissChangelog,
+                onViewChangelog = dropUnlessResumed { navigator.navigate(WhatsNewRoute) },
+                updateAvailable = bannersState.update,
+                onDismissUpdate = banners::dismissUpdate,
+                onUpdate = { (activity as? Activity)?.let(banners::startUpdate) },
             )
         }
         entry<SyncRoute> {
@@ -255,10 +277,17 @@ fun VirgaNavHost(
             )
         }
         entry<SettingsRoute> {
-            SettingsScreen(onOpenStats = dropUnlessResumed { navigator.navigate(StatsRoute) })
+            SettingsScreen(
+                onOpenStats = dropUnlessResumed { navigator.navigate(StatsRoute) },
+                onOpenWhatsNew = dropUnlessResumed { navigator.navigate(WhatsNewRoute) },
+                crashReportingAvailable = app.lusk.virga.BuildConfig.SENTRY_DSN.isNotBlank(),
+            )
         }
         entry<StatsRoute> {
             StatsScreen(onBack = dropUnlessResumed { navigator.goBack() })
+        }
+        entry<WhatsNewRoute> {
+            WhatsNewScreen(onBack = dropUnlessResumed { navigator.goBack() })
         }
     }
 

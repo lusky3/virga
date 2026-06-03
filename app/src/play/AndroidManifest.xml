@@ -11,4 +11,14 @@
         android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:node="remove"
         tools:ignore="ScopedStorage" />
+
+    <!--
+      Strip the direct battery-optimization-exemption permission the FOSS flavor
+      declares. Play policy restricts ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS to
+      specific app categories a general sync app doesn't qualify for; the Play build
+      instead opens the general optimization-settings list (see OnboardingScreen).
+    -->
+    <uses-permission
+        android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
+        tools:node="remove" />
 </manifest>

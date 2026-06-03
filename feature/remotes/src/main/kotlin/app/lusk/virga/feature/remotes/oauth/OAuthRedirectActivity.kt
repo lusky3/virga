@@ -23,15 +23,13 @@ class OAuthRedirectActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        handle(intent)
-        returnToApp()
+        if (handle(intent)) returnToApp()
         finish()
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        handle(intent)
-        returnToApp()
+        if (handle(intent)) returnToApp()
         finish()
     }
 
@@ -50,13 +48,16 @@ class OAuthRedirectActivity : ComponentActivity() {
         if (launch != null) startActivity(launch)
     }
 
-    private fun handle(intent: Intent?) {
+    /**
+     * Processes a redirect, returning true only if it was a genuine OAuth redirect
+     * origin (and was emitted to [OAuthStore]). Returns false for a fabricated /
+     * unexpected intent so the caller does NOT bring the app to the foreground — an
+     * arbitrary app shouldn't be able to foreground Virga (or cancel an in-flight
+     * authorization) by sending this exported activity a bogus intent.
+     */
+    private fun handle(intent: Intent?): Boolean {
         val uri = intent?.data
-        // The activity is exported (the App Link / custom-scheme filters require it),
-        // so any app can send it an explicit intent. Ignore anything that isn't a
-        // genuine OAuth redirect origin rather than emitting to the store — otherwise
-        // a fabricated intent could cancel an in-flight authorization (DoS).
-        if (uri == null || !isExpectedRedirect(uri)) return
+        if (uri == null || !isExpectedRedirect(uri)) return false
         val state = uri.getQueryParameter("state")
         val code = uri.getQueryParameter("code")
         val error = uri.getQueryParameter("error")
@@ -65,6 +66,7 @@ class OAuthRedirectActivity : ComponentActivity() {
             code != null && state != null -> store.emit(OAuthResult.Success(state = state, code = code))
             else -> store.emit(OAuthResult.Error(state, message = "Malformed OAuth redirect"))
         }
+        return true
     }
 
     /**

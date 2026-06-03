@@ -45,6 +45,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
@@ -181,7 +182,7 @@ fun ConflictsScreen(
             onDismissRequest = viewModel::cancelBulkChoice,
             title = { Text(stringResource(titleRes)) },
             text = {
-                Text(stringResource(R.string.conflicts_bulk_body, count, stringResource(bodyRes)))
+                Text(pluralStringResource(R.plurals.conflicts_bulk_body, count, count, stringResource(bodyRes)))
             },
             confirmButton = {
                 TextButton(
@@ -258,6 +259,11 @@ private fun ConflictCard(
                     CircularProgressIndicator()
                 }
             } else {
+                // Richer screen-reader action labels (hoisted: semantics{} is not a
+                // composable scope, so stringResource must be read here).
+                val keepLocalCd = stringResource(R.string.conflicts_keep_local_cd)
+                val keepRemoteCd = stringResource(R.string.conflicts_keep_remote_cd)
+                val keepBothCd = stringResource(R.string.conflicts_keep_both_cd)
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
@@ -267,20 +273,20 @@ private fun ConflictCard(
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                         modifier = Modifier
                             .heightIn(min = 48.dp)
-                            .semantics { onClick(label = "Keep local — deletes remote version", action = null) },
+                            .semantics { onClick(label = keepLocalCd, action = null) },
                     ) { Text(stringResource(R.string.conflicts_btn_keep_local)) }
                     OutlinedButton(
                         onClick = { onChoice(ConflictChoice.KEEP_VARIANT_2) },
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                         modifier = Modifier
                             .heightIn(min = 48.dp)
-                            .semantics { onClick(label = "Keep remote — overwrites local version", action = null) },
+                            .semantics { onClick(label = keepRemoteCd, action = null) },
                     ) { Text(stringResource(R.string.conflicts_btn_keep_remote)) }
                     OutlinedButton(
                         onClick = { onChoice(ConflictChoice.KEEP_BOTH) },
                         modifier = Modifier
                             .heightIn(min = 48.dp)
-                            .semantics { onClick(label = "Keep both versions", action = null) },
+                            .semantics { onClick(label = keepBothCd, action = null) },
                     ) { Text(stringResource(R.string.conflicts_btn_keep_both)) }
                 }
             }

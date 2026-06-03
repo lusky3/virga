@@ -52,4 +52,8 @@
     <!-- Quick Settings tile (Phase 3 WS3.6) -->
     <string name="tile_label">Virga sync</string>
     <string name="tile_subtitle">Back up now</string>
+
+    <!-- WhatsNewScreen -->
+    <string name="whats_new_title">What\'s new</string>
+    <string name="whats_new_cd_back">Back</string>
 </resources>

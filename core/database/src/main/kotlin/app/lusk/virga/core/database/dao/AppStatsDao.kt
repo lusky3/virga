@@ -22,6 +22,11 @@ interface AppStatsDao {
      * Atomically increments all additive counters for a completed run.
      * SQLite serialises writes, so concurrent workers cannot interleave partial
      * updates — each caller's delta is applied atomically in one statement.
+     *
+     * [firstSyncCandidate] is null for a failed run and the finish timestamp for a
+     * successful one, so "first sync" (the "Syncing since …" anchor) is set once by the
+     * first *successful* run — consistent with the success-only streak. COALESCE keeps
+     * the existing value when the candidate is null.
      */
     @Query(
         """
@@ -37,7 +42,7 @@ interface AppStatsDao {
             totalSyncMillis         = totalSyncMillis + :durationMs,
             largestRunBytes         = MAX(largestRunBytes, :bytes),
             longestRunMillis        = MAX(longestRunMillis, :durationMs),
-            firstSyncEpochMs        = COALESCE(firstSyncEpochMs, :nowEpochMs)
+            firstSyncEpochMs        = COALESCE(firstSyncEpochMs, :firstSyncCandidate)
         WHERE id = 0
         """,
     )
@@ -50,7 +55,7 @@ interface AppStatsDao {
         down: Long,
         twoWay: Long,
         durationMs: Long,
-        nowEpochMs: Long,
+        firstSyncCandidate: Long?,
     )
 
     @Query(
@@ -85,7 +90,12 @@ interface AppStatsDao {
         isSuccess: Boolean,
     ) {
         ensureRow()
-        applyAdditive(successDelta, failDelta, files, bytes, up, down, twoWay, durationMs, nowEpochMs)
+        // "First sync" anchors to the first SUCCESSFUL run, so a failed first attempt
+        // doesn't set the "Syncing since …" date (parity with the streak below).
+        applyAdditive(
+            successDelta, failDelta, files, bytes, up, down, twoWay, durationMs,
+            firstSyncCandidate = if (isSuccess) nowEpochMs else null,
+        )
         if (isSuccess) {
             val s = getOnce() ?: return
             val last = s.lastSyncDayEpochDay

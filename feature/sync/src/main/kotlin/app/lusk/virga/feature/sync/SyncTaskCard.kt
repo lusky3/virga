@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
@@ -71,13 +72,14 @@ internal fun SyncTaskCard(
         selected -> VirgaCardState.Selected
         else -> VirgaCardState.Default
     }
+    val openCd = stringResource(R.string.sync_task_open_cd)
 
     VirgaCard(
         state = cardState,
         onClick = onClick,
         onLongClick = onLongClick,
         contentPadding = PaddingValues(start = VirgaSpacing.sm, end = VirgaSpacing.xs, top = VirgaSpacing.md, bottom = VirgaSpacing.md),
-        modifier = Modifier.semantics { onClick(label = "Open task") { false } },
+        modifier = Modifier.semantics { onClick(label = openCd) { false } },
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -238,7 +240,12 @@ private fun LastRunLine(run: SyncRun) {
         ).toString()
     }
     val sizeLabel = if (run.bytesTransferred > 0) " · ${formatFileSize(run.bytesTransferred)}" else ""
-    val line = stringResource(R.string.sync_task_last_run_line, relTime, run.filesTransferred) + sizeLabel
+    val line = pluralStringResource(
+        R.plurals.sync_task_last_run_line,
+        run.filesTransferred,
+        relTime,
+        run.filesTransferred,
+    ) + sizeLabel
     Text(
         text = line,
         style = MaterialTheme.typography.labelSmall,

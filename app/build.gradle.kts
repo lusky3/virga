@@ -7,6 +7,7 @@ plugins {
     id("virga.jvm.test")
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.baselineprofile)
+    alias(libs.plugins.sentry.android)
 }
 
 // OAuth client IDs are public-by-design for mobile apps but identify the
@@ -19,6 +20,15 @@ val localProps = Properties().apply {
 fun oauthClientId(provider: String): String =
     System.getenv("VIRGA_OAUTH_CLIENT_ID_${provider.uppercase()}")
         ?: localProps.getProperty("oauthClientId.$provider")
+        ?: ""
+
+// Sentry DSN for opt-in crash reporting. Like the OAuth client IDs it is developer-
+// specific and kept out of git (local.properties / env). An empty default means crash
+// reporting is unavailable — CrashReporter no-ops — so contributor and CI builds
+// without the secret behave exactly as before (no telemetry, no network).
+fun sentryDsn(): String =
+    System.getenv("VIRGA_SENTRY_DSN")
+        ?: localProps.getProperty("sentryDsn")
         ?: ""
 
 // Release signing. The keystore and its passwords never enter git: read from
@@ -50,6 +60,15 @@ val debugStoreFile: java.io.File? =
         ?.let { rootProject.file(it) }
         ?.takeIf { it.exists() }
 
+// In-app update check (foss flavor only — polls the GitHub Releases API). On by
+// default for GitHub / sideload installs that have no store to update them.
+// F-Droid ships updates through its own client, so an app self-checking GitHub
+// is both redundant and against the grain of F-Droid's "no unsolicited network"
+// expectation. The F-Droid build recipe flips this off without patching source,
+// via `-Pvirga.enableUpdateCheck=false` or a line in gradle.properties.
+val enableUpdateCheck: Boolean =
+    (project.findProperty("virga.enableUpdateCheck") as String?)?.toBoolean() ?: true
+
 android {
     namespace = "app.lusk.virga"
 
@@ -71,6 +90,11 @@ android {
         buildConfigField("String", "OAUTH_CLIENT_ID_ONEDRIVE", "\"${oauthClientId("onedrive")}\"")
         buildConfigField("String", "OAUTH_CLIENT_ID_DROPBOX", "\"${oauthClientId("dropbox")}\"")
         buildConfigField("String", "OAUTH_CLIENT_ID_PCLOUD", "\"${oauthClientId("pcloud")}\"")
+
+        // Opt-in crash reporting endpoint (empty = disabled). Read at runtime by
+        // CrashReporter, which only initializes Sentry when this is non-blank AND the
+        // user has enabled the Settings toggle.
+        buildConfigField("String", "SENTRY_DSN", "\"${sentryDsn()}\"")
 
         // Google Android OAuth clients require a redirect URI scheme of the
         // form com.googleusercontent.apps.<reversed-client-id>. The reversed
@@ -99,6 +123,9 @@ android {
             buildConfigField("boolean", "ALLOW_BYO_OAUTH", "true")
             buildConfigField("boolean", "SDCARD_ACCESS_AVAILABLE", "true")
             buildConfigField("String", "DISTRIBUTION", "\"foss\"")
+            // GitHub Releases self-check — true for GitHub/sideload, flipped off
+            // by the F-Droid build recipe (see enableUpdateCheck above).
+            buildConfigField("boolean", "ENABLE_UPDATE_CHECK", enableUpdateCheck.toString())
         }
         // Google Play distribution. Play policy is hostile to
         // MANAGE_EXTERNAL_STORAGE for general-purpose sync apps; we still
@@ -181,6 +208,30 @@ android {
     }
 }
 
+// Sentry Gradle plugin — used ONLY to upload R8 mapping files (and source context) so
+// release-build crash reports symbolicate in Sentry. It deliberately does NOT manage the
+// SDK or instrument bytecode: we own the `sentry-android-core` dependency and a manual,
+// opt-in init in CrashReporter, with auto-init disabled in the manifest.
+sentry {
+    org.set(System.getenv("SENTRY_ORG") ?: "lusktech")
+    // Sentry project slug; override at build time with SENTRY_PROJECT if it ever changes.
+    projectName.set(System.getenv("SENTRY_PROJECT") ?: "virga")
+    authToken.set(System.getenv("SENTRY_AUTH_TOKEN"))
+
+    // Don't let the plugin add the SDK (avoids drift with our pinned 8.43.0) and don't
+    // auto-instrument bytecode — that would wrap our OkHttp / file IO and capture request
+    // data, which is at odds with the opt-in privacy posture. We want symbolication only.
+    autoInstallation { enabled.set(false) }
+    tracingInstrumentation { enabled.set(false) }
+
+    // Upload only when a build-time auth token is present, so tokenless contributor /
+    // F-Droid / CI builds never fail and never phone home at build time. The R8 mapping
+    // is still bundled + UUID-tagged so a manual upload can symbolicate later.
+    val hasToken = !System.getenv("SENTRY_AUTH_TOKEN").isNullOrBlank()
+    autoUploadProguardMapping.set(hasToken)
+    includeSourceContext.set(hasToken)
+}
+
 dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:data"))
@@ -235,6 +286,16 @@ dependencies {
 
     // The baseline profile is installed at build time by ProfileInstaller; the
     // dependency below is what wires the generated file into the APK.
+    // FOSS update checker uses OkHttp to poll the GitHub Releases API.
+    "fossImplementation"(libs.okhttp)
+    // Play update flow (in-app update API).
+    "playImplementation"(libs.play.appupdate.ktx)
+
+    // Opt-in crash reporting (both flavors). MIT-licensed SDK; auto-init is disabled
+    // in the manifest and Sentry is initialized manually by CrashReporter only after
+    // the user opts in, so the FOSS build makes no telemetry calls by default.
+    implementation(libs.sentry.android.core)
+
     // Glance home-screen widget + Quick Settings tile (Phase 3 WS3.6)
     implementation(libs.glance.appwidget)
     implementation(libs.glance.material3)

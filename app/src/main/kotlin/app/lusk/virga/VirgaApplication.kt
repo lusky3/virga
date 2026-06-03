@@ -1,12 +1,15 @@
 package app.lusk.virga
 
 import android.app.Application
+import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.datastore.PreferencesRepository
+import app.lusk.virga.core.rclone.RcloneEngine
 import app.lusk.virga.notification.NotificationChannels
 import app.lusk.virga.sync.WatchdogController
+import app.lusk.virga.telemetry.CrashReporter
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +26,8 @@ class VirgaApplication : Application(), Configuration.Provider {
     @Inject lateinit var syncHistory: SyncHistoryRepository
     @Inject lateinit var preferences: PreferencesRepository
     @Inject lateinit var watchdog: WatchdogController
+    @Inject lateinit var rcloneEngine: RcloneEngine
+    @Inject lateinit var crashReporter: CrashReporter
 
     // Captured at Application construction (before any worker can run) so reconcile
     // only fails runs that were already in flight before this process started.
@@ -42,6 +47,14 @@ class VirgaApplication : Application(), Configuration.Provider {
         val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         appScope.launch {
             runCatching { syncHistory.reconcileInterruptedRuns(processStartMs) }
+                .onFailure { Log.w(TAG, "Failed to reconcile interrupted runs on startup", it) }
+            // A worker killed mid-sync (process death) can't run its finally, so the
+            // decrypted plaintext rclone config (OAuth tokens) it had open may still be
+            // on disk. Purge it via the engine, which is lease-aware: it no-ops if a
+            // worker that raced this startup already holds the daemon, so it can never
+            // delete a config in active use. The next daemon start re-decrypts anyway.
+            runCatching { rcloneEngine.cleanupStaleConfigIfIdle() }
+                .onFailure { Log.w(TAG, "Failed to clean stale decrypted config on startup", it) }
         }
         // Keep the persistent watchdog in sync with its preference. Runs for the
         // app's lifetime: applies the saved state on every launch and reacts to
@@ -53,5 +66,21 @@ class VirgaApplication : Application(), Configuration.Provider {
                 .distinctUntilChanged()
                 .collect { enabled -> watchdog.setEnabled(enabled) }
         }
+        // Opt-in crash reporting: initialize/close Sentry to follow the saved toggle.
+        // Default OFF, so the FOSS build makes no telemetry call unless the user opts in
+        // (and only when a DSN was configured at build time — CrashReporter no-ops otherwise).
+        appScope.launch {
+            preferences.preferences
+                .map { it.crashReportingEnabled }
+                .distinctUntilChanged()
+                .collect { enabled ->
+                    runCatching { crashReporter.setEnabled(enabled) }
+                        .onFailure { Log.w(TAG, "Failed to apply crash-reporting toggle", it) }
+                }
+        }
+    }
+
+    private companion object {
+        const val TAG = "VirgaApplication"
     }
 }

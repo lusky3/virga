@@ -34,6 +34,7 @@
     <!-- AddRemoteDialog -->
     <string name="remotes_add_dialog_title">Add cloud account</string>
     <string name="remotes_add_field_name">Name</string>
+    <string name="remotes_add_name_invalid">Name can\'t contain \':\' or \'/\'</string>
     <string name="remotes_add_sign_in_with">Sign in with</string>
     <string name="remotes_add_or_manual">Or configure manually</string>
     <!-- Bring-your-own OAuth keys -->
@@ -71,6 +72,10 @@
     <!-- ViewModel user-facing messages -->
     <string name="remotes_msg_oauth_not_configured">%1$s OAuth client ID isn\'t configured yet.</string>
     <string name="remotes_msg_sign_in_failed">Sign-in failed: %1$s</string>
+    <string name="remotes_oauth_err_access_denied">you declined the authorization request</string>
+    <string name="remotes_oauth_err_invalid_scope">the app requested permissions the provider rejected</string>
+    <string name="remotes_oauth_err_server_error">the provider had a temporary error — try again</string>
+    <string name="remotes_oauth_err_temporarily_unavailable">the provider is temporarily unavailable — try again</string>
     <string name="remotes_msg_state_mismatch">Sign-in state mismatch; please try again.</string>
     <string name="remotes_msg_could_not_save">Could not save remote.</string>
     <string name="remotes_msg_added_remote">Added %1$s remote \"%2$s\"</string>

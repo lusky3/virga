@@ -73,11 +73,12 @@ fun SyncStatusBadge(status: SyncStatus, modifier: Modifier = Modifier) {
         )
     }
     val label = stringResource(style.labelRes)
+    val statusCd = stringResource(R.string.sync_status_cd, label)
     Row(
         modifier = modifier
             .background(style.container, RoundedCornerShape(50))
             .padding(horizontal = 8.dp, vertical = 2.dp)
-            .semantics { contentDescription = "Status: $label" },
+            .semantics(mergeDescendants = true) { contentDescription = statusCd },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (style.glyph != null) {

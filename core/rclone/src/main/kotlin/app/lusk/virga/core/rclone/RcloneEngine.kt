@@ -48,6 +48,14 @@ interface RcloneEngine {
     suspend fun stopDaemonIfIdle()
 
     /**
+     * Purges any decrypted plaintext config left on disk by a worker killed before it
+     * could run its cleanup (process death). Lease-aware: a no-op when a daemon is live
+     * or any lease is held, so it can never delete a config a concurrent sync is using.
+     * Safe to call once at app startup.
+     */
+    suspend fun cleanupStaleConfigIfIdle()
+
+    /**
      * Fetches the full provider/option schema from rclone's `config/providers`
      * endpoint. Returns an empty list on failure so callers are failure-tolerant.
      */
