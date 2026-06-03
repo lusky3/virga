@@ -224,6 +224,15 @@ sentry {
     autoInstallation { enabled.set(false) }
     tracingInstrumentation { enabled.set(false) }
 
+    // Don't embed an external-dependencies manifest in the APK assets. Two reasons:
+    // (1) it's tangential to the opt-in, symbolication-only posture, and
+    // (2) the task that writes it (collectExternalDependenciesForSentry) injects a
+    //     lazily-resolved provider into the variant's asset dirs, which the SonarQube
+    //     plugin's sonarResolver enumerates eagerly and fails on ("Querying the mapped
+    //     value ... before task ... has completed is not supported"). Disabling it
+    //     removes the entanglement and unblocks `./gradlew sonar` in CI.
+    includeDependenciesReport.set(false)
+
     // Upload only when a build-time auth token is present, so tokenless contributor /
     // F-Droid / CI builds never fail and never phone home at build time. The R8 mapping
     // is still bundled + UUID-tagged so a manual upload can symbolicate later.
