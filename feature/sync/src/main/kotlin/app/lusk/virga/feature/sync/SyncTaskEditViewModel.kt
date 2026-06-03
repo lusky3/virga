@@ -49,6 +49,7 @@ data class SyncTaskForm(
     val scheduleHour: Int = 9,
     val scheduleMinute: Int = 0,
     val wifiOnly: Boolean = true,
+    val requiresCharging: Boolean = false,
     val bwLimitWifi: String = "",
     val bwLimitMetered: String = "",
     val bufferSize: String = "16M",
@@ -202,6 +203,7 @@ class SyncTaskEditViewModel @Inject constructor(
                         scheduleHour = task.scheduleHour,
                         scheduleMinute = task.scheduleMinute,
                         wifiOnly = task.wifiOnly,
+                        requiresCharging = task.requiresCharging,
                         bwLimitWifi = task.bwLimitWifi.orEmpty(),
                         bwLimitMetered = task.bwLimitMetered.orEmpty(),
                         bufferSize = task.bufferSize,
@@ -232,6 +234,7 @@ class SyncTaskEditViewModel @Inject constructor(
                 _form.update {
                     it.copy(
                         wifiOnly = prefs.wifiOnlyByDefault,
+                        requiresCharging = prefs.requireChargingByDefault,
                         bwLimitWifi = prefs.defaultBwLimitWifi ?: it.bwLimitWifi,
                         bwLimitMetered = prefs.defaultBwLimitMetered ?: it.bwLimitMetered,
                     )
@@ -311,6 +314,7 @@ class SyncTaskEditViewModel @Inject constructor(
                 scheduleHour = form.scheduleHour,
                 scheduleMinute = form.scheduleMinute,
                 wifiOnly = form.wifiOnly,
+                requiresCharging = form.requiresCharging,
                 bwLimitWifi = form.bwLimitWifi.trim().ifBlank { null },
                 bwLimitMetered = form.bwLimitMetered.trim().ifBlank { null },
                 bufferSize = form.bufferSize.trim().ifBlank { "16M" },

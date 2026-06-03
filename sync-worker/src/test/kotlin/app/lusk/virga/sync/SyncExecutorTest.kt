@@ -125,4 +125,11 @@ class SyncExecutorTest {
         SyncExecutor(engine).run(task(SyncDirection.BISYNC), metered = false).collect {}
         assertThat(engine.bisyncArgs!!.third.resync).isFalse()
     }
+
+    @Test
+    fun `bisync forwards the task buffer size`() = runTest {
+        val engine = RecordingEngine()
+        SyncExecutor(engine).run(task(SyncDirection.BISYNC).copy(bufferSize = "32M"), metered = false).collect {}
+        assertThat(engine.bisyncArgs!!.third.bufferSize).isEqualTo("32M")
+    }
 }

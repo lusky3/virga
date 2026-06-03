@@ -281,6 +281,26 @@ fun SyncTaskEditScreen(
                 Switch(checked = form.wifiOnly, onCheckedChange = null)
             }
 
+            // Require charging toggle
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .toggleable(
+                        value = form.requiresCharging,
+                        role = Role.Switch,
+                        onValueChange = { v -> viewModel.update { f -> f.copy(requiresCharging = v) } },
+                    )
+                    .padding(vertical = VirgaSpacing.xs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.sync_edit_field_require_charging),
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Switch(checked = form.requiresCharging, onCheckedChange = null)
+            }
+
             // Filters (Tier 1) — include/exclude rule builder.
             FilterEditor(
                 filters = form.filters,

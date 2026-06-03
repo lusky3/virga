@@ -41,6 +41,8 @@ class SyncTaskEditViewModelTest {
 
     private fun viewModel() = SyncTaskEditViewModel(taskRepository, remoteRepository, scheduler, RemoteFolderPickStore(), PendingRemoteResult(), prefsRepo())
 
+    private fun viewModel(prefs: AppPreferences) = SyncTaskEditViewModel(taskRepository, remoteRepository, scheduler, RemoteFolderPickStore(), PendingRemoteResult(), prefsRepo(prefs))
+
     // --- pre-existing tests -------------------------------------------------
 
     @Test
@@ -107,6 +109,34 @@ class SyncTaskEditViewModelTest {
             )
             scheduler.schedule(match<SyncTask> { it.id == 99L })
         }
+    }
+
+    @Test
+    fun save_persistsRequiresCharging() = runTest(mainDispatcher.dispatcher) {
+        coEvery { taskRepository.save(any()) } returns 1L
+        val vm = viewModel()
+        vm.update {
+            it.copy(
+                name = "Photos",
+                sourcePath = "/storage/emulated/0/DCIM",
+                remoteName = "gdrive",
+                remotePath = "/Photos",
+                requiresCharging = true,
+            )
+        }
+        vm.save {}
+        advanceUntilIdle()
+
+        coVerify { taskRepository.save(match<SyncTask> { it.requiresCharging }) }
+    }
+
+    @Test
+    fun load_newTask_seedsRequiresChargingFromPrefs() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel(AppPreferences(requireChargingByDefault = true))
+        vm.load(taskId = 0)
+        advanceUntilIdle()
+
+        assertThat(vm.form.value.requiresCharging).isTrue()
     }
 
     @Test
@@ -474,6 +504,6 @@ class SyncTaskEditViewModelTest {
     )
 }
 
-private fun prefsRepo(): PreferencesRepository = mockk(relaxed = true) {
-    every { preferences } returns flowOf(AppPreferences())
+private fun prefsRepo(prefs: AppPreferences = AppPreferences()): PreferencesRepository = mockk(relaxed = true) {
+    every { preferences } returns flowOf(prefs)
 }

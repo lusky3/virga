@@ -148,6 +148,7 @@
     <string name="sync_edit_browse_dest_needs_remote">Select a remote first to browse</string>
     <string name="sync_edit_field_direction">Direction</string>
     <string name="sync_edit_field_wifi_only">Wi-Fi only</string>
+    <string name="sync_edit_field_require_charging">Only while charging</string>
     <string name="sync_edit_field_bw_wifi">Upload limit (Wi-Fi)</string>
     <string name="sync_edit_field_bw_wifi_placeholder">e.g. 10M or 10M:1M</string>
     <string name="sync_edit_field_bw_wifi_hint">Optional. Leave blank for no limit. Uses rclone --bwlimit format.</string>

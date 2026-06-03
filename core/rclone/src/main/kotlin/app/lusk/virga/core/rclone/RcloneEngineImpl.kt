@@ -335,7 +335,7 @@ class RcloneEngineImpl @Inject constructor(
                     bwLimit = options.bwLimit,
                     transfers = options.transfers,
                     checkers = options.checkers,
-                    bufferSize = "16M",
+                    bufferSize = options.bufferSize,
                     dryRun = options.dryRun,
                     checksum = options.checksum,
                     backupDir = options.backupDir,

@@ -58,6 +58,7 @@ data class BisyncOptions(
     val bwLimit: String? = null,
     val transfers: Int = 4,
     val checkers: Int = 8,
+    val bufferSize: String = "16M",
     val filters: List<String> = emptyList(),
     val dryRun: Boolean = false,
     /** First-run resync to establish the bisync baseline. */

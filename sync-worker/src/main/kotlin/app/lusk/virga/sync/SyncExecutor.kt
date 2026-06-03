@@ -55,6 +55,7 @@ class SyncExecutor @Inject constructor(
                     bwLimit = bwLimit,
                     transfers = task.transfers,
                     checkers = task.checkers,
+                    bufferSize = task.bufferSize,
                     filters = filters,
                     resync = resync,
                     dryRun = dryRun,
