@@ -1,10 +1,25 @@
+<div align="center">
+
+<img src="docs/images/header.png" alt="Virga — weather for your data" width="720">
+
 # Virga
 
-A modern Android app that syncs local storage — including the microSD root — to
-cloud providers via [rclone](https://rclone.org). One-way and two-way (bisync)
-sync, scheduled in the background, with bandwidth limits and per-task control.
+**Weather for your data.** A modern Android app that backs up and syncs your phone's
+storage — including the microSD root — to any cloud, powered by
+[rclone](https://rclone.org). One-way and two-way sync, scheduled in the background,
+with your credentials encrypted on the device.
+
+[![Build](https://github.com/lusky3/virga/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/lusky3/virga/actions/workflows/build.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-1E6FD9.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-0.1.0%20·%20pre--release-FFB868.svg)](https://github.com/lusky3/virga/releases)
+[![Android](https://img.shields.io/badge/Android-8.0%2B%20(API%2026)-3DDC84.svg?logo=android&logoColor=white)](https://github.com/lusky3/virga)
+[![Kotlin](https://img.shields.io/badge/Kotlin-Compose%20·%20Material%203-7F52FF.svg?logo=kotlin&logoColor=white)](https://github.com/lusky3/virga)
+[![Powered by rclone](https://img.shields.io/badge/powered%20by-rclone-3F87C2.svg?logo=rclone&logoColor=white)](https://rclone.org)
+[![Website](https://img.shields.io/badge/website-lusky3.github.io%2Fvirga-1FA8A0.svg)](https://lusky3.github.io/virga/)
 
 **Package:** `app.lusk.virga` · **License:** Apache 2.0 · **minSdk:** 26 (Android 8.0)
+
+</div>
 
 > Status: early development. The engine, data layer, background sync, and core
 > UI are implemented and build to an installable APK. See
