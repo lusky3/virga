@@ -24,7 +24,6 @@ import app.lusk.virga.core.rclone.RcloneEngine
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.distinctUntilChangedBy
 
 /**
  * Executes one sync task as a foreground (dataSync) job so it survives Doze and
@@ -89,6 +88,7 @@ class SyncWorker @AssistedInject constructor(
         val effectiveTask = if (staged.isStaged) task.copy(sourcePath = staged.localPath) else task
 
         var last: SyncProgress? = null
+        var lastNotifiedPct = -1
         var failure: Throwable? = null
         // Reference-counted daemon lease: a concurrent sync ("sync all" / co-scheduled
         // tasks) must not have its daemon torn down by THIS worker's cleanup. Released
@@ -144,18 +144,26 @@ class SyncWorker @AssistedInject constructor(
                     !historyRepository.hasSucceeded(taskId)
                 executor.run(effectiveTask, metered, allowDeletes, resync = resync)
                     .catch { failure = it }
-                    // Only update the foreground notification when the integer percent changes.
-                    .distinctUntilChangedBy { p -> (p.fraction * 100).toInt() }
                     .collect { progress ->
+                        // Record EVERY emit + publish to the UI: the terminal emit carries
+                        // the authoritative final counts. (A flow-level distinctUntilChanged
+                        // on byte-percent used to drop that terminal emit — it shares 100%
+                        // with the prior tick, which lands before rclone finalizes the
+                        // `transfers` count — so finished syncs recorded 0 files moved.)
                         last = progress
-                        // Publish to the UI (WS1.1) and mirror to the notification.
                         setProgress(SyncProgressData.encode(progress))
-                        log.line(
-                            "Progress ${(progress.fraction * 100).toInt()}% · " +
-                                "${progress.transferredFiles}/${progress.totalFiles} files · " +
-                                "${progress.errors} error(s)",
-                        )
-                        setForeground(foregroundInfo(notifications.progress(task.name, progress, taskId)))
+                        // Throttle ONLY the foreground notification + log to once per
+                        // integer-percent change (Android rate-limits frequent FGS updates).
+                        val pct = (progress.fraction * 100).toInt()
+                        if (pct != lastNotifiedPct) {
+                            lastNotifiedPct = pct
+                            log.line(
+                                "Progress $pct% · " +
+                                    "${progress.transferredFiles}/${progress.totalFiles} files · " +
+                                    "${progress.errors} error(s)",
+                            )
+                            setForeground(foregroundInfo(notifications.progress(task.name, progress, taskId)))
+                        }
                     }
                 }
             }
