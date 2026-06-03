@@ -42,6 +42,7 @@ import app.lusk.virga.core.designsystem.theme.VirgaMotion
 import app.lusk.virga.core.designsystem.theme.rememberReduceMotion
 import app.lusk.virga.R
 import app.lusk.virga.feature.explorer.FileBrowserScreen
+import app.lusk.virga.feature.remotes.AddRemoteScreen
 import app.lusk.virga.feature.remotes.RemotesScreen
 import app.lusk.virga.feature.settings.SettingsScreen
 import app.lusk.virga.feature.stats.StatsScreen
@@ -94,6 +95,12 @@ import kotlinx.serialization.Serializable
 
 /** Guided first-sync wizard for cold-install users (WS1.2). */
 @Serializable object FirstSyncWizardRoute : NavKey
+
+/**
+ * Add-a-cloud-account flow as a pushable destination (not the Remotes tab), so the
+ * wizard / task editor can open it on their own stack and return when done.
+ */
+@Serializable object AddRemoteRoute : NavKey
 
 /** Lifetime statistics screen. */
 @Serializable object StatsRoute : NavKey
@@ -175,7 +182,12 @@ fun VirgaNavHost(
             val bannersState by banners.state.collectAsStateWithLifecycle()
             val activity = LocalActivity.current
             HomeScreen(
-                onOpenStats = dropUnlessResumed { navigator.navigate(StatsRoute) },
+                // Stats lives under the Settings tab — switch there and push it, so it has
+                // one canonical home (not a duplicate copy on the Home tab's stack).
+                onOpenStats = dropUnlessResumed {
+                    navigator.navigate(SettingsRoute)
+                    navigator.navigate(StatsRoute)
+                },
                 // Switch to the Sync tab and open the create flow there (so Back
                 // lands on the Sync list, not Home) — same flow as Sync's CTA.
                 onAddTask = dropUnlessResumed {
@@ -201,14 +213,21 @@ fun VirgaNavHost(
                 onOpenHistory = dropUnlessResumed { navigator.navigate(HistoryRoute) },
                 onOpenConflicts = dropUnlessResumed { navigator.navigate(ConflictsRoute) },
                 onOpenRun = { id -> navigator.navigate(RunDetailRoute(id)) },
-                onOpenStats = dropUnlessResumed { navigator.navigate(StatsRoute) },
+                // Stats is canonically under Settings — route there rather than copying it
+                // onto the Sync tab's stack.
+                onOpenStats = dropUnlessResumed {
+                    navigator.navigate(SettingsRoute)
+                    navigator.navigate(StatsRoute)
+                },
                 onDetailBackAvailableChanged = { syncDetailCanGoBack = it },
             )
         }
         entry<FirstSyncWizardRoute> {
             FirstSyncWizardScreen(
                 onBack = dropUnlessResumed { navigator.goBack() },
-                onNavigateToRemotes = dropUnlessResumed { navigator.navigate(RemotesRoute) },
+                // Push the add-remote flow on the wizard's own stack (NOT the Remotes
+                // tab), so adding an account returns straight to the wizard.
+                onAddRemote = dropUnlessResumed { navigator.navigate(AddRemoteRoute) },
                 onFinished = { taskId ->
                     // Pop the completed wizard first so Back from the summary lands
                     // on the task list, not a blank finished wizard pane.
@@ -216,6 +235,9 @@ fun VirgaNavHost(
                     navigator.navigate(TaskSummaryRoute(taskId))
                 },
             )
+        }
+        entry<AddRemoteRoute> {
+            AddRemoteScreen(onDone = dropUnlessResumed { navigator.goBack() })
         }
         entry<TaskSummaryRoute> { key ->
             SyncTaskSummaryScreen(
@@ -281,6 +303,8 @@ fun VirgaNavHost(
                 onOpenStats = dropUnlessResumed { navigator.navigate(StatsRoute) },
                 onOpenWhatsNew = dropUnlessResumed { navigator.navigate(WhatsNewRoute) },
                 crashReportingAvailable = app.lusk.virga.BuildConfig.SENTRY_DSN.isNotBlank(),
+                // All-files-access builds (foss) can offer a storage-access grant in Settings.
+                storageAccessRelevant = app.lusk.virga.BuildConfig.SDCARD_ACCESS_AVAILABLE,
             )
         }
         entry<StatsRoute> {

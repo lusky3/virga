@@ -63,7 +63,9 @@ import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 @Composable
 fun FirstSyncWizardScreen(
     onBack: () -> Unit,
-    onNavigateToRemotes: () -> Unit,
+    // Opens the add-cloud-account flow and returns here when done (the caller pushes a
+    // dedicated add-remote destination on this stack), rather than switching tabs.
+    onAddRemote: () -> Unit,
     onFinished: (taskId: Long) -> Unit,
     viewModel: FirstSyncWizardViewModel = hiltViewModel(),
 ) {
@@ -147,7 +149,7 @@ fun FirstSyncWizardScreen(
                         remotes = remotes,
                         selected = state.remoteName,
                         onSelect = viewModel::selectRemote,
-                        onAddRemote = onNavigateToRemotes,
+                        onAddRemote = onAddRemote,
                     )
                     WizardStep.SOURCE -> SourceStep(
                         sourcePath = state.sourcePath,

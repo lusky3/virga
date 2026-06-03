@@ -32,6 +32,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -61,6 +62,12 @@ fun SyncTasksScreen(
     val snackbar = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
     val longPressHaptic = rememberLongPressHaptic()
+
+    // The search field must only focus when the user taps it. On re-entry to this tab the
+    // field composes immediately (no loading frame to defer it) and Compose's focus
+    // restoration would otherwise grab it and pop the keyboard — clear focus once on entry.
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(Unit) { focusManager.clearFocus(force = true) }
 
     // Collapse FAB once the user scrolls down.
     val fabExpanded by remember { derivedStateOf { !listState.canScrollBackward } }

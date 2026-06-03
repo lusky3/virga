@@ -49,5 +49,9 @@
     <string name="settings_licenses_intro">Virga is built with these open-source projects. Tap any item to view it. Thank you to their authors.</string>
     <string name="settings_dialog_ok">OK</string>
     <string name="settings_snack_no_browser">No browser app found</string>
+    <string name="settings_section_storage">Storage access</string>
+    <string name="settings_storage_hint">Virga needs all-files access to read and write the folders you sync. Grant it here if you skipped this during setup.</string>
+    <string name="settings_btn_grant_storage">Grant storage access</string>
+    <string name="settings_snack_no_storage_settings">Couldn\'t open storage settings on this device</string>
     <string name="settings_snack_no_battery_settings">Couldn\'t open battery settings on this device</string>
 </resources>

@@ -118,6 +118,9 @@ fun OnboardingScreen(
         Column(Modifier.fillMaxSize().safeDrawingPadding().padding(VirgaSpacing.lg)) {
             HorizontalPager(
                 state = pagerState,
+                // Drive paging only via Back/Next — free swiping let users silently skip
+                // the permission pages (storage/battery) without ever seeing the prompt.
+                userScrollEnabled = false,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
             ) { pageIndex ->
                 val page = pages[pageIndex]
@@ -126,6 +129,7 @@ fun OnboardingScreen(
                     pageIndex == 1 && storageGranted -> stringResource(R.string.onboarding_storage_granted)
                     pageIndex == 1 && !storageGranted -> stringResource(R.string.onboarding_storage_needed)
                     pageIndex == 2 && batteryExempt -> stringResource(R.string.onboarding_battery_exempt)
+                    pageIndex == 2 && !batteryExempt -> stringResource(R.string.onboarding_battery_needed)
                     else -> null
                 }
                 PageContent(title = page.title, body = page.body, statusHint = statusHint)

@@ -25,7 +25,8 @@
     <string name="onboarding_storage_body_foss">Virga needs filesystem access to sync your local folders. On Android 11+ this is the \"All files access\" permission; below that it\'s the standard storage permission. Tap Next to grant access.</string>
     <string name="onboarding_storage_body_play">Virga reads files from the standard media folders the system exposes to apps. Picking individual folders may prompt for additional access. Tap Next to continue.</string>
     <string name="onboarding_battery_title">Keep syncing in the background</string>
-    <string name="onboarding_battery_body">Some manufacturers aggressively kill background apps, which can stop scheduled syncs. Exempt Virga from battery optimization (tap Next) and see dontkillmyapp.com for device-specific steps.</string>
+    <string name="onboarding_battery_body">Some manufacturers aggressively kill background apps, which can stop scheduled syncs. Tap Next, then choose \"Allow\" when Android asks whether to let Virga keep running in the background. Android\'s prompt mentions battery use, but allowing it is what keeps your scheduled syncs from being killed. See dontkillmyapp.com for device-specific tips.</string>
+    <string name="onboarding_battery_needed">Battery optimization not yet disabled.</string>
     <string name="onboarding_first_remote_title">Add your first cloud account</string>
     <!-- beg-01: define "remote" and "sync task" in plain language before using them -->
     <string name="onboarding_first_remote_body">A cloud account (called a "remote") connects Virga to Google Drive, Dropbox, OneDrive, and more. A sync task copies files between a folder on your phone and a remote.\n\nOn the Remotes tab, tap Add cloud account to connect a provider, then create a sync task. You can also import an existing rclone.conf file from your desktop. Tap Get started.</string>

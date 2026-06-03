@@ -76,10 +76,9 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(
     onOpenStats: () -> Unit = {},
     onOpenWhatsNew: () -> Unit = {},
-    // Whether a crash-reporting backend (Sentry DSN) was configured at build time. The
-    // app module owns BuildConfig and passes this in, so feature:settings stays
-    // BuildConfig-free; the opt-in toggle is hidden entirely when unavailable.
+    // Build-time flags from the app module (keeps feature:settings BuildConfig-free).
     crashReportingAvailable: Boolean = false,
+    storageAccessRelevant: Boolean = false,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val prefs by viewModel.state.collectAsStateWithLifecycle()
@@ -225,6 +224,8 @@ fun SettingsScreen(
                 singleLine = true,
             )
 
+            if (storageAccessRelevant) StorageAccessSection()
+
             HorizontalDivider()
             SectionTitle(stringResource(R.string.settings_section_battery))
             Text(
@@ -256,8 +257,7 @@ fun SettingsScreen(
                 }
             }
 
-            // Privacy (crash-reporting opt-in) — only shown when a backend is configured
-            // for this build; default OFF. Extracted to SettingsPrivacySection.kt.
+            // Privacy opt-in (crash reporting); only when a backend is configured. See SettingsPrivacySection.
             if (crashReportingAvailable) {
                 PrivacySection(
                     enabled = prefs.crashReportingEnabled,
