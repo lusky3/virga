@@ -14,7 +14,7 @@ buildscript {
                 "io.netty" ->
                     // netty enforces a single aligned version across all its
                     // modules; pin them together to the latest 4.1.x patch.
-                    useVersion("4.1.133.Final")
+                    useVersion("4.1.135.Final")
                 "org.bouncycastle" -> useVersion("1.84")
             }
             when (requested.module.toString()) {
