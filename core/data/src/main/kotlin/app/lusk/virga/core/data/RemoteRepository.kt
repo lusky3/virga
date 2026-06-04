@@ -96,6 +96,13 @@ class RemoteRepository @Inject constructor(
     suspend fun testConnectivity(remoteName: String): Result<Unit> =
         engine.testConnectivity(remoteName)
 
+    /**
+     * Provides a live daemon for the duration of a daemon-mediated OAuth flow.
+     * On success, persists the updated config; on failure, cleans up without persisting.
+     */
+    suspend fun <T> withDaemonForOAuth(block: suspend (app.lusk.virga.core.rclone.RcloneDaemon) -> T): T =
+        engine.withDaemonForOAuth(block)
+
     /** Fetches storage quota for [remoteName]. Returns [Result.failure] when offline or unsupported. */
     suspend fun about(remoteName: String): Result<RemoteQuota> =
         runCatching { engine.about(remoteName) }

@@ -113,6 +113,14 @@ interface RcloneEngine {
     suspend fun about(remoteName: String): RemoteQuota
 
     /**
+     * Provides a daemon for a long-running config-mutating operation (daemon OAuth).
+     * The daemon stays alive for the entire [block]. On success, persists the updated
+     * config and tears down. On failure/cancellation, cleans up without persisting.
+     * Rejects if syncs hold leases (same as [createRemote]).
+     */
+    suspend fun <T> withDaemonForOAuth(block: suspend (RcloneDaemon) -> T): T
+
+    /**
      * Tests connectivity to [remoteName] by attempting `operations/about`, falling
      * back to `operations/list` if the backend doesn't support about.
      * Returns [Result.success] if either succeeds, [Result.failure] if both fail.

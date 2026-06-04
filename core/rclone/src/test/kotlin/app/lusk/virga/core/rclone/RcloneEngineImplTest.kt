@@ -715,4 +715,52 @@ class RcloneEngineImplTest {
         coVerify(exactly = 0) { configManager.snapshotCiphertext() }
         coVerify(exactly = 0) { configManager.import(any()) }
     }
+
+    // --- withDaemonForOAuth ---
+
+    @Test fun `withDaemonForOAuth provides daemon and persists config on success`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.persistAndCleanup() } returns Unit
+
+        var receivedDaemon: RcloneDaemon? = null
+        engine.withDaemonForOAuth { d -> receivedDaemon = d }
+
+        assertThat(receivedDaemon).isSameInstanceAs(fakeDaemon)
+        coVerify { daemonManager.stop(fakeDaemon) }
+        coVerify { configManager.persistAndCleanup() }
+    }
+
+    @Test fun `withDaemonForOAuth cleans up without persisting on failure`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.cleanup() } returns Unit
+
+        assertThrows<VirgaError.Rclone> {
+            engine.withDaemonForOAuth<Unit> { throw VirgaError.Rclone(message = "oauth failed") }
+        }
+
+        coVerify(exactly = 0) { configManager.persistAndCleanup() }
+        coVerify { configManager.cleanup() }
+    }
+
+    @Test fun `withDaemonForOAuth is refused while a sync holds a lease`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.persistAndCleanup() } returns Unit
+        engine.acquireDaemon() // leases = 1
+
+        val error = assertThrows<VirgaError.Rclone> {
+            engine.withDaemonForOAuth<Unit> { }
+        }
+        assertThat(error.message).contains("Stop running syncs")
+
+        engine.releaseDaemon()
+    }
 }

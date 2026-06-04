@@ -502,6 +502,25 @@ class RcloneEngineImpl @Inject constructor(
         }
     }
 
+    override suspend fun <T> withDaemonForOAuth(block: suspend (RcloneDaemon) -> T): T {
+        return lock.withLock {
+            if (leases > 0) {
+                throw VirgaError.Rclone(message = "Stop running syncs before modifying remotes.")
+            }
+            val d = ensureDaemonLocked()
+            var ok = false
+            try {
+                val result = block(d)
+                ok = true
+                result
+            } finally {
+                daemonManager.stop(d)
+                daemon = null
+                if (ok) configManager.persistAndCleanup() else runCatching { configManager.cleanup() }
+            }
+        }
+    }
+
     private suspend fun rc(d: RcloneDaemon, command: String, params: JsonObject = JsonObject(emptyMap())): JsonObject =
         apiClient.call(d.baseUrl, d.user, d.pass, command, params)
 
