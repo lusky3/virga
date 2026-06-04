@@ -5,10 +5,11 @@ storage to cloud providers via rclone.
 
 ## Getting set up
 
-1. Install JDK 21, the Android SDK (platform 36, build-tools 36) + NDK
-   `27.2.12479018`, and Go 1.25+.
-2. Build the rclone binaries: `./scripts/build-rclone.sh`.
-3. Build: `./gradlew assembleFossDebug`.
+1. Install JDK 21 and the Android SDK (platform 36, build-tools 36). NDK
+   `27.2.12479018` and Go 1.25+ are only needed to build the rclone binaries.
+2. Build: `./gradlew assembleFossDebug`. The `:rclone-build` module
+   cross-compiles `librclone.so` on demand when it's absent and skips when the
+   binaries already exist.
 
 ## Ground rules
 
@@ -20,8 +21,10 @@ storage to cloud providers via rclone.
   have unit tests (`./gradlew testFossDebugUnitTest`). Use MockK + Turbine +
   Truth, JUnit 5.
 - **Run lint** before opening a PR: `./gradlew lintFossDebug`.
-- **No secrets** in commits. OAuth *client IDs* are public by design and live in
-  BuildConfig; client *secrets* and tokens never get committed.
+- **No secrets** in commits. OAuth *client IDs* are public by design but stay
+  out of git — set them in `local.properties` (`oauthClientId.*`) or via
+  `VIRGA_OAUTH_CLIENT_ID_*` env vars, from where they reach BuildConfig. Client
+  *secrets*, keystores, and tokens never get committed.
 
 ## Commit / PR
 

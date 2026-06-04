@@ -21,9 +21,10 @@ with your credentials encrypted on the device.
 
 </div>
 
-> Status: early development. The engine, data layer, background sync, and core
-> UI are implemented and build to an installable APK. See
-> [Project status](#project-status) for what is and isn't done yet.
+> Status: 0.1.0 pre-release. The engine, data layer, background sync, and the
+> full screen set are implemented, tested, and build to a signed, installable
+> APK. See [Project status](#project-status) for what's done and what's still
+> open.
 
 ## How it works
 
@@ -49,15 +50,20 @@ DataStore, WorkManager, Coroutines/Flow.
 |--------|----------------|
 | `app` | Application, single Activity, Compose navigation, DI aggregation |
 | `core:common` | Shared domain models, errors, dispatchers |
-| `core:database` | Room entities/DAOs (remotes, tasks, runs) |
+| `core:designsystem` | Theme (color, type, motion) and reusable Compose components |
+| `core:database` | Room entities/DAOs (remotes, tasks, runs, conflicts) |
 | `core:datastore` | App preferences (DataStore) |
 | `core:rclone` | rclone binary mgmt, RC daemon lifecycle, RC API client, engine, encrypted config |
 | `core:data` | Repositories tying the data sources together |
 | `sync-worker` | WorkManager worker, foreground service, scheduler, boot receiver |
 | `feature:sync` | Sync task list + editor, sync history, conflict resolution |
+| `feature:stats` | Home tab: lifetime transfer/run stats |
 | `feature:remotes` | Remote management (OAuth + manual config + config import) |
 | `feature:explorer` | File browser for remote contents |
 | `feature:settings` | App settings |
+
+Build-support modules sit alongside these: `rclone-build` cross-compiles the
+native binary, and `benchmark` holds the Macrobenchmark + baseline-profile run.
 
 The full design rationale lives in [`specs/virga-android/spec.md`](specs/virga-android/spec.md).
 
@@ -118,14 +124,19 @@ the code is exchanged for tokens and a remote is created via rclone's RC API.
 State is validated, PKCE binds the code to a verifier kept in-process, and no
 client secret ships in the APK.
 
-The redirect URI differs per provider because Google enforces a reverse-DNS
-scheme on Android OAuth clients:
+The redirect URI differs by provider. Google's Android OAuth client only accepts
+a reverse-DNS scheme derived from the client ID, so Google Drive uses that.
+Microsoft and Dropbox accept an HTTPS redirect, so they use a verified Android
+App Link (`autoVerify`, backed by `docs/well-known/assetlinks.json` served from
+the site); the OS routes the callback straight back into the app with no
+scheme-hijack window. An earlier build used a `virga://` custom scheme for these,
+which the App Link replaced.
 
 | Provider | Redirect URI |
 |---|---|
 | Google Drive | `com.googleusercontent.apps.<client-id-prefix>:/oauth2redirect` (auto-derived) |
-| OneDrive | `virga://oauth/callback` |
-| Dropbox | `virga://oauth/callback` |
+| OneDrive | `https://lusk.app/virga/oauth/callback` |
+| Dropbox | `https://lusk.app/virga/oauth/callback` |
 
 ### Registering your own client IDs
 
@@ -142,9 +153,11 @@ into git. To provide your own:
      Drive API** for the project, and add your test Google account under
      **OAuth consent screen → Test users**.
    - **Microsoft:** Azure Portal → App registrations → New registration →
-     Mobile/Desktop → register `virga://oauth/callback` as the redirect URI.
+     register `https://lusk.app/virga/oauth/callback` as a Web/SPA redirect.
+     Point your own App Link domain there if you fork (update the manifest
+     intent-filter host and host your own `assetlinks.json`).
    - **Dropbox:** developers.dropbox.com → My apps → Create app → Scoped
-     access → Full Dropbox → add `virga://oauth/callback` redirect.
+     access → Full Dropbox → add `https://lusk.app/virga/oauth/callback`.
 
 2. Add the client IDs to `local.properties` (already gitignored):
 
@@ -175,19 +188,23 @@ universal), signs them with a keystore stored in repo secrets, generates a
 `SHA256SUMS.txt`, and publishes them as a GitHub Release with auto-generated
 notes. See [`.github/workflows/release.yml`](.github/workflows/release.yml).
 
-Required secrets:
+The workflow reads these from the `production` environment. The keystore and
+its passwords are secrets; the alias is non-sensitive, so it's an Actions
+**variable** (`vars.RELEASE_KEY_ALIAS`), not a secret.
 
-| Secret | Purpose |
-|---|---|
-| `RELEASE_KEYSTORE_BASE64` | `base64 -w0 your.jks` |
-| `RELEASE_KEYSTORE_PASSWORD` | keystore password |
-| `RELEASE_KEY_ALIAS` | key alias inside the store |
-| `RELEASE_KEY_PASSWORD` | key password |
-| `OAUTH_CLIENT_ID_{GDRIVE,ONEDRIVE,DROPBOX}` | OAuth client IDs (optional; empty values disable the corresponding OAuth chips) |
+| Name | Type | Purpose |
+|---|---|---|
+| `RELEASE_KEYSTORE_BASE64` | secret | `base64 -w0 your.jks` |
+| `RELEASE_KEYSTORE_PASSWORD` | secret | keystore password |
+| `RELEASE_KEY_PASSWORD` | secret | key password |
+| `RELEASE_KEY_ALIAS` | variable | key alias inside the store |
+| `OAUTH_CLIENT_ID_{GDRIVE,ONEDRIVE,DROPBOX}` | secret | OAuth client IDs (optional; empty disables the matching chip) |
 
-If the keystore secret is unset, the workflow still builds, just skips signing.
-Release tags must match `vMAJOR.MINOR(.PATCH)(-suffix)?` — the workflow refuses
-anything else as a defense against shell injection via a malicious tag.
+A tag-triggered release **will not publish unsigned APKs**: after the build, a
+gate fails the run if any `*-unsigned.apk` is present, so missing or wrong
+keystore config breaks the release rather than shipping unsigned. Release tags
+must match `vMAJOR.MINOR(.PATCH)(-suffix)?`; the workflow rejects anything else,
+which also blocks shell injection via a crafted tag.
 
 Per-release notes can be written ahead of time at `docs/release/<tag>.md`; if
 present they become the GitHub Release body (otherwise the body is auto-
@@ -203,23 +220,29 @@ Implemented and verified:
 - ✅ RcloneEngine: daemon lifecycle, RC API client, sync/bisync/list/config
 - ✅ Storage access (MANAGE_EXTERNAL_STORAGE + volume enumeration)
 - ✅ Background sync: WorkManager + foreground `dataSync` worker + scheduler + boot receiver
-- ✅ UI: sync task list/editor, remotes (OAuth + manual + import + delete),
-  file browser, sync history, conflict resolution, settings, 4-step onboarding
-- ✅ OAuth 2.0 + PKCE browser flow (Custom Tabs + provider-specific redirect)
-  for Google Drive, OneDrive, and Dropbox — see [OAuth / BYO credentials](#oauth--byo-credentials)
-- ✅ Unit tests across engine, RC client, OAuth, ViewModels, scheduler, etc.
+- ✅ UI: Home stats tab, sync task list/editor, remotes (OAuth + manual +
+  import + delete), file browser, sync history, conflict resolution, settings,
+  4-step onboarding — on a shared design system (`core:designsystem`)
+- ✅ OAuth 2.0 + PKCE browser flow (Custom Tabs) for Google Drive, OneDrive, and
+  Dropbox; Google via reverse-DNS scheme, the rest via a verified App Link —
+  see [OAuth / BYO credentials](#oauth--byo-credentials)
+- ✅ Opt-in, redacting crash reporting (Sentry, off until the user enables it)
+- ✅ Unit tests across engine, RC client, OAuth, ViewModels, scheduler, etc.,
+  plus Roborazzi screenshot tests
 - ✅ Instrumented tests including an **end-to-end real-rclone sync** that
   proves the bundled binary, daemon, RC API, and sync engine all work on device
-- ✅ R8-minified release build; cold-start ~2 s
-- ✅ CI: build + test on every PR; tag-driven release workflow
+- ✅ R8-minified release build with a generated baseline profile; cold-start ~2 s
+- ✅ CI: build + test + CodeQL on every PR; tag-driven signed release workflow
+- ✅ Showcase site deployed to GitHub Pages from `gh-pages/` via Actions
 - ✅ Distribution flavors (`foss` allows BYO OAuth + advertises SD-card sync;
   `play` softens SD-card messaging)
 
-Outstanding (mostly distribution work):
+Outstanding:
 
-- ⏳ Register OAuth clients for OneDrive and Dropbox (Google Drive is done)
+- ⏳ First-party release OAuth clients (the bundled ones are debug-registered, so
+  release builds need BYO keys or `rclone.conf` import for cloud OAuth)
 - ⏳ Play Store / F-Droid listing assets (screenshots, descriptions)
-- ⏳ Roborazzi screenshot tests; baseline profiles for further startup wins
+- ⏳ Baseline-profile measurement on physical hardware for the real startup delta
 
 See [`specs/virga-android/tasks.md`](specs/virga-android/tasks.md) for the full task breakdown.
 
