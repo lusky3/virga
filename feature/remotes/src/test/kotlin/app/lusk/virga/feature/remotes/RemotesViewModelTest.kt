@@ -972,8 +972,14 @@ class RemotesViewModelTest {
 
     @Test
     fun `startDaemonOAuth sets oauthInProgress false after completion`() = runTest(mainDispatcher.dispatcher) {
-        // Simulate orchestrator completing immediately via withDaemonForOAuth
-        coEvery { repository.withDaemonForOAuth<Unit>(any()) } returns Unit
+        // Invoke the block with a mock daemon so the orchestrator runs the state
+        // machine. The relaxed apiClient returns an empty JsonObject which makes
+        // the orchestrator reach State.Failed immediately.
+        val mockDaemon: app.lusk.virga.core.rclone.RcloneDaemon = mockk(relaxed = true)
+        coEvery { repository.withDaemonForOAuth<Unit>(any()) } coAnswers {
+            val block = firstArg<suspend (app.lusk.virga.core.rclone.RcloneDaemon) -> Unit>()
+            block(mockDaemon)
+        }
         coEvery { repository.refresh() } returns Result.success(Unit)
         val vm = viewModel()
         val collector = backgroundScope.launch { vm.uiState.collect {} }

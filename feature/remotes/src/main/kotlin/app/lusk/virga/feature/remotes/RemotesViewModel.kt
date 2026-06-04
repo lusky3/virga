@@ -28,6 +28,7 @@ import app.lusk.virga.core.rclone.oauth.Pkce
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -420,10 +421,11 @@ class RemotesViewModel @Inject constructor(
                     daemonOAuthOrchestrator = orchestrator
                     orchestrator.start(name.trim(), type, clientId, clientSecret, daemon, this)
                     // Observe orchestrator state until terminal.
-                    orchestrator.state.collect { s ->
+                    orchestrator.state.first { s ->
                         when (s) {
                             is DaemonOAuthOrchestrator.State.AwaitingAuth -> {
                                 _launchUrl.value = s.url
+                                false // keep collecting
                             }
                             is DaemonOAuthOrchestrator.State.Complete -> {
                                 pendingRemoteResult.created(s.remoteName)
@@ -436,11 +438,11 @@ class RemotesViewModel @Inject constructor(
                                         } else null,
                                     )
                                 }
-                                return@collect
+                                true // terminal
                             }
                             is DaemonOAuthOrchestrator.State.Failed -> {
                                 transient.update { it.copy(oauthInProgress = false, message = s.message) }
-                                return@collect
+                                true // terminal
                             }
                             is DaemonOAuthOrchestrator.State.TimedOut -> {
                                 transient.update {
@@ -449,13 +451,13 @@ class RemotesViewModel @Inject constructor(
                                         message = context.getString(R.string.remotes_msg_oauth_timed_out),
                                     )
                                 }
-                                return@collect
+                                true // terminal
                             }
                             is DaemonOAuthOrchestrator.State.Cancelled -> {
                                 transient.update { it.copy(oauthInProgress = false) }
-                                return@collect
+                                true // terminal
                             }
-                            else -> {} // Idle, Starting — no-op
+                            else -> false // Idle, Starting — keep collecting
                         }
                     }
                 }
