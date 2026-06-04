@@ -1,0 +1,67 @@
+name: CodeQL
+
+# Advanced CodeQL setup (replaces GitHub's default setup). Default setup was
+# auto-detecting only the languages Linguist sees on the default branch —
+# which, for this repo, is the handful of CSS/JS/HTML showcase bytes, not the
+# ~26k lines of Kotlin. That made default setup analyze javascript-typescript
+# (which has no real source here, so the analysis hard-failed) while refusing
+# java-kotlin as "not present". Declaring languages explicitly here scans the
+# actual app code.
+#
+# build-mode: none for java-kotlin extracts straight from source, so CodeQL
+# does NOT try to run a Gradle assemble — important because a real build needs
+# the NDK + the cross-compiled rclone binaries, which aren't available (and
+# aren't worth provisioning) in the analysis job.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, matching the cadence the previous default setup used.
+    - cron: '0 9 * * 1'
+
+# Least privilege: analysis only needs to read code and write scanning results.
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          # java-kotlin is intentionally NOT scanned here. CodeQL's
+          # build-mode: none does not analyze Kotlin (only build-free Java),
+          # and this module is Kotlin-only — so `none` extracts nothing and
+          # fails with "no code seen". Real Kotlin coverage requires CodeQL to
+          # trace the Kotlin compiler, i.e. a full build: JDK + Go + NDK +
+          # cross-compiled rclone + `./gradlew compile*Kotlin` (the same heavy
+          # setup as the `build` job). That's an opt-in cost — add a
+          #   - language: java-kotlin
+          #     build-mode: manual
+          # entry plus the build steps when it's worth a ~15-min CodeQL run.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@d77b13a0df3134d64a457ea9003f600b09fa1c8a # v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@d77b13a0df3134d64a457ea9003f600b09fa1c8a # v3
+        with:
+          category: "/language:${{ matrix.language }}"
