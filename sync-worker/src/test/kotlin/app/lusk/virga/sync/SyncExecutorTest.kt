@@ -60,6 +60,8 @@ class SyncExecutorTest {
             password: String,
             salt: String?,
         ) = Unit
+        override suspend fun <T> withDaemonForOAuth(block: suspend (app.lusk.virga.core.rclone.RcloneDaemon) -> T): T =
+            error("unused")
     }
 
     private fun task(
