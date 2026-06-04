@@ -32,10 +32,14 @@ object OAuthConfigModule {
             OAuthProviders.GoogleDrive.id to BuildConfig.OAUTH_CLIENT_ID_GDRIVE,
             OAuthProviders.OneDrive.id to BuildConfig.OAUTH_CLIENT_ID_ONEDRIVE,
             OAuthProviders.Dropbox.id to BuildConfig.OAUTH_CLIENT_ID_DROPBOX,
+            OAuthProviders.Box.id to BuildConfig.OAUTH_CLIENT_ID_BOX,
         ),
         redirectUris = mapOf(
             OAuthProviders.GoogleDrive.id to
                 OAuthConfig.googleAndroidRedirect(BuildConfig.OAUTH_CLIENT_ID_GDRIVE, REDIRECT_URI),
+        ),
+        clientSecrets = mapOf(
+            OAuthProviders.Box.id to BuildConfig.OAUTH_CLIENT_SECRET_BOX,
         ),
     )
 
