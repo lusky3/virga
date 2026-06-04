@@ -62,7 +62,12 @@ interface RcloneEngine {
     suspend fun providers(): List<RemoteProvider>
 
     suspend fun listRemotes(): List<Remote>
-    suspend fun createRemote(name: String, type: String, params: Map<String, String>)
+    suspend fun createRemote(
+        name: String,
+        type: String,
+        params: Map<String, String>,
+        sensitiveKeys: Set<String> = emptySet(),
+    )
 
     /**
      * Creates a `crypt:` remote that wraps [baseRemoteSpec] (e.g. "gdrive:encrypted").

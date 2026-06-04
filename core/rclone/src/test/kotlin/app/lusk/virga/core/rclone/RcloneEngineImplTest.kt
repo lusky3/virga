@@ -234,6 +234,40 @@ class RcloneEngineImplTest {
         coVerify { configManager.cleanup() }
     }
 
+    @Test fun `createRemote sets opt obscure when sensitiveKeys present`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.persistAndCleanup() } returns Unit
+
+        val capturedParams = mutableListOf<kotlinx.serialization.json.JsonObject>()
+        coEvery { apiClient.call(any(), any(), any(), "config/create", capture(capturedParams)) } returns buildJsonObject {}
+
+        engine.createRemote("box", "box", mapOf("token" to "t", "pass" to "secret"), sensitiveKeys = setOf("pass"))
+
+        val opt = capturedParams.first()["opt"]?.jsonObject
+        assertThat(opt?.get("obscure")?.jsonPrimitive?.booleanOrNull).isTrue()
+        assertThat(opt?.get("nonInteractive")?.jsonPrimitive?.booleanOrNull).isTrue()
+    }
+
+    @Test fun `createRemote omits opt obscure for token-only OAuth create`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.persistAndCleanup() } returns Unit
+
+        val capturedParams = mutableListOf<kotlinx.serialization.json.JsonObject>()
+        coEvery { apiClient.call(any(), any(), any(), "config/create", capture(capturedParams)) } returns buildJsonObject {}
+
+        engine.createRemote("gdrive", "drive", mapOf("token" to "{\"access_token\":\"x\"}"))
+
+        val opt = capturedParams.first()["opt"]?.jsonObject
+        assertThat(opt?.containsKey("obscure")).isFalse()
+        assertThat(opt?.get("nonInteractive")?.jsonPrimitive?.booleanOrNull).isTrue()
+    }
+
     // --- listDir ---
 
     @Test fun `listDir maps operations_list response to FileItem list`() = runTest(testDispatcher) {
