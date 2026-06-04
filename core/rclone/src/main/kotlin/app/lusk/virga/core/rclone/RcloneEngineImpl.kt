@@ -364,6 +364,22 @@ class RcloneEngineImpl @Inject constructor(
         })
     }
 
+    override suspend fun testConnectivity(remoteName: String): Result<Unit> {
+        val d = ensureDaemon()
+        val fs = "$remoteName:"
+        return try {
+            rc(d, "operations/about", buildJsonObject { put("fs", fs) })
+            Result.success(Unit)
+        } catch (_: Throwable) {
+            try {
+                rc(d, "operations/list", buildJsonObject { put("fs", fs); put("remote", "") })
+                Result.success(Unit)
+            } catch (e: Throwable) {
+                Result.failure(e)
+            }
+        }
+    }
+
     override suspend fun about(remoteName: String): RemoteQuota {
         val d = ensureDaemon()
         val result = rc(d, "operations/about", buildJsonObject {

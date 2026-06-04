@@ -649,6 +649,50 @@ class RcloneEngineImplTest {
 
     // --- config mutations are refused while a sync holds a lease ---
 
+    @Test fun `testConnectivity succeeds when about succeeds`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "operations/about", any()) } returns buildJsonObject {}
+
+        engine.startDaemon()
+        val result = engine.testConnectivity("gdrive")
+
+        assertThat(result.isSuccess).isTrue()
+    }
+
+    @Test fun `testConnectivity falls back to listDir when about fails`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "operations/about", any()) } throws
+            VirgaError.Rclone(message = "not supported")
+        coEvery { apiClient.call(any(), any(), any(), "operations/list", any()) } returns buildJsonObject {}
+
+        engine.startDaemon()
+        val result = engine.testConnectivity("local")
+
+        assertThat(result.isSuccess).isTrue()
+    }
+
+    @Test fun `testConnectivity returns failure when both about and listDir fail`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "operations/about", any()) } throws
+            VirgaError.Rclone(message = "not supported")
+        coEvery { apiClient.call(any(), any(), any(), "operations/list", any()) } throws
+            VirgaError.Network("unreachable")
+
+        engine.startDaemon()
+        val result = engine.testConnectivity("broken")
+
+        assertThat(result.isFailure).isTrue()
+        assertThat(result.exceptionOrNull()).isInstanceOf(VirgaError.Network::class.java)
+    }
+
+    // --- config mutations are refused while a sync holds a lease ---
+
     @Test fun `createRemote is refused while a sync holds a lease`() = runTest(testDispatcher) {
         coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
         coEvery { daemonManager.start(any()) } returns fakeDaemon

@@ -92,6 +92,10 @@ class RemoteRepository @Inject constructor(
 
     suspend fun exportConfig(): String = configManager.exportPlaintext()
 
+    /** Tests connectivity to [remoteName]. Returns [Result.failure] when unreachable. */
+    suspend fun testConnectivity(remoteName: String): Result<Unit> =
+        engine.testConnectivity(remoteName)
+
     /** Fetches storage quota for [remoteName]. Returns [Result.failure] when offline or unsupported. */
     suspend fun about(remoteName: String): Result<RemoteQuota> =
         runCatching { engine.about(remoteName) }

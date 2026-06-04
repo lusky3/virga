@@ -112,6 +112,13 @@ interface RcloneEngine {
      */
     suspend fun about(remoteName: String): RemoteQuota
 
+    /**
+     * Tests connectivity to [remoteName] by attempting `operations/about`, falling
+     * back to `operations/list` if the backend doesn't support about.
+     * Returns [Result.success] if either succeeds, [Result.failure] if both fail.
+     */
+    suspend fun testConnectivity(remoteName: String): Result<Unit>
+
     /** Emits progress until the sync completes; the terminal emission has full counts. */
     fun sync(source: String, dest: String, options: SyncOptions): Flow<SyncProgress>
     fun bisync(path1: String, path2: String, options: BisyncOptions): Flow<SyncProgress>

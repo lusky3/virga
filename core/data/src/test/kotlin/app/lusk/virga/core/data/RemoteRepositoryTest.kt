@@ -174,6 +174,26 @@ class RemoteRepositoryTest {
 
     // --- exportConfig ---
 
+    @Test fun `testConnectivity delegates to engine`() = runTest {
+        coEvery { engine.testConnectivity("gdrive") } returns Result.success(Unit)
+
+        val result = repo.testConnectivity("gdrive")
+
+        assertThat(result.isSuccess).isTrue()
+        coVerify { engine.testConnectivity("gdrive") }
+    }
+
+    @Test fun `testConnectivity propagates engine failure`() = runTest {
+        coEvery { engine.testConnectivity("broken") } returns Result.failure(VirgaError.Network("timeout"))
+
+        val result = repo.testConnectivity("broken")
+
+        assertThat(result.isFailure).isTrue()
+        assertThat(result.exceptionOrNull()).isInstanceOf(VirgaError.Network::class.java)
+    }
+
+    // --- exportConfig ---
+
     @Test fun `exportConfig delegates to configManager`() = runTest {
         coEvery { configManager.exportPlaintext() } returns "[gdrive]\ntype=drive\n"
 

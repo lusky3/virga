@@ -49,6 +49,7 @@ class SyncExecutorTest {
         override suspend fun listDir(remote: String, path: String, recurse: Boolean, filters: List<String>): List<FileItem> = emptyList()
         override suspend fun deleteFile(remote: String, path: String) = Unit
         override suspend fun moveFile(source: String, dest: String) = Unit
+        override suspend fun testConnectivity(remoteName: String) = Result.success(Unit)
         override suspend fun about(remoteName: String) =
             app.lusk.virga.core.common.model.RemoteQuota(null, null, null)
         override suspend fun providers() =
