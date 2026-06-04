@@ -234,6 +234,8 @@ fun RemotesScreen(
             onEnsureProviders = viewModel::ensureProvidersLoaded,
             allOptionsForBackend = viewModel::allOptionsForBackend,
             providersLoaded = providersLoaded,
+            pickerEntries = viewModel.pickerEntries(),
+            setupKindFor = viewModel::setupKindFor,
             existingRemotes = state.remotes,
             onDismiss = { showAdd = false; manualError = null },
             onManualConfirm = { name, type, params ->

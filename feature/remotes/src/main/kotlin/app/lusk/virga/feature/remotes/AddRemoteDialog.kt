@@ -38,7 +38,16 @@ import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import app.lusk.virga.core.common.model.RemoteOption
 import app.lusk.virga.core.common.model.RemoteProvider
+import app.lusk.virga.core.rclone.PickerEntry
+import app.lusk.virga.core.rclone.SetupKind
 import app.lusk.virga.core.rclone.oauth.OAuthProvider
+import app.lusk.virga.core.rclone.oauth.OAuthProviders
+
+private sealed interface AddStep {
+    data object Picker : AddStep
+    data class CredentialForm(val type: String, val description: String) : AddStep
+    data class WrapperPlaceholder(val type: String) : AddStep
+}
 /**
  * [AddRemoteDialog] manual section: renders typed fields for each [RemoteOption] in
  * [options], or falls back to the freeform textarea when [options] is null.
@@ -71,6 +80,10 @@ internal fun AddRemoteDialog(
      * key the lookup on this Compose-observable value.
      */
     providersLoaded: List<RemoteProvider>?,
+    /** Picker entries from the loaded ProviderCatalog, or null when not yet ready. */
+    pickerEntries: List<PickerEntry>? = null,
+    /** Classifies a backend type for routing. */
+    setupKindFor: (String) -> SetupKind = { SetupKind.Credential },
     /** All currently configured remotes — used by [CryptRemoteForm] to populate the base picker. */
     existingRemotes: List<Remote> = emptyList(),
     onDismiss: () -> Unit,
@@ -93,6 +106,9 @@ internal fun AddRemoteDialog(
     var type by remember { mutableStateOf("") }
     var params by remember { mutableStateOf("") }
     var typeMenuExpanded by remember { mutableStateOf(false) }
+
+    // Step state: when the picker is available, start in Picker mode.
+    var step by remember { mutableStateOf<AddStep>(AddStep.Picker) }
 
     val isCrypt = type.trim().equals("crypt", ignoreCase = true)
 
@@ -170,158 +186,219 @@ internal fun AddRemoteDialog(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            // OAuth sign-in chips and BYO keys are irrelevant for crypt remotes.
-            if (!isCrypt) {
-                Text(
-                    stringResource(R.string.remotes_add_sign_in_with),
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
-                    oauthProviders.forEach { provider ->
-                        val custom = provider.id in customClientIds
-                        AssistChip(
-                            onClick = { onOAuth(provider, name) },
-                            enabled = name.isNotBlank(),
-                            label = {
-                                Text(
-                                    if (custom) stringResource(R.string.remotes_byo_chip_custom, provider.displayName)
-                                    else provider.displayName,
+            when {
+                // Step: Picker — show the provider picker when available
+                step == AddStep.Picker && pickerEntries != null -> {
+                    ProviderPicker(
+                        entries = pickerEntries,
+                        setupKindFor = setupKindFor,
+                        onSelect = { entry ->
+                            type = entry.type
+                            when (val kind = setupKindFor(entry.type)) {
+                                is SetupKind.OAuth -> {
+                                    if (kind.bundled) {
+                                        // Find matching OAuthProvider and fire OAuth flow
+                                        val provider = OAuthProviders.All.firstOrNull { it.type == entry.type }
+                                        if (provider != null) {
+                                            onOAuth(provider, name)
+                                        } else {
+                                            step = AddStep.CredentialForm(entry.type, entry.description)
+                                        }
+                                    } else {
+                                        step = AddStep.CredentialForm(entry.type, entry.description)
+                                    }
+                                }
+                                SetupKind.Credential -> {
+                                    step = AddStep.CredentialForm(entry.type, entry.description)
+                                }
+                                SetupKind.Wrapper -> {
+                                    step = AddStep.WrapperPlaceholder(entry.type)
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                // Step: Wrapper placeholder
+                step is AddStep.WrapperPlaceholder -> {
+                    Text(
+                        "Coming in Phase 3",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        TextButton(onClick = { step = AddStep.Picker }) {
+                            Text(stringResource(R.string.remotes_add_cancel))
+                        }
+                    }
+                }
+
+                // Step: CredentialForm or legacy fallback (pickerEntries == null)
+                else -> {
+                    // OAuth sign-in chips and BYO keys are irrelevant for crypt remotes.
+                    if (!isCrypt && pickerEntries == null) {
+                        Text(
+                            stringResource(R.string.remotes_add_sign_in_with),
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
+                            oauthProviders.forEach { provider ->
+                                val custom = provider.id in customClientIds
+                                AssistChip(
+                                    onClick = { onOAuth(provider, name) },
+                                    enabled = name.isNotBlank(),
+                                    label = {
+                                        Text(
+                                            if (custom) stringResource(R.string.remotes_byo_chip_custom, provider.displayName)
+                                            else provider.displayName,
+                                        )
+                                    },
                                 )
-                            },
+                            }
+                        }
+
+                        ByoKeysSection(
+                            providers = oauthProviders,
+                            customClientIds = customClientIds,
+                            onSaveClientId = onSaveClientId,
+                            onClearClientId = onClearClientId,
+                        )
+
+                        HorizontalDivider()
+                        Text(
+                            stringResource(R.string.remotes_add_or_manual),
+                            style = MaterialTheme.typography.labelLarge,
                         )
                     }
-                }
 
-                ByoKeysSection(
-                    providers = oauthProviders,
-                    customClientIds = customClientIds,
-                    onSaveClientId = onSaveClientId,
-                    onClearClientId = onClearClientId,
-                )
-
-                HorizontalDivider()
-                Text(
-                    stringResource(R.string.remotes_add_or_manual),
-                    style = MaterialTheme.typography.labelLarge,
-                )
-            }
-
-            // Searchable / editable dropdown for backend type
-            ExposedDropdownMenuBox(
-                expanded = typeMenuExpanded,
-                onExpandedChange = { typeMenuExpanded = it },
-            ) {
-                OutlinedTextField(
-                    value = type,
-                    onValueChange = { type = it; typeMenuExpanded = true },
-                    label = { Text(stringResource(R.string.remotes_add_field_type)) },
-                    trailingIcon = {
-                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeMenuExpanded)
-                    },
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.None,
-                        autoCorrectEnabled = false,
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
-                )
-                if (filteredBackends.isNotEmpty()) {
-                    ExposedDropdownMenu(
-                        expanded = typeMenuExpanded,
-                        onDismissRequest = { typeMenuExpanded = false },
-                    ) {
-                        filteredBackends.forEach { (id, label) ->
-                            DropdownMenuItem(
-                                text = {
-                                    Column {
-                                        Text(label, style = MaterialTheme.typography.bodyMedium)
-                                        Text(
-                                            id,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    // Show legacy dropdown only when pickerEntries is null (fallback)
+                    if (pickerEntries == null) {
+                        ExposedDropdownMenuBox(
+                            expanded = typeMenuExpanded,
+                            onExpandedChange = { typeMenuExpanded = it },
+                        ) {
+                            OutlinedTextField(
+                                value = type,
+                                onValueChange = { type = it; typeMenuExpanded = true },
+                                label = { Text(stringResource(R.string.remotes_add_field_type)) },
+                                trailingIcon = {
+                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeMenuExpanded)
+                                },
+                                keyboardOptions = KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.None,
+                                    autoCorrectEnabled = false,
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
+                            )
+                            if (filteredBackends.isNotEmpty()) {
+                                ExposedDropdownMenu(
+                                    expanded = typeMenuExpanded,
+                                    onDismissRequest = { typeMenuExpanded = false },
+                                ) {
+                                    filteredBackends.forEach { (id, label) ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Column {
+                                                    Text(label, style = MaterialTheme.typography.bodyMedium)
+                                                    Text(
+                                                        id,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    )
+                                                }
+                                            },
+                                            onClick = {
+                                                type = id
+                                                typeMenuExpanded = false
+                                            },
+                                            contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
                                         )
                                     }
-                                },
-                                onClick = {
-                                    type = id
-                                    typeMenuExpanded = false
-                                },
-                                contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
-                            )
+                                }
+                            }
                         }
                     }
-                }
-            }
 
-            // Crypt wizard replaces generic typed / freeform fields when type == "crypt".
-            if (isCrypt) {
-                CryptRemoteForm(
-                    existingRemotes = existingRemotes,
-                    selectedBaseRemote = cryptBaseRemote,
-                    onBaseRemoteSelected = { cryptBaseRemote = it },
-                    basePath = cryptBasePath,
-                    onBasePathChange = { cryptBasePath = it },
-                    password = cryptPassword,
-                    onPasswordChange = { cryptPassword = it },
-                    salt = cryptSalt,
-                    onSaltChange = { cryptSalt = it },
-                )
-            } else if (schemaOptions != null) {
-                TypedOptionFields(
-                    options = schemaOptions,
-                    values = typedValues,
-                    showAdvanced = showAdvanced,
-                    onToggleAdvanced = { showAdvanced = !showAdvanced },
-                )
-            } else {
-                OutlinedTextField(
-                    value = params,
-                    onValueChange = { params = it },
-                    label = { Text(stringResource(R.string.remotes_add_field_params)) },
-                    placeholder = { Text(stringResource(R.string.remotes_add_params_placeholder)) },
-                    supportingText = { Text(stringResource(R.string.remotes_add_params_supporting)) },
-                    minLines = 3,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-
-            if (error != null) {
-                Text(
-                    error,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.remotes_add_cancel)) }
-                TextButton(
-                    onClick = {
-                        if (isCrypt) {
-                            onCryptConfirm(name.trim(), cryptBaseRemote, cryptBasePath, cryptPassword, cryptSalt)
-                        } else {
-                            val paramsText = if (schemaOptions != null) {
-                                // Serialise typed values to the same "key=value\n..." format the
-                                // VM's addRemote() parser already understands — no persistence change.
-                                typedValues.entries
-                                    .filter { (_, v) -> v.isNotBlank() }
-                                    .joinToString("\n") { (k, v) -> "$k=$v" }
-                            } else {
-                                params
-                            }
-                            onManualConfirm(name, type, paramsText)
-                        }
-                    },
-                    enabled = if (isCrypt) {
-                        nameUsable && cryptBaseRemote.isNotBlank() && cryptPassword.isNotBlank()
+                    // Crypt wizard replaces generic typed / freeform fields when type == "crypt".
+                    if (isCrypt) {
+                        CryptRemoteForm(
+                            existingRemotes = existingRemotes,
+                            selectedBaseRemote = cryptBaseRemote,
+                            onBaseRemoteSelected = { cryptBaseRemote = it },
+                            basePath = cryptBasePath,
+                            onBasePathChange = { cryptBasePath = it },
+                            password = cryptPassword,
+                            onPasswordChange = { cryptPassword = it },
+                            salt = cryptSalt,
+                            onSaltChange = { cryptSalt = it },
+                        )
+                    } else if (schemaOptions != null) {
+                        TypedOptionFields(
+                            options = schemaOptions,
+                            values = typedValues,
+                            showAdvanced = showAdvanced,
+                            onToggleAdvanced = { showAdvanced = !showAdvanced },
+                        )
                     } else {
-                        nameUsable && type.isNotBlank()
-                    },
-                ) { Text(stringResource(R.string.remotes_add_create)) }
+                        OutlinedTextField(
+                            value = params,
+                            onValueChange = { params = it },
+                            label = { Text(stringResource(R.string.remotes_add_field_params)) },
+                            placeholder = { Text(stringResource(R.string.remotes_add_params_placeholder)) },
+                            supportingText = { Text(stringResource(R.string.remotes_add_params_supporting)) },
+                            minLines = 3,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+
+                    if (error != null) {
+                        Text(
+                            error,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        if (pickerEntries != null) {
+                            TextButton(onClick = { step = AddStep.Picker; type = "" }) {
+                                Text(stringResource(R.string.remotes_add_cancel))
+                            }
+                        } else {
+                            TextButton(onClick = onDismiss) { Text(stringResource(R.string.remotes_add_cancel)) }
+                        }
+                        TextButton(
+                            onClick = {
+                                if (isCrypt) {
+                                    onCryptConfirm(name.trim(), cryptBaseRemote, cryptBasePath, cryptPassword, cryptSalt)
+                                } else {
+                                    val paramsText = if (schemaOptions != null) {
+                                        typedValues.entries
+                                            .filter { (_, v) -> v.isNotBlank() }
+                                            .joinToString("\n") { (k, v) -> "$k=$v" }
+                                    } else {
+                                        params
+                                    }
+                                    onManualConfirm(name, type, paramsText)
+                                }
+                            },
+                            enabled = if (isCrypt) {
+                                nameUsable && cryptBaseRemote.isNotBlank() && cryptPassword.isNotBlank()
+                            } else {
+                                nameUsable && type.isNotBlank()
+                            },
+                        ) { Text(stringResource(R.string.remotes_add_create)) }
+                    }
+                }
             }
         }
     }

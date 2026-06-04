@@ -68,6 +68,8 @@ fun AddRemoteScreen(
             onEnsureProviders = viewModel::ensureProvidersLoaded,
             allOptionsForBackend = viewModel::allOptionsForBackend,
             providersLoaded = providersLoaded,
+            pickerEntries = viewModel.pickerEntries(),
+            setupKindFor = viewModel::setupKindFor,
             existingRemotes = state.remotes,
             onDismiss = { finishOnce() },
             onManualConfirm = { name, type, params ->
