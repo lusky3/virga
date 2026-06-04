@@ -32,10 +32,15 @@ data-modeling one.
 1. **Config depth:** full schema-driven form for credential backends — typed
    fields, required vs advanced, examples/enums, sensitive masking, validation.
 2. **OAuth coverage:** bundled first-party clients for Google Drive, Dropbox,
-   Box, and OneDrive; BYOK for every other OAuth backend.
-3. **OAuth mechanism:** hybrid. The bundled four keep Virga's Custom Tabs + PKCE
-   flow; the long tail is driven by rclone's own daemon OAuth over the RC config
-   flow, so no per-provider endpoint metadata is maintained.
+   Box, and OneDrive; BYOK for every other OAuth backend. Drive, Dropbox, and
+   OneDrive already ship today; Box is *added* to the bundled set in 0.2.0.
+3. **OAuth mechanism:** hybrid. Drive/Dropbox/OneDrive keep Virga's Custom Tabs +
+   PKCE flow with no secret in the APK. Box is the exception: its token exchange
+   needs a `client_secret`, so bundling Box means shipping a (non-confidential,
+   public-client) secret and teaching `OAuthTokenExchanger` to send it — the
+   strict "no secret in the APK" property holds only for the PKCE three. The long
+   tail is driven by rclone's own daemon OAuth over the RC config flow, so no
+   per-provider endpoint metadata is maintained.
 4. **Meta/wrapper backends:** in scope. crypt, union, alias, combine, chunker,
    compress, cache, and hasher get a "wrap an existing remote" sub-flow.
 5. **Connectivity test before save:** kept (see Validation).
@@ -50,8 +55,13 @@ A classification layer over `providers()`. Each backend resolves to one
 `SetupKind`:
 
 - `Credential` — render the schema form.
-- `OAuth(bundled: Boolean)` — bundled four vs BYOK long-tail. Detected by the
-  backend carrying OAuth options (`token` plus `client_id`/`client_secret`).
+- `OAuth(bundled: Boolean)` — bundled four vs BYOK long-tail. A backend is
+  treated as OAuth when its option set contains a `token` option alongside
+  `client_id` (rclone's convention for the OAuth backends). `bundled` is not
+  inferred from options at all; it's set by the override map below for exactly
+  the four we ship clients for. Everything else with that option shape is BYOK.
+  This keeps a stray non-OAuth backend that happens to expose a `token` field
+  from being misread — bundling is an allowlist, not a heuristic.
 - `Wrapper` — references other remotes rather than credentials (the fixed set:
   crypt, union, alias, combine, chunker, compress, cache, hasher).
 
@@ -69,6 +79,12 @@ SizeSuffix, Duration, enum), examples (value + help), default, required flag,
 `config/providers` payload; the design fills any gaps in `RcloneJson` parsing
 and the model.
 
+One concrete consequence: `RemotesViewModel.optionsForBackend` today filters
+`!it.advanced`, so it can't back the form — the "Advanced" expander needs the
+advanced options too. The form reads the full option list and partitions it
+into required / basic / advanced itself; the existing filtered accessor stays
+for whatever else uses it, or gets a sibling that returns everything.
+
 ### UI (`feature:remotes`)
 
 - **Picker:** searchable. Popular cloud pinned, then "All providers," then
@@ -85,9 +101,23 @@ and the model.
 ### Creation path
 
 All three kinds converge on `engine.createRemote(name, type, params)`
-(`config/create`). Sensitive option values are obscured through rclone before
-the config is written (rclone's obscure step), never stored in cleartext. OAuth
-kinds attach the resulting token to the params.
+(`config/create`). Today that call sets only `opt.nonInteractive`; the existing
+`createCryptRemote` adds `opt.obscure=true` because its values are plaintext
+passwords. The blanket `obscure` flag can't move up to `createRemote` unchanged:
+it would also rewrite an OAuth `token` (already-formatted JSON) and corrupt it.
+So `createRemote` gains a way to name *which* keys to obscure — a
+`sensitiveKeys: Set<String>` derived from each option's `IsPassword`/sensitive
+flag — and obscures only those. `createCryptRemote` collapses into this once the
+crypt path runs through the generic form. The mock engine in the unit tests
+takes the same signature.
+
+The BYOK rclone-delegated flow is the one path that does *not* hand fully-formed
+params to `createRemote`: rclone's daemon runs the interactive OAuth and writes
+the remote itself as the exchange completes. To keep "one creation path" honest,
+that flow still routes its non-token params (and the obscure decision) through
+the same code, and the post-create connectivity test is identical — only the
+token acquisition differs. The freeform editor and `importConfig` remain
+fallbacks, not a parallel creation path.
 
 ## Data flow
 
@@ -143,8 +173,9 @@ the bundled four and the credential/wrapper forms don't depend on the spike.
 - `local` is excluded from the picker; it's device storage, and sync-source
   folder picking already exists elsewhere.
 - No per-provider bespoke screens. Everything credential-side is schema-driven.
-- crypt's standalone screen is removed in favor of the wrapper sub-flow (no
-  third crypt UI).
+- crypt's standalone screen is removed; crypt is configured only through the
+  wrapper sub-flow. Existing crypt remotes in `rclone.conf` keep working — the
+  config format is unchanged, only the dedicated creation screen goes away.
 - No remote *editing* redesign in 0.2.0 beyond what create needs; editing an
   existing remote through the same dynamic form is a candidate follow-up, not a
   requirement here.
@@ -152,7 +183,8 @@ the bundled four and the credential/wrapper forms don't depend on the spike.
 ## Affected modules
 
 - `core:rclone` — `ProviderCatalog`, `RemoteOption`/`RcloneJson` extensions,
-  rclone-delegated OAuth helper, obscure-on-create.
+  rclone-delegated OAuth helper, `createRemote` sensitive-key obscuring, Box
+  added to `OAuthProvider` plus `client_secret` support in `OAuthTokenExchanger`.
 - `feature:remotes` — picker, dynamic form, the three sub-flows, ViewModel
   state, removal of the standalone crypt screen.
 - `core:designsystem` — any shared form-field components the form needs.
