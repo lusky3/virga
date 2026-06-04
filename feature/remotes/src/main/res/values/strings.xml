@@ -37,6 +37,9 @@
     <string name="remotes_add_name_invalid">Name can\'t contain \':\' or \'/\'</string>
     <string name="remotes_add_sign_in_with">Sign in with</string>
     <string name="remotes_add_or_manual">Or configure manually</string>
+    <!-- Provider picker -->
+    <string name="remotes_picker_search">Search providers…</string>
+    <string name="remotes_picker_wrappers_header">Advanced · wrap a remote</string>
     <!-- Bring-your-own OAuth keys -->
     <string name="remotes_byo_chip_custom">%1$s (your key)</string>
     <string name="remotes_byo_toggle">Use your own keys (recommended for regular use)</string>
