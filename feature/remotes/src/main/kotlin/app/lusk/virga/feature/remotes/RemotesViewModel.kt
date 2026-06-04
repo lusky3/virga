@@ -16,6 +16,8 @@ import app.lusk.virga.core.datastore.OAuthKeyStore
 import app.lusk.virga.core.rclone.PickerEntry
 import app.lusk.virga.core.rclone.ProviderCatalog
 import app.lusk.virga.core.rclone.SetupKind
+import app.lusk.virga.core.rclone.api.RcApiClient
+import app.lusk.virga.core.rclone.oauth.DaemonOAuthOrchestrator
 import app.lusk.virga.core.rclone.oauth.OAuthConfig
 import app.lusk.virga.core.rclone.oauth.OAuthProvider
 import app.lusk.virga.core.rclone.oauth.OAuthProviders
@@ -73,6 +75,7 @@ class RemotesViewModel @Inject constructor(
     private val oauthStore: OAuthStore,
     private val tokenExchanger: OAuthTokenExchanger,
     private val oauthKeyStore: OAuthKeyStore,
+    private val apiClient: RcApiClient,
     private val dispatchers: DispatcherProvider,
     private val pendingRemoteResult: PendingRemoteResult,
 ) : ViewModel() {
@@ -399,6 +402,76 @@ class RemotesViewModel @Inject constructor(
     }
 
     // --- OAuth ----------------------------------------------------------
+
+    private var daemonOAuthOrchestrator: DaemonOAuthOrchestrator? = null
+
+    /** Starts daemon-mediated OAuth for a non-bundled provider. Observe [launchUrl] for the auth URL. */
+    fun startDaemonOAuth(
+        type: String,
+        name: String,
+        clientId: String? = null,
+        clientSecret: String? = null,
+    ) {
+        viewModelScope.launch {
+            transient.update { it.copy(oauthInProgress = true, message = null) }
+            try {
+                repository.withDaemonForOAuth { daemon ->
+                    val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
+                    daemonOAuthOrchestrator = orchestrator
+                    orchestrator.start(name.trim(), type, clientId, clientSecret, daemon, this)
+                    // Observe orchestrator state until terminal.
+                    orchestrator.state.collect { s ->
+                        when (s) {
+                            is DaemonOAuthOrchestrator.State.AwaitingAuth -> {
+                                _launchUrl.value = s.url
+                            }
+                            is DaemonOAuthOrchestrator.State.Complete -> {
+                                pendingRemoteResult.created(s.remoteName)
+                                val connResult = repository.testConnectivity(s.remoteName)
+                                transient.update {
+                                    it.copy(
+                                        oauthInProgress = false,
+                                        message = if (connResult.isFailure) {
+                                            context.getString(R.string.remotes_msg_connectivity_warning, s.remoteName)
+                                        } else null,
+                                    )
+                                }
+                                return@collect
+                            }
+                            is DaemonOAuthOrchestrator.State.Failed -> {
+                                transient.update { it.copy(oauthInProgress = false, message = s.message) }
+                                return@collect
+                            }
+                            is DaemonOAuthOrchestrator.State.TimedOut -> {
+                                transient.update {
+                                    it.copy(
+                                        oauthInProgress = false,
+                                        message = context.getString(R.string.remotes_msg_oauth_timed_out),
+                                    )
+                                }
+                                return@collect
+                            }
+                            is DaemonOAuthOrchestrator.State.Cancelled -> {
+                                transient.update { it.copy(oauthInProgress = false) }
+                                return@collect
+                            }
+                            else -> {} // Idle, Starting — no-op
+                        }
+                    }
+                }
+                // Refresh remote list after successful daemon config
+                repository.refresh()
+            } catch (e: Throwable) {
+                transient.update { it.copy(oauthInProgress = false, message = e.toUserMessage()) }
+            } finally {
+                daemonOAuthOrchestrator = null
+            }
+        }
+    }
+
+    fun cancelDaemonOAuth() {
+        daemonOAuthOrchestrator?.cancel()
+    }
 
     /** Starts the OAuth flow for [provider]; observe [launchUrl] to launch Custom Tabs. */
     fun startOAuth(provider: OAuthProvider, remoteName: String) {

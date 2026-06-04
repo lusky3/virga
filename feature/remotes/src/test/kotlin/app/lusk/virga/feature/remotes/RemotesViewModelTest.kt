@@ -98,6 +98,8 @@ class RemotesViewModelTest {
         ),
     )
 
+    private val apiClient: app.lusk.virga.core.rclone.api.RcApiClient = mockk(relaxed = true)
+
     // Route the VM's IO work onto the test scheduler so advanceUntilIdle() awaits it.
     private val testDispatchers = object : app.lusk.virga.core.common.dispatchers.DispatcherProvider {
         override val main = mainDispatcher.dispatcher
@@ -106,7 +108,7 @@ class RemotesViewModelTest {
     }
 
     private fun viewModel(cfg: OAuthConfig = config()) =
-        RemotesViewModel(context, repository, cfg, store, tokenExchanger, keyStore, testDispatchers, PendingRemoteResult())
+        RemotesViewModel(context, repository, cfg, store, tokenExchanger, keyStore, apiClient, testDispatchers, PendingRemoteResult())
 
     // --- Provider list -----------------------------------------------------------
 
@@ -948,5 +950,53 @@ class RemotesViewModelTest {
         assertThat(resultSuccess).isTrue()
         assertThat(vm.uiState.value.message).contains("could not verify connectivity")
         collector.cancel()
+    }
+
+    // --- startDaemonOAuth / cancelDaemonOAuth -----------------------------------
+
+    @Test
+    fun `startDaemonOAuth surfaces error on failure`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.withDaemonForOAuth<Unit>(any()) } throws
+            app.lusk.virga.core.common.error.VirgaError.Rclone(message = "token exchange failed")
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.startDaemonOAuth(type = "pcloud", name = "mypcloud")
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.message).contains("token exchange failed")
+        assertThat(vm.uiState.value.oauthInProgress).isFalse()
+        collector.cancel()
+    }
+
+    @Test
+    fun `startDaemonOAuth sets oauthInProgress false after completion`() = runTest(mainDispatcher.dispatcher) {
+        // Simulate orchestrator completing immediately via withDaemonForOAuth
+        coEvery { repository.withDaemonForOAuth<Unit>(any()) } returns Unit
+        coEvery { repository.refresh() } returns Result.success(Unit)
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.startDaemonOAuth(type = "pcloud", name = "mypcloud")
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.oauthInProgress).isFalse()
+        collector.cancel()
+    }
+
+    @Test
+    fun `cancelDaemonOAuth when no orchestrator is a no-op`() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        // Should not throw
+        vm.cancelDaemonOAuth()
+        assertThat(vm.uiState.value.oauthInProgress).isFalse()
+    }
+
+    @Test
+    fun `oauthInProgress is false by default`() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        assertThat(vm.uiState.value.oauthInProgress).isFalse()
     }
 }
