@@ -114,6 +114,18 @@ class RemotesViewModel @Inject constructor(
             ?.filter { !it.advanced }
     }
 
+    /**
+     * Returns the FULL [RemoteOption] list (basic + advanced) for [backendType], or
+     * null when the schema is not loaded or the type is unknown. Use this for the
+     * credential form — [TypedOptionFields] partitions basic/advanced itself and
+     * needs the advanced options to render the "Show advanced options" expander.
+     */
+    fun allOptionsForBackend(backendType: String): List<RemoteOption>? {
+        val loaded = _providers.value ?: return null
+        if (loaded.isEmpty()) return null
+        return loaded.firstOrNull { it.name.equals(backendType, ignoreCase = true) }?.options
+    }
+
     init {
         // Observe the redirect activity's results for the lifetime of the VM.
         viewModelScope.launch {

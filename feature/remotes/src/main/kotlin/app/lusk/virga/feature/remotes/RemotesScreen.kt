@@ -232,7 +232,7 @@ fun RemotesScreen(
             error = manualError,
             customClientIds = state.customClientIds,
             onEnsureProviders = viewModel::ensureProvidersLoaded,
-            optionsForBackend = viewModel::optionsForBackend,
+            allOptionsForBackend = viewModel::allOptionsForBackend,
             providersLoaded = providersLoaded,
             existingRemotes = state.remotes,
             onDismiss = { showAdd = false; manualError = null },

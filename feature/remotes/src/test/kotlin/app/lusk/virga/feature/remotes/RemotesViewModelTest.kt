@@ -570,6 +570,36 @@ class RemotesViewModelTest {
     }
 
     @Test
+    fun `allOptionsForBackend returns advanced options too`() = runTest(mainDispatcher.dispatcher) {
+        val basicOpt = RemoteOption(
+            name = "client_id", help = "ID", type = "string",
+            required = false, isPassword = false, default = null,
+            examples = emptyList(), advanced = false,
+        )
+        val advancedOpt = RemoteOption(
+            name = "root_folder_id", help = "Root folder", type = "string",
+            required = false, isPassword = false, default = null,
+            examples = emptyList(), advanced = true,
+        )
+        coEvery { repository.providers() } returns listOf(
+            RemoteProvider("drive", "Google Drive", listOf(basicOpt, advancedOpt)),
+        )
+        val vm = viewModel()
+        vm.ensureProvidersLoaded()
+        advanceUntilIdle()
+
+        val all = vm.allOptionsForBackend("drive")
+        assertThat(all).isNotNull()
+        assertThat(all!!).hasSize(2)
+        assertThat(all.map { it.name }).containsExactly("client_id", "root_folder_id")
+
+        // optionsForBackend still excludes advanced
+        val filtered = vm.optionsForBackend("drive")
+        assertThat(filtered).hasSize(1)
+        assertThat(filtered!!.first().name).isEqualTo("client_id")
+    }
+
+    @Test
     fun `ensureProvidersLoaded is idempotent - does not re-fetch if already loaded`() = runTest(mainDispatcher.dispatcher) {
         coEvery { repository.providers() } returns emptyList()
         val vm = viewModel()

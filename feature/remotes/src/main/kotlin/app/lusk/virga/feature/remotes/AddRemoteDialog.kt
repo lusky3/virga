@@ -60,10 +60,10 @@ internal fun AddRemoteDialog(
      */
     onEnsureProviders: () -> Unit,
     /**
-     * Returns the non-advanced option list for a backend type, or null when the
-     * schema is not yet loaded or the type is unknown → fall back to freeform.
+     * Returns the full option list (basic + advanced) for a backend type, or null
+     * when the schema is not yet loaded or the type is unknown → fall back to freeform.
      */
-    optionsForBackend: (String) -> List<RemoteOption>?,
+    allOptionsForBackend: (String) -> List<RemoteOption>?,
     /**
      * The loaded provider schema (null until loaded). Passed in only so the typed
      * fields recompute when the schema arrives AFTER the user already picked a
@@ -125,7 +125,7 @@ internal fun AddRemoteDialog(
     var showAdvanced by remember { mutableStateOf(false) }
 
     // Recompute which options to render whenever type changes.
-    val schemaOptions: List<RemoteOption>? = remember(type, providersLoaded) { optionsForBackend(type.trim()) }
+    val schemaOptions: List<RemoteOption>? = remember(type, providersLoaded) { allOptionsForBackend(type.trim()) }
 
     // Reset typed values when the user picks a different backend type.
     LaunchedEffect(type) {
