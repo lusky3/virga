@@ -16,6 +16,7 @@ import app.lusk.virga.core.rclone.oauth.OAuthProviders
 import app.lusk.virga.core.rclone.oauth.OAuthResult
 import app.lusk.virga.core.rclone.oauth.OAuthStore
 import app.lusk.virga.core.rclone.oauth.OAuthTokenExchanger
+import app.lusk.virga.core.rclone.SetupKind
 import com.google.common.truth.Truth.assertThat
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -835,6 +836,54 @@ class RemotesViewModelTest {
     }
 
     private fun OAuthProvider.unused() = Unit  // silence unused-import warning for OAuthProvider import
+
+    // --- ProviderCatalog exposure -----------------------------------------------
+
+    @Test
+    fun `pickerEntries returns catalog entries after providers loaded`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.providers() } returns listOf(
+            RemoteProvider("drive", "Google Drive", listOf(
+                RemoteOption("client_id", "", "string", false, false, null, emptyList(), false),
+                RemoteOption("token", "", "string", false, false, null, emptyList(), true),
+            )),
+            RemoteProvider("sftp", "SFTP", listOf(
+                RemoteOption("host", "", "string", true, false, null, emptyList(), false),
+            )),
+            RemoteProvider("crypt", "Encrypt/Decrypt", listOf(
+                RemoteOption("remote", "", "string", true, false, null, emptyList(), false),
+            )),
+        )
+        val vm = viewModel()
+        vm.ensureProvidersLoaded()
+        advanceUntilIdle()
+
+        val entries = vm.pickerEntries()
+        assertThat(entries).isNotNull()
+        assertThat(entries!!.map { it.type }).containsAtLeast("drive", "sftp", "crypt")
+    }
+
+    @Test
+    fun `setupKindFor classifies providers correctly`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.providers() } returns listOf(
+            RemoteProvider("drive", "Google Drive", listOf(
+                RemoteOption("client_id", "", "string", false, false, null, emptyList(), false),
+                RemoteOption("token", "", "string", false, false, null, emptyList(), true),
+            )),
+            RemoteProvider("sftp", "SFTP", listOf(
+                RemoteOption("host", "", "string", true, false, null, emptyList(), false),
+            )),
+            RemoteProvider("crypt", "Encrypt/Decrypt", listOf(
+                RemoteOption("remote", "", "string", true, false, null, emptyList(), false),
+            )),
+        )
+        val vm = viewModel()
+        vm.ensureProvidersLoaded()
+        advanceUntilIdle()
+
+        assertThat(vm.setupKindFor("drive")).isEqualTo(SetupKind.OAuth(bundled = true))
+        assertThat(vm.setupKindFor("sftp")).isEqualTo(SetupKind.Credential)
+        assertThat(vm.setupKindFor("crypt")).isEqualTo(SetupKind.Wrapper)
+    }
 
     // --- sensitiveKeys derivation & connectivity test --------------------------
 

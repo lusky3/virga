@@ -13,6 +13,9 @@ import app.lusk.virga.core.common.model.RemoteQuota
 import app.lusk.virga.core.data.PendingRemoteResult
 import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.datastore.OAuthKeyStore
+import app.lusk.virga.core.rclone.PickerEntry
+import app.lusk.virga.core.rclone.ProviderCatalog
+import app.lusk.virga.core.rclone.SetupKind
 import app.lusk.virga.core.rclone.oauth.OAuthConfig
 import app.lusk.virga.core.rclone.oauth.OAuthProvider
 import app.lusk.virga.core.rclone.oauth.OAuthProviders
@@ -137,6 +140,16 @@ class RemotesViewModel @Inject constructor(
         if (loaded.isEmpty()) return null
         return loaded.firstOrNull { it.name.equals(backendType, ignoreCase = true) }?.options
     }
+
+    /** The [ProviderCatalog] built from the loaded schema, or null before load. */
+    private val catalog: ProviderCatalog?
+        get() = _providers.value?.let { if (it.isEmpty()) null else ProviderCatalog(it) }
+
+    /** Picker entries for the Add-remote picker, or null when schema is not loaded. */
+    fun pickerEntries(): List<PickerEntry>? = catalog?.pickerEntries()
+
+    /** Classification of a backend type for routing the Add-remote flow. */
+    fun setupKindFor(type: String): SetupKind = catalog?.setupKind(type) ?: SetupKind.Credential
 
     init {
         // Observe the redirect activity's results for the lifetime of the VM.
