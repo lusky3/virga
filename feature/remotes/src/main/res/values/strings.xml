@@ -72,6 +72,12 @@
     <string name="remotes_crypt_hide_password">Hide password</string>
     <string name="remotes_msg_crypt_created">Encrypted remote \"%1$s\" created.</string>
 
+    <!-- Wrapper sub-flow (WrapperForm) -->
+    <string name="remotes_wrapper_no_base_remotes">No remotes found. Add a cloud remote first, then wrap it.</string>
+    <string name="remotes_wrapper_pick_base">Wrap an existing remote</string>
+    <string name="remotes_wrapper_base_remote_label">Base remote</string>
+    <string name="remotes_wrapper_pick_upstreams">Select upstream remotes</string>
+
     <!-- ViewModel user-facing messages -->
     <string name="remotes_msg_oauth_not_configured">%1$s OAuth client ID isn\'t configured yet.</string>
     <string name="remotes_msg_sign_in_failed">Sign-in failed: %1$s</string>
