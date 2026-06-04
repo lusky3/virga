@@ -39,6 +39,9 @@ class OAuthTokenExchanger @Inject constructor(
         val verifier: String,
         val clientId: String,
         val redirectUri: String,
+        /** Sent as `client_secret` in the token exchange when the provider needs one
+         *  (Box). Null for public PKCE clients (Drive/Dropbox/OneDrive). */
+        val clientSecret: String? = null,
         /**
          * Remote name the user typed before the round-trip. Carried in the
          * (singleton-stored) pending auth so it survives ViewModel/process
@@ -76,6 +79,7 @@ class OAuthTokenExchanger @Inject constructor(
             .add("redirect_uri", p.redirectUri)
             .add("client_id", p.clientId)
             .add("code_verifier", p.verifier)
+            .apply { if (!p.clientSecret.isNullOrBlank()) add("client_secret", p.clientSecret) }
             .build()
         val request = Request.Builder()
             .url(p.provider.tokenEndpoint)
