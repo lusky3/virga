@@ -39,10 +39,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - language: java-kotlin
-            build-mode: none
           - language: actions
             build-mode: none
+          # java-kotlin is intentionally NOT scanned here. CodeQL's
+          # build-mode: none does not analyze Kotlin (only build-free Java),
+          # and this module is Kotlin-only — so `none` extracts nothing and
+          # fails with "no code seen". Real Kotlin coverage requires CodeQL to
+          # trace the Kotlin compiler, i.e. a full build: JDK + Go + NDK +
+          # cross-compiled rclone + `./gradlew compile*Kotlin` (the same heavy
+          # setup as the `build` job). That's an opt-in cost — add a
+          #   - language: java-kotlin
+          #     build-mode: manual
+          # entry plus the build steps when it's worth a ~15-min CodeQL run.
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
