@@ -71,6 +71,7 @@ fun AddRemoteScreen(
             pickerEntries = viewModel.pickerEntries(),
             setupKindFor = viewModel::setupKindFor,
             existingRemotes = state.remotes,
+            oauthInProgress = state.oauthInProgress,
             onDismiss = { finishOnce() },
             onManualConfirm = { name, type, params ->
                 manualError = null
@@ -91,6 +92,10 @@ fun AddRemoteScreen(
                 }
             },
             onOAuth = { provider, name -> viewModel.startOAuth(provider, name) },
+            onDaemonOAuth = { type, name, clientId, clientSecret ->
+                viewModel.startDaemonOAuth(type, name, clientId, clientSecret)
+            },
+            onCancelDaemonOAuth = viewModel::cancelDaemonOAuth,
             onSaveClientId = viewModel::saveClientId,
             onClearClientId = viewModel::clearClientId,
         )

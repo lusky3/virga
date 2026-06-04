@@ -5,12 +5,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -30,10 +34,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
 import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import app.lusk.virga.core.common.model.RemoteOption
@@ -86,11 +94,14 @@ internal fun AddRemoteDialog(
     setupKindFor: (String) -> SetupKind = { SetupKind.Credential },
     /** All currently configured remotes — used by [CryptRemoteForm] to populate the base picker. */
     existingRemotes: List<Remote> = emptyList(),
+    oauthInProgress: Boolean = false,
     onDismiss: () -> Unit,
     onManualConfirm: (name: String, type: String, params: String) -> Unit,
     onCryptConfirm: (name: String, baseRemote: String, basePath: String, password: String, salt: String) -> Unit = { _, _, _, _, _ -> },
     onWrapperConfirm: (name: String, type: String, params: String) -> Unit = { _, _, _ -> },
     onOAuth: (provider: OAuthProvider, name: String) -> Unit,
+    onDaemonOAuth: (type: String, name: String, clientId: String?, clientSecret: String?) -> Unit = { _, _, _, _ -> },
+    onCancelDaemonOAuth: () -> Unit = {},
     onSaveClientId: (providerId: String, clientId: String) -> Unit,
     onClearClientId: (providerId: String) -> Unit,
 ) {
@@ -394,14 +405,25 @@ internal fun AddRemoteDialog(
                         }
                     }
 
-                    // Show OAuth BYOK hint when entering credentials for a non-bundled OAuth provider.
+                    // For non-bundled OAuth providers, show the daemon OAuth form instead of
+                    // the old "use rclone authorize" hint. The form handles credential input,
+                    // progress, and cancellation.
                     if ((step as? AddStep.CredentialForm)?.isOAuthByok == true) {
-                        Text(
-                            stringResource(R.string.remotes_oauth_byok_hint, type.trim()),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(bottom = VirgaSpacing.xs),
+                        DaemonOAuthForm(
+                            providerName = type.trim(),
+                            oauthInProgress = oauthInProgress,
+                            onConnect = { clientId, clientSecret ->
+                                onDaemonOAuth(
+                                    type.trim(),
+                                    name.trim(),
+                                    clientId.ifBlank { null },
+                                    clientSecret.ifBlank { null },
+                                )
+                            },
+                            onCancel = onCancelDaemonOAuth,
+                            modifier = Modifier.fillMaxWidth(),
                         )
+                        return@Column
                     }
 
                     // Crypt wizard replaces generic typed / freeform fields when type == "crypt".
@@ -572,4 +594,68 @@ private fun buildWrapperParams(
         .filter { (_, v) -> v.isNotBlank() }
         .joinToString("\n") { (k, v) -> "$k=$v" }
     return if (extras.isBlank()) baseParam else "$baseParam\n$extras"
+}
+
+/**
+ * Form shown when the user picks a non-bundled OAuth provider (bundled=false).
+ * Lets them optionally provide their own client credentials, then starts the
+ * daemon-mediated OAuth flow via [onConnect].
+ */
+@Composable
+private fun DaemonOAuthForm(
+    providerName: String,
+    oauthInProgress: Boolean,
+    onConnect: (clientId: String, clientSecret: String) -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var clientId by rememberSaveable { mutableStateOf("") }
+    var clientSecret by rememberSaveable { mutableStateOf("") }
+
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
+        Text(
+            text = "Connect to $providerName",
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Text(
+            text = "Optionally enter your own API credentials. Leave blank to use the defaults.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedTextField(
+            value = clientId,
+            onValueChange = { clientId = it },
+            label = { Text("Client ID (optional)") },
+            singleLine = true,
+            enabled = !oauthInProgress,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            value = clientSecret,
+            onValueChange = { clientSecret = it },
+            label = { Text("Client Secret (optional)") },
+            singleLine = true,
+            enabled = !oauthInProgress,
+            modifier = Modifier.fillMaxWidth(),
+            visualTransformation = PasswordVisualTransformation(),
+        )
+        if (oauthInProgress) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                Text("Waiting for authorization…", style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = onCancel) { Text("Cancel") }
+            }
+        } else {
+            Button(
+                onClick = { onConnect(clientId, clientSecret) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Connect")
+            }
+        }
+    }
 }

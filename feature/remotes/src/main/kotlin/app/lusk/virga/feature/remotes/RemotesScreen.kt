@@ -237,6 +237,7 @@ fun RemotesScreen(
             pickerEntries = viewModel.pickerEntries(),
             setupKindFor = viewModel::setupKindFor,
             existingRemotes = state.remotes,
+            oauthInProgress = state.oauthInProgress,
             onDismiss = { showAdd = false; manualError = null },
             onManualConfirm = { name, type, params ->
                 manualError = null
@@ -257,6 +258,10 @@ fun RemotesScreen(
                 }
             },
             onOAuth = { provider, name -> viewModel.startOAuth(provider, name) },
+            onDaemonOAuth = { type, name, clientId, clientSecret ->
+                viewModel.startDaemonOAuth(type, name, clientId, clientSecret)
+            },
+            onCancelDaemonOAuth = viewModel::cancelDaemonOAuth,
             onSaveClientId = viewModel::saveClientId,
             onClearClientId = viewModel::clearClientId,
         )
