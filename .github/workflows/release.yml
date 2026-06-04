@@ -86,9 +86,12 @@ jobs:
       - name: Build rclone binaries
         run: ./scripts/build-rclone.sh
 
-      # Gate: never publish a tag whose unit tests fail.
+      # Gate: never publish a tag whose unit tests fail. `test` is the lifecycle
+      # task aggregating every module's unit tests; the app has no release-type
+      # unit-test task (testBuildType = debug), so the debug-variant unit tests
+      # are the authoritative suite — identical logic, run on non-minified classes.
       - name: Unit tests (release gate)
-        run: ./gradlew testFossReleaseUnitTest
+        run: ./gradlew test
 
       - name: Decode release keystore
         # Stored as base64 to keep it out of the repo and yaml-safe.
