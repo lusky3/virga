@@ -42,7 +42,7 @@ class SyncExecutorTest {
         override suspend fun cleanupStaleConfigIfIdle() = Unit
         override suspend fun isDaemonHealthy() = true
         override suspend fun listRemotes(): List<Remote> = emptyList()
-        override suspend fun createRemote(name: String, type: String, params: Map<String, String>) = Unit
+        override suspend fun createRemote(name: String, type: String, params: Map<String, String>, sensitiveKeys: Set<String>) = Unit
         override suspend fun deleteRemote(name: String) = Unit
         override suspend fun getConfig() = RcloneConfig(emptyMap())
         override suspend fun importConfig(confContent: String) = Unit
