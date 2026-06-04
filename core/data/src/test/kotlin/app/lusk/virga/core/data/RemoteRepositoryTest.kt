@@ -65,24 +65,34 @@ class RemoteRepositoryTest {
     // --- addRemote ---
 
     @Test fun `addRemote calls engine_createRemote and then refresh on success`() = runTest {
-        coEvery { engine.createRemote("new", "drive", any()) } returns Unit
+        coEvery { engine.createRemote("new", "drive", any(), any()) } returns Unit
         coEvery { engine.listRemotes() } returns listOf(Remote("new", "drive"))
 
         val result = repo.addRemote("new", "drive", mapOf("client_id" to "abc"))
 
         assertThat(result.isSuccess).isTrue()
-        coVerify { engine.createRemote("new", "drive", mapOf("client_id" to "abc")) }
+        coVerify { engine.createRemote("new", "drive", mapOf("client_id" to "abc"), emptySet()) }
         coVerify { remoteDao.replaceAll(match { it.size == 1 && it[0].name == "new" }) }
     }
 
     @Test fun `addRemote returns failure and skips refresh when engine fails`() = runTest {
-        coEvery { engine.createRemote(any(), any(), any()) } throws
+        coEvery { engine.createRemote(any(), any(), any(), any()) } throws
             VirgaError.Rclone(message = "duplicate")
 
         val result = repo.addRemote("dup", "drive", emptyMap())
 
         assertThat(result.isFailure).isTrue()
         coVerify(exactly = 0) { remoteDao.replaceAll(any()) }
+    }
+
+    @Test fun `addRemote forwards sensitiveKeys to the engine`() = runTest {
+        coEvery { engine.createRemote(any(), any(), any(), any()) } returns Unit
+        coEvery { engine.listRemotes() } returns listOf(Remote("sftp1", "sftp"))
+
+        val result = repo.addRemote("sftp1", "sftp", mapOf("pass" to "p"), sensitiveKeys = setOf("pass"))
+
+        assertThat(result.isSuccess).isTrue()
+        coVerify { engine.createRemote("sftp1", "sftp", mapOf("pass" to "p"), setOf("pass")) }
     }
 
     // --- deleteRemote ---

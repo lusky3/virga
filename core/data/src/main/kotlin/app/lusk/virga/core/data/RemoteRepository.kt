@@ -49,8 +49,13 @@ class RemoteRepository @Inject constructor(
         )
     }
 
-    suspend fun addRemote(name: String, type: String, params: Map<String, String>): Result<Unit> =
-        runCatching { engine.createRemote(name, type, params) }
+    suspend fun addRemote(
+        name: String,
+        type: String,
+        params: Map<String, String>,
+        sensitiveKeys: Set<String> = emptySet(),
+    ): Result<Unit> =
+        runCatching { engine.createRemote(name, type, params, sensitiveKeys) }
             .mapCatching { refresh().getOrThrow() }
 
     /**
