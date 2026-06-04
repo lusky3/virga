@@ -250,6 +250,12 @@ fun RemotesScreen(
                     if (success) showAdd = false else manualError = error
                 }
             },
+            onWrapperConfirm = { name, type, params ->
+                manualError = null
+                viewModel.addRemote(name, type, params) { success, error ->
+                    if (success) showAdd = false else manualError = error
+                }
+            },
             onOAuth = { provider, name -> viewModel.startOAuth(provider, name) },
             onSaveClientId = viewModel::saveClientId,
             onClearClientId = viewModel::clearClientId,

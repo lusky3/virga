@@ -89,6 +89,7 @@ internal fun AddRemoteDialog(
     onDismiss: () -> Unit,
     onManualConfirm: (name: String, type: String, params: String) -> Unit,
     onCryptConfirm: (name: String, baseRemote: String, basePath: String, password: String, salt: String) -> Unit = { _, _, _, _, _ -> },
+    onWrapperConfirm: (name: String, type: String, params: String) -> Unit = { _, _, _ -> },
     onOAuth: (provider: OAuthProvider, name: String) -> Unit,
     onSaveClientId: (providerId: String, clientId: String) -> Unit,
     onClearClientId: (providerId: String) -> Unit,
@@ -125,6 +126,22 @@ internal fun AddRemoteDialog(
             cryptBasePath = ""
             cryptPassword = ""
             cryptSalt = ""
+        }
+    }
+
+    // Wrapper sub-flow state (non-crypt wrappers)
+    var wrapperSelectedRemote by remember { mutableStateOf("") }
+    var wrapperSelectedRemotes by remember { mutableStateOf(emptySet<String>()) }
+    val wrapperTypedValues = remember { mutableStateMapOf<String, String>() }
+    var wrapperShowAdvanced by remember { mutableStateOf(false) }
+
+    // Reset wrapper state when step changes away from wrapper
+    LaunchedEffect(step) {
+        if (step !is AddStep.WrapperPlaceholder) {
+            wrapperSelectedRemote = ""
+            wrapperSelectedRemotes = emptySet()
+            wrapperTypedValues.clear()
+            wrapperShowAdvanced = false
         }
     }
 
@@ -220,20 +237,72 @@ internal fun AddRemoteDialog(
                     )
                 }
 
-                // Step: Wrapper placeholder
+                // Step: Wrapper sub-flow
                 step is AddStep.WrapperPlaceholder -> {
-                    Text(
-                        "Coming in Phase 3",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    val wrapperType = (step as AddStep.WrapperPlaceholder).type
+                    val isWrapperCrypt = wrapperType.equals("crypt", ignoreCase = true)
+                    val isUnion = wrapperType.equals("union", ignoreCase = true)
+                    val wrapperOptions: List<RemoteOption>? = remember(wrapperType, providersLoaded) {
+                        allOptionsForBackend(wrapperType)
+                    }
+
+                    WrapperForm(
+                        wrapperType = wrapperType,
+                        existingRemotes = existingRemotes,
+                        schemaOptions = wrapperOptions,
+                        selectedRemote = wrapperSelectedRemote,
+                        onRemoteSelected = { wrapperSelectedRemote = it },
+                        selectedRemotes = wrapperSelectedRemotes,
+                        onRemotesChanged = { wrapperSelectedRemotes = it },
+                        typedValues = wrapperTypedValues,
+                        showAdvanced = wrapperShowAdvanced,
+                        onToggleAdvanced = { wrapperShowAdvanced = !wrapperShowAdvanced },
+                        cryptBaseRemote = cryptBaseRemote,
+                        onCryptBaseRemoteSelected = { cryptBaseRemote = it },
+                        cryptBasePath = cryptBasePath,
+                        onCryptBasePathChange = { cryptBasePath = it },
+                        cryptPassword = cryptPassword,
+                        onCryptPasswordChange = { cryptPassword = it },
+                        cryptSalt = cryptSalt,
+                        onCryptSaltChange = { cryptSalt = it },
                     )
+
+                    if (error != null) {
+                        Text(
+                            error,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End,
                     ) {
-                        TextButton(onClick = { step = AddStep.Picker }) {
+                        TextButton(onClick = { step = AddStep.Picker; type = "" }) {
                             Text(stringResource(R.string.remotes_add_cancel))
                         }
+                        TextButton(
+                            onClick = {
+                                if (isWrapperCrypt) {
+                                    onCryptConfirm(name.trim(), cryptBaseRemote, cryptBasePath, cryptPassword, cryptSalt)
+                                } else {
+                                    val paramsText = buildWrapperParams(
+                                        wrapperType = wrapperType,
+                                        isUnion = isUnion,
+                                        selectedRemote = wrapperSelectedRemote,
+                                        selectedRemotes = wrapperSelectedRemotes,
+                                        typedValues = wrapperTypedValues,
+                                    )
+                                    onWrapperConfirm(name.trim(), wrapperType, paramsText)
+                                }
+                            },
+                            enabled = nameUsable && when {
+                                isWrapperCrypt -> cryptBaseRemote.isNotBlank() && cryptPassword.isNotBlank()
+                                isUnion -> wrapperSelectedRemotes.isNotEmpty()
+                                else -> wrapperSelectedRemote.isNotBlank()
+                            },
+                        ) { Text(stringResource(R.string.remotes_add_create)) }
                     }
                 }
 
@@ -471,4 +540,26 @@ private fun ByoKeysSection(
             }
         }
     }
+}
+
+/**
+ * Builds the key=value parameter text for a wrapper remote.
+ * Union uses `upstreams = remote1: remote2:`, others use `remote = name:`.
+ */
+private fun buildWrapperParams(
+    wrapperType: String,
+    isUnion: Boolean,
+    selectedRemote: String,
+    selectedRemotes: Set<String>,
+    typedValues: Map<String, String>,
+): String {
+    val baseParam = if (isUnion) {
+        "upstreams=" + selectedRemotes.joinToString(" ") { "$it:" }
+    } else {
+        "remote=$selectedRemote:"
+    }
+    val extras = typedValues.entries
+        .filter { (_, v) -> v.isNotBlank() }
+        .joinToString("\n") { (k, v) -> "$k=$v" }
+    return if (extras.isBlank()) baseParam else "$baseParam\n$extras"
 }
