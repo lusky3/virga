@@ -92,11 +92,12 @@ jobs:
 
       - name: Decode release keystore
         # Stored as base64 to keep it out of the repo and yaml-safe.
-        # Expected secret names:
-        #   RELEASE_KEYSTORE_BASE64 — base64 of the .jks file
-        #   RELEASE_KEYSTORE_PASSWORD — keystore password
-        #   RELEASE_KEY_ALIAS — key alias inside the store
-        #   RELEASE_KEY_PASSWORD — key password
+        # Expected config:
+        #   RELEASE_KEYSTORE_BASE64 (secret) — base64 of the .jks file
+        #   RELEASE_KEYSTORE_PASSWORD (secret) — keystore password
+        #   RELEASE_KEY_ALIAS (variable) — key alias inside the store (not
+        #     sensitive, so stored as an Actions variable, read via vars.*)
+        #   RELEASE_KEY_PASSWORD (secret) — key password
         if: env.HAS_KEYSTORE == 'true'
         env:
           HAS_KEYSTORE: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' }}
@@ -123,7 +124,8 @@ jobs:
           VIRGA_OAUTH_CLIENT_ID_ONEDRIVE: ${{ secrets.OAUTH_CLIENT_ID_ONEDRIVE }}
           VIRGA_OAUTH_CLIENT_ID_DROPBOX: ${{ secrets.OAUTH_CLIENT_ID_DROPBOX }}
           VIRGA_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
-          VIRGA_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          # Key alias is non-sensitive and stored as an Actions *variable*.
+          VIRGA_KEY_ALIAS: ${{ vars.RELEASE_KEY_ALIAS }}
           VIRGA_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
           VIRGA_VERSION_NAME: ${{ steps.version.outputs.version }}
           VIRGA_VERSION_CODE: ${{ steps.version.outputs.code }}
