@@ -1,0 +1,882 @@
+/* =============================================================
+   Virga showcase site — styles.css
+   Calm, premium, atmospheric. The hero gradient and the canvas
+   precipitation are the only "effects"; everything else is clean
+   type, generous space, and tonal surfaces.
+   Owns: styles.css, assets/logo.svg, assets/favicon.svg
+   ============================================================= */
+
+/* Manrope (SIL OFL), self-hosted — see assets/fonts/Manrope-OFL.txt.
+   A single variable TTF covers the display weights (500/700/800). */
+@font-face {
+  font-family: "Manrope";
+  src:
+    url("assets/fonts/manrope.ttf") format("truetype-variations"),
+    url("assets/fonts/manrope.ttf") format("truetype");
+  font-weight: 500 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ---------- Tokens: light (default) ---------- */
+:root {
+  /* Brand seeds — constant in both themes */
+  --virga-blue: #1e6fd9;
+  --virga-teal: #1fa8a0;
+  --virga-blue-dark: #0b3c7a;
+  --virga-error: #ba1a1a;
+  --virga-success: #2e7d32;
+  --virga-warning: #b26a00;
+
+  /* Surfaces & text (light) */
+  --bg: #f7f9fc;
+  --surface: #ffffff;
+  --surface-2: #eef3fa;
+  --text: #0e1726;
+  --text-muted: #4a5568;
+  --border: #d8e0ec;
+
+  /* Accent used for links/inline emphasis — readable in this theme */
+  --accent: var(--virga-blue);
+  --accent-strong: var(--virga-blue-dark);
+
+  /* Hero atmosphere. Used sparingly, never behind body text w/o a scrim. */
+  --grad-hero: linear-gradient(160deg, var(--virga-blue), var(--virga-teal));
+  /* A scrim laid over the gradient so white text clears AA. */
+  --grad-hero-scrim: linear-gradient(
+    160deg,
+    rgba(8, 30, 60, 0.34),
+    rgba(8, 40, 60, 0.3)
+  );
+
+  /* Legible blue->teal for gradient-clipped TEXT and white-on-fill badges.
+     The teal end is darkened (#147F79) so the title clears AA on --bg and
+     white clears AA on the step-number fill. */
+  --grad-title: linear-gradient(100deg, var(--virga-blue), #147f79);
+
+  /* Type */
+  --font-display: "Manrope", system-ui, sans-serif;
+  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* Spacing scale (web rhythm) */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --space-3xl: 80px;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 28px;
+
+  /* Elevation */
+  --shadow: 0 6px 24px rgba(11, 60, 122, 0.1);
+
+  /* Layout */
+  --content-max: 1080px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --dur: 600ms;
+}
+
+/* ---------- Tokens: dark override ---------- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0a1220;
+    --surface: #111b2e;
+    --surface-2: #16223a;
+    --text: #e8eef7;
+    --text-muted: #9fb0c6;
+    --border: #233148;
+
+    /* Lightened accents for contrast on dark surfaces */
+    --virga-teal-bright: #4fd0c7;
+    --virga-blue-bright: #5b9bf0;
+    --accent: var(--virga-blue-bright);
+    --accent-strong: var(--virga-teal-bright);
+
+    /* Dark hero gradient starts at the deep navy */
+    --grad-hero: linear-gradient(
+      160deg,
+      var(--virga-blue-dark),
+      var(--virga-teal)
+    );
+    --grad-hero-scrim: linear-gradient(
+      160deg,
+      rgba(4, 12, 24, 0.46),
+      rgba(4, 20, 28, 0.4)
+    );
+
+    /* On dark, the brightened accents are both well over AA for title text. */
+    --grad-title: linear-gradient(
+      100deg,
+      var(--virga-blue-bright),
+      var(--virga-teal-bright)
+    );
+
+    --shadow: 0 6px 28px rgba(0, 0, 0, 0.45);
+  }
+}
+
+/* ---------- Reset / base ---------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: clamp(1rem, 0.97rem + 0.2vw, 1.0625rem);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  margin: 0 0 var(--space-md);
+  text-wrap: balance;
+}
+
+h2 {
+  font-size: clamp(1.6rem, 1.3rem + 1.4vw, 2.25rem);
+}
+
+h3 {
+  font-weight: 700;
+  font-size: 1.2rem;
+  letter-spacing: -0.005em;
+}
+
+p {
+  margin: 0 0 var(--space-md);
+}
+
+a {
+  color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+a:hover {
+  color: var(--accent-strong);
+}
+
+img,
+svg,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ---------- Focus ---------- */
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}
+
+/* Skip-link convenience (HTML may provide one) */
+.skip-link {
+  position: absolute;
+  left: var(--space-md);
+  top: -100px;
+  z-index: 100;
+  background: var(--surface);
+  color: var(--text);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  transition: top 160ms var(--ease);
+}
+.skip-link:focus {
+  top: var(--space-md);
+}
+
+/* ---------- Layout helpers ---------- */
+.section {
+  padding-block: var(--space-3xl);
+  padding-inline: var(--space-md);
+}
+
+.section > :where(h2, p, ul, ol, .features, .steps),
+.section > :where(.section__lead, .hero__cta, .btn-row),
+.site-footer > * {
+  max-width: var(--content-max);
+  margin-inline: auto;
+}
+
+.section__lead {
+  color: var(--text-muted);
+  max-width: 60ch;
+  font-size: 1.0625rem;
+}
+
+/* =============================================================
+   Header
+   ============================================================= */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  /* Full-bleed background, but the row caps at the content width:
+     extra viewport beyond --content-max becomes symmetric padding. */
+  padding-block: var(--space-md);
+  padding-inline: max(var(--space-md), calc((100% - var(--content-max)) / 2));
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: saturate(140%) blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+
+.site-header__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.25rem;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.site-header__brand img {
+  width: 34px;
+  height: 34px;
+}
+
+.site-nav {
+  display: flex;
+  align-items: center;
+}
+
+.site-nav__list {
+  display: flex;
+  align-items: center;
+  gap: clamp(var(--space-md), 2vw, var(--space-xl));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.site-nav a {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: var(--space-xs) 0;
+  position: relative;
+  transition: color 160ms var(--ease);
+}
+
+.site-nav a:hover,
+.site-nav a[aria-current="true"] {
+  color: var(--text);
+}
+
+.site-nav a[aria-current="true"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+/* The GitHub link (last in the list) reads as a quiet pill */
+.site-nav__list li:last-child a {
+  padding-inline: var(--space-md);
+  padding-block: var(--space-xs);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+}
+.site-nav__list li:last-child a:hover {
+  background: var(--surface-2);
+}
+
+/* Mobile menu toggle — hidden on desktop */
+.nav-toggle {
+  display: none;
+  appearance: none;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  cursor: pointer;
+}
+.nav-toggle::before {
+  content: "";
+  width: 20px;
+  height: 2px;
+  background: currentColor;
+  box-shadow:
+    0 -6px 0 currentColor,
+    0 6px 0 currentColor;
+  transition: transform 200ms var(--ease);
+}
+.nav-toggle[aria-expanded="true"]::before {
+  box-shadow: 0 0 0 currentColor;
+  transform: rotate(45deg);
+}
+/* The label is the button's accessible name; the bars are drawn via ::before. */
+.nav-toggle__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* =============================================================
+   Hero
+   ============================================================= */
+.hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding-block: clamp(
+    var(--space-2xl),
+    8vw,
+    calc(var(--space-3xl) + var(--space-xl))
+  );
+  padding-inline: var(--space-md);
+  text-align: center;
+}
+
+/* The atmospheric gradient panel sits behind the hero, with a scrim
+   so any white text on it clears AA. It never sits behind body copy. */
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(
+      120% 90% at 50% -10%,
+      rgba(31, 168, 160, 0.16),
+      transparent 60%
+    ),
+    var(--bg);
+}
+
+/* Precipitation canvas — pure decoration, fills the hero */
+.hero__precip {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.hero > * {
+  max-width: 780px;
+  margin-inline: auto;
+}
+
+.hero__mark {
+  width: clamp(72px, 12vw, 104px);
+  height: auto;
+  margin: 0 auto var(--space-lg);
+  filter: drop-shadow(0 8px 22px rgba(31, 168, 160, 0.25));
+}
+
+.hero__title {
+  font-size: clamp(2.4rem, 1.7rem + 3.4vw, 4rem);
+  margin-bottom: var(--space-md);
+  background: var(--grad-title);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  /* Fallback solid color is set on h1 above; gradient text is decorative
+     emphasis, the same string is also the accessible name in HTML. */
+}
+
+@supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+  .hero__title {
+    color: var(--accent-strong);
+  }
+}
+
+.hero__promise {
+  color: var(--text-muted);
+  font-size: clamp(1.05rem, 1rem + 0.4vw, 1.25rem);
+  max-width: 58ch;
+  margin: 0 auto var(--space-xl);
+}
+
+.hero__cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  justify-content: center;
+  margin-bottom: var(--space-lg);
+}
+
+/* Small honest note under the CTAs */
+.hero__note,
+.hero > p:last-child {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  letter-spacing: 0.01em;
+  margin: 0 auto;
+}
+
+/* =============================================================
+   Buttons
+   ============================================================= */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.85em 1.5em;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    transform 160ms var(--ease),
+    box-shadow 160ms var(--ease),
+    background-color 160ms var(--ease),
+    border-color 160ms var(--ease);
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+.btn:active {
+  transform: translateY(0);
+}
+
+.btn--primary {
+  background: var(--virga-blue);
+  color: #ffffff;
+  box-shadow: var(--shadow);
+}
+.btn--primary:hover {
+  background: var(--accent-strong);
+  color: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  /* Keep the primary readable: white on the brand blue is ~4.9:1 */
+  .btn--primary {
+    background: var(--virga-blue);
+  }
+  .btn--primary:hover {
+    background: var(--virga-blue-bright);
+    color: #08111f;
+  }
+}
+
+.btn--secondary {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+.btn--secondary:hover {
+  background: var(--surface-2);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+}
+
+/* Coming-soon / disabled store buttons (CTA section) */
+.btn[aria-disabled="true"],
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+/* =============================================================
+   Sections: intro / privacy / cta variants
+   ============================================================= */
+.section--intro p {
+  color: var(--text-muted);
+  font-size: clamp(1.05rem, 1rem + 0.45vw, 1.3rem);
+  max-width: 62ch;
+}
+.section--intro p:first-of-type {
+  color: var(--text);
+}
+
+.section--privacy {
+  background: var(--surface-2);
+}
+
+.section--cta {
+  text-align: center;
+}
+.section--cta .hero__cta,
+.section--cta .btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  justify-content: center;
+  margin-top: var(--space-lg);
+}
+.section--cta p {
+  color: var(--text-muted);
+  max-width: 60ch;
+  margin-inline: auto;
+}
+
+/* Privacy bullet facts */
+.section--privacy ul {
+  display: grid;
+  gap: var(--space-md);
+  margin-top: var(--space-lg);
+}
+.section--privacy li {
+  position: relative;
+  padding-left: var(--space-xl);
+  color: var(--text);
+  max-width: 70ch;
+}
+.section--privacy li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.45em;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--virga-teal);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--virga-teal) 22%, transparent);
+}
+
+/* =============================================================
+   Features grid
+   ============================================================= */
+.features {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-lg);
+  margin-top: var(--space-2xl);
+}
+
+.feature {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-xl);
+  transition:
+    transform 220ms var(--ease),
+    border-color 220ms var(--ease),
+    box-shadow 220ms var(--ease);
+}
+.feature:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--virga-teal) 45%, var(--border));
+  box-shadow: var(--shadow);
+}
+
+.feature__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: var(--space-md);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--accent);
+}
+.feature__icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.feature__title {
+  margin-bottom: var(--space-sm);
+}
+
+.feature__body {
+  color: var(--text-muted);
+  margin: 0;
+  font-size: 0.98rem;
+}
+
+/* =============================================================
+   How it works — steps
+   ============================================================= */
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-lg);
+  margin-top: var(--space-2xl);
+  counter-reset: step;
+}
+
+.step {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-xl);
+}
+
+.step__num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: var(--space-md);
+  border-radius: 50%;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.15rem;
+  color: #ffffff;
+  background: var(--grad-title);
+}
+
+.step__title {
+  margin-bottom: var(--space-sm);
+}
+
+.step__body {
+  color: var(--text-muted);
+  margin: 0;
+  font-size: 0.98rem;
+}
+
+/* Connecting line between steps on wide screens */
+@media (min-width: 760px) {
+  .steps {
+    position: relative;
+  }
+}
+
+/* =============================================================
+   Footer
+   ============================================================= */
+.site-footer {
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  padding: var(--space-2xl) var(--space-md);
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+.site-footer a {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.site-footer a:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+.site-footer nav,
+.site-footer ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md) var(--space-lg);
+  margin-bottom: var(--space-md);
+}
+.site-footer p {
+  margin: 0 0 var(--space-xs);
+  max-width: 70ch;
+}
+
+/* Links on the tinted privacy panel use the stronger accent: brand blue on
+   --surface-2 is only 4.35:1, under AA for normal text. --accent-strong is
+   navy in light and teal-bright in dark, both well clear of 4.5:1. */
+.section--privacy a:not(.btn) {
+  color: var(--accent-strong);
+}
+
+/* =============================================================
+   Reveal-on-scroll
+   data-reveal elements are VISIBLE BY DEFAULT (no-JS / reduced-motion).
+   JS adds [data-reveal-init] only when motion is allowed; that class
+   sets the pre-animation hidden state, and [data-revealed] animates in.
+   ============================================================= */
+[data-reveal] {
+  opacity: 1;
+  transform: none;
+}
+
+/* JS adds .is-pre-reveal (only when motion is allowed) to set the hidden
+   pre-animation state, then swaps it for .is-revealed to animate in. */
+[data-reveal].is-pre-reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+  will-change: opacity, transform;
+}
+
+[data-reveal].is-revealed {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+
+/* =============================================================
+   Responsive
+   ============================================================= */
+@media (max-width: 920px) {
+  .features,
+  .steps {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  /* The toggle only appears when JS can actually drive the menu. With JS
+     off, .js is absent: no toggle, and the full nav stays visible below. */
+  .js .nav-toggle {
+    display: inline-flex;
+  }
+
+  .site-nav {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: var(--space-sm) var(--space-md) var(--space-md);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    box-shadow: var(--shadow);
+  }
+
+  /* With JS on, the menu is closed by default and opens via .is-open
+     (JS keeps aria-expanded in sync). No `hidden` attribute is used, so the
+     desktop nav is never semantically hidden from assistive tech. */
+  .js .site-nav {
+    display: none;
+  }
+  .js .site-nav.is-open {
+    display: flex;
+  }
+
+  /* Stack the links vertically inside the dropdown. */
+  .site-nav__list {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    width: 100%;
+  }
+
+  .site-nav a {
+    display: block;
+    padding: var(--space-md) var(--space-xs);
+    border-bottom: 1px solid var(--border);
+    font-size: 1.05rem;
+  }
+  .site-nav__list li:last-child a {
+    border-bottom: none;
+    margin-top: var(--space-sm);
+    text-align: center;
+  }
+  .site-nav a[aria-current="true"]::after {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .features,
+  .steps {
+    grid-template-columns: 1fr;
+  }
+
+  .section {
+    padding-block: var(--space-2xl);
+  }
+
+  .feature,
+  .step {
+    padding: var(--space-lg);
+  }
+
+  .btn {
+    width: 100%;
+  }
+  .hero__cta .btn,
+  .section--cta .btn {
+    flex: 1 1 auto;
+  }
+}
+
+/* =============================================================
+   Reduced motion — kill every animation/transition we add.
+   The precipitation + reveal end-states are handled here and in JS.
+   ============================================================= */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Reveal elements always show their final state. */
+  [data-reveal],
+  [data-reveal].is-pre-reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .btn:hover,
+  .feature:hover {
+    transform: none;
+  }
+}

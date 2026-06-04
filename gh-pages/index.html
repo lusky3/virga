@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Virga — weather for your data</title>
+    <meta
+      name="description"
+      content="Virga is an open-source Android app that backs up and syncs your phone to cloud storage. A working backup in under a minute, with every rclone capability one tap away. Credentials stay encrypted on your device."
+    />
+
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <link rel="canonical" href="https://lusky3.github.io/virga/" />
+
+    <!-- Open Graph / Twitter -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Virga — weather for your data" />
+    <meta
+      property="og:description"
+      content="Open-source backup and sync for Android, powered by a bundled rclone engine. A working backup in under a minute; your credentials never leave the device."
+    />
+    <meta property="og:url" content="https://lusky3.github.io/virga/" />
+    <meta
+      property="og:image"
+      content="https://lusky3.github.io/virga/assets/og-image.png"
+    />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Virga — weather for your data" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Virga — weather for your data" />
+    <meta
+      name="twitter:description"
+      content="Open-source backup and sync for Android, powered by a bundled rclone engine. Your credentials never leave the device."
+    />
+    <meta
+      name="twitter:image"
+      content="https://lusky3.github.io/virga/assets/og-image.png"
+    />
+
+    <!-- Manrope (display headings only; body uses the system stack) is self-hosted,
+       not loaded from a third party: no external request, no tracking, nothing to
+       tamper with. The @font-face lives in styles.css. -->
+    <link
+      rel="preload"
+      href="assets/fonts/manrope.ttf"
+      as="font"
+      type="font/ttf"
+      crossorigin
+    />
+
+    <link rel="stylesheet" href="styles.css" />
+    <script src="main.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#hero">Skip to content</a>
+
+    <header class="site-header">
+      <a class="site-header__brand" href="#hero">
+        <img
+          class="site-header__logo"
+          src="assets/logo.svg"
+          alt="Virga logo: a blue-to-teal streak trailed by fading droplets"
+          width="40"
+          height="40"
+        />
+        <span class="site-header__name">Virga</span>
+      </a>
+
+      <button class="nav-toggle" aria-expanded="false" aria-controls="site-nav">
+        <span class="nav-toggle__bars" aria-hidden="true"></span>
+        <span class="nav-toggle__label">Menu</span>
+      </button>
+
+      <nav id="site-nav" class="site-nav" aria-label="Primary">
+        <ul class="site-nav__list">
+          <li><a href="#features">Features</a></li>
+          <li><a href="#privacy">Privacy</a></li>
+          <li><a href="#how">How it works</a></li>
+          <li><a href="#get">Get Virga</a></li>
+          <li>
+            <a href="https://github.com/lusky3/virga" rel="noopener">GitHub</a>
+          </li>
+        </ul>
+      </nav>
+    </header>
+
+    <main>
+      <section id="hero" class="hero">
+        <canvas id="precip" class="hero__precip" aria-hidden="true"></canvas>
+
+        <div class="hero__inner">
+          <img
+            class="hero__mark"
+            src="assets/logo.svg"
+            alt=""
+            aria-hidden="true"
+            width="120"
+            height="120"
+          />
+          <h1 class="hero__title" data-reveal>Weather for your data</h1>
+          <p class="hero__promise" data-reveal>
+            Connect a cloud account, pick a folder, and have a working backup in
+            under a minute — while every rclone capability stays one deliberate
+            tap away.
+          </p>
+          <div class="hero__cta" data-reveal>
+            <a
+              class="btn btn--primary"
+              href="https://github.com/lusky3/virga/releases"
+              rel="noopener"
+              >Get it on GitHub</a
+            >
+            <a
+              class="btn btn--secondary"
+              href="https://github.com/lusky3/virga/wiki"
+              rel="noopener"
+              >Read the docs</a
+            >
+          </div>
+          <p class="hero__note" data-reveal>
+            Open source · Android 8+ · Pre-release (0.1.0)
+          </p>
+        </div>
+      </section>
+
+      <section id="what" class="section section--intro">
+        <div class="section__inner">
+          <p data-reveal>
+            Virga backs up your phone to the cloud and keeps it there. You point
+            it at a folder and an account; it copies your files up, watches for
+            changes, and runs again when you've said it should. The hard part —
+            talking to whichever storage you use — runs on the device through a
+            bundled rclone engine, so you're never managing servers or pasting
+            config by hand.
+          </p>
+          <p data-reveal>
+            A <em>virga</em> is rain that falls but evaporates before it reaches
+            the ground: weather you can watch, calm and legible, even
+            mid-motion. That's the feeling we're after for your files. Backing
+            up shouldn't be a spinner you stare at or a wall of jargon you
+            decode. It's your data moving, and you can see exactly what's
+            happening to it.
+          </p>
+        </div>
+      </section>
+
+      <section id="features" class="section">
+        <div class="section__inner">
+          <h2 class="section__title" data-reveal>What you get</h2>
+          <ul class="features">
+            <li class="feature" data-reveal>
+              <span class="feature__icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  width="28"
+                  height="28"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7v5l3 2" />
+                </svg>
+              </span>
+              <h3 class="feature__title">Set up in under a minute</h3>
+              <p class="feature__body">
+                A guided first sync walks you through it: connect an account,
+                pick a folder, done. No manual config, no rclone vocabulary
+                before you're ready for it.
+              </p>
+            </li>
+
+            <li class="feature" data-reveal>
+              <span class="feature__icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  width="28"
+                  height="28"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path
+                    d="M7 18a4 4 0 0 1 0-8 5.5 5.5 0 0 1 10.6-1.3A3.8 3.8 0 0 1 18 18z"
+                  />
+                </svg>
+              </span>
+              <h3 class="feature__title">Your clouds, your way</h3>
+              <p class="feature__body">
+                Sign in to Google Drive, OneDrive, or Dropbox in a few taps.
+                Need something else? Point Virga at S3, WebDAV, SFTP, and over
+                70 storage products through rclone.
+              </p>
+            </li>
+
+            <li class="feature" data-reveal>
+              <span class="feature__icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  width="28"
+                  height="28"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M8 7l-4 4 4 4" />
+                  <path d="M4 11h12" />
+                  <path d="M16 17l4-4-4-4" />
+                  <path d="M20 13H9" />
+                </svg>
+              </span>
+              <h3 class="feature__title">One-way or two-way</h3>
+              <p class="feature__body">
+                Upload, Download, or Two-way sync, whichever fits the folder.
+                Mirror is opt-in, and it tells you exactly what it'll delete
+                before it touches anything.
+              </p>
+            </li>
+
+            <li class="feature" data-reveal>
+              <span class="feature__icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  width="28"
+                  height="28"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7v5l3.5 2" />
+                </svg>
+              </span>
+              <h3 class="feature__title">Runs on your terms</h3>
+              <p class="feature__body">
+                Set a schedule, hold runs to Wi-Fi, wait for the charger, and
+                cap upload speed separately on Wi-Fi and mobile data. Virga
+                waits for the right moment instead of fighting your battery.
+              </p>
+            </li>
+
+            <li class="feature" data-reveal>
+              <span class="feature__icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  width="28"
+                  height="28"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" />
+                  <path d="M9.5 12l1.8 1.8L15 10" />
+                </svg>
+              </span>
+              <h3 class="feature__title">Private by design</h3>
+              <p class="feature__body">
+                Your credentials are encrypted on the device, and rclone runs
+                locally — nothing passes through anyone's server. There's no
+                tracking, and crash reports stay off until you turn them on.
+              </p>
+            </li>
+
+            <li class="feature" data-reveal>
+              <span class="feature__icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  width="28"
+                  height="28"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M4 6h16" />
+                  <path d="M7 12h10" />
+                  <path d="M10 18h4" />
+                </svg>
+              </span>
+              <h3 class="feature__title">Power when you want it</h3>
+              <p class="feature__body">
+                Filters, checksum verification, and a dry-run preview sit a tap
+                away. The simple path stays simple; the depth shows up only when
+                you reach for it.
+              </p>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="privacy" class="section section--privacy">
+        <div class="section__inner">
+          <h2 class="section__title" data-reveal>
+            Your files, nobody else's business
+          </h2>
+          <p class="section__lead" data-reveal>
+            Virga has no account with us and no server in the middle. Here's
+            what that means in practice.
+          </p>
+          <ul class="privacy-list">
+            <li data-reveal>
+              Your cloud config is encrypted on the device using the Android
+              Keystore.
+            </li>
+            <li data-reveal>
+              The rclone engine binds to loopback only; it's never exposed to
+              your network.
+            </li>
+            <li data-reveal>
+              OAuth sign-in uses PKCE, and the tokens it returns stay on your
+              phone.
+            </li>
+            <li data-reveal>
+              The F-Droid build ships with no telemetry of any kind.
+            </li>
+            <li data-reveal>
+              Crash reporting is opt-in, and it redacts file paths, remote
+              names, and tokens.
+            </li>
+          </ul>
+          <p class="privacy-list__more" data-reveal>
+            <a
+              href="https://github.com/lusky3/virga/blob/main/docs/privacy-policy.md"
+              rel="noopener"
+              >Read the full privacy policy</a
+            >
+          </p>
+        </div>
+      </section>
+
+      <section id="how" class="section">
+        <div class="section__inner">
+          <h2 class="section__title" data-reveal>How it works</h2>
+          <ol class="steps">
+            <li class="step" data-reveal>
+              <span class="step__num" aria-hidden="true">1</span>
+              <h3 class="step__title">Connect a cloud account</h3>
+              <p class="step__body">
+                Sign in to Google Drive, OneDrive, or Dropbox — or add another
+                provider through rclone. Your credentials are encrypted and stay
+                on the phone.
+              </p>
+            </li>
+            <li class="step" data-reveal>
+              <span class="step__num" aria-hidden="true">2</span>
+              <h3 class="step__title">Pick a folder to back up</h3>
+              <p class="step__body">
+                Choose a Source on your phone and a Destination in the cloud,
+                then say which way it should flow: Upload, Download, or Two-way
+                sync.
+              </p>
+            </li>
+            <li class="step" data-reveal>
+              <span class="step__num" aria-hidden="true">3</span>
+              <h3 class="step__title">Virga keeps it in sync</h3>
+              <p class="step__body">
+                Set a schedule and the conditions you want, then leave it alone.
+                Virga runs on your terms and shows you what moved on every Run.
+              </p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section id="get" class="section section--cta">
+        <div class="section__inner">
+          <h2 class="section__title" data-reveal>Get Virga</h2>
+          <p class="section__lead" data-reveal>
+            Virga is pre-release and open source. Grab the latest build from
+            GitHub Releases, or build it yourself from the source. F-Droid and
+            Google Play are planned.
+          </p>
+          <div class="get__cta" data-reveal>
+            <a
+              class="btn btn--primary"
+              href="https://github.com/lusky3/virga/releases"
+              rel="noopener"
+              >Download from GitHub Releases</a
+            >
+            <a
+              class="btn btn--secondary"
+              href="https://github.com/lusky3/virga/wiki/Building-from-Source"
+              rel="noopener"
+              >Build from source</a
+            >
+          </div>
+          <ul class="get__planned" data-reveal>
+            <li class="get__planned-item" aria-disabled="true">
+              F-Droid — planned, not yet live
+            </li>
+            <li class="get__planned-item" aria-disabled="true">
+              Google Play — planned, not yet live
+            </li>
+          </ul>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer__inner">
+        <nav class="site-footer__links" aria-label="Footer">
+          <a href="https://github.com/lusky3/virga" rel="noopener">GitHub</a>
+          <a href="https://github.com/lusky3/virga/wiki" rel="noopener">Wiki</a>
+          <a
+            href="https://github.com/lusky3/virga/blob/main/docs/privacy-policy.md"
+            rel="noopener"
+            >Privacy policy</a
+          >
+        </nav>
+
+        <p class="site-footer__credit">
+          Built on <a href="https://rclone.org" rel="noopener">rclone</a>. Virga
+          isn't affiliated with the rclone project.
+        </p>
+        <p class="site-footer__license">
+          Licensed under the
+          <a
+            href="https://github.com/lusky3/virga/blob/main/LICENSE"
+            rel="noopener"
+            >Apache License 2.0</a
+          >.
+        </p>
+        <p class="site-footer__brand">Virga — weather for your data.</p>
+      </div>
+    </footer>
+  </body>
+</html>
