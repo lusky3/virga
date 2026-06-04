@@ -125,6 +125,7 @@ private fun OptionField(
                 value = current,
                 onValueChange = { values[opt.name] = it },
                 label = { Text(labelText) },
+                isError = opt.required && current.isBlank(),
                 supportingText = if (opt.help.isNotBlank()) {
                     { Text(opt.help, style = MaterialTheme.typography.bodySmall) }
                 } else null,
@@ -144,6 +145,7 @@ private fun OptionField(
                 value = current,
                 onValueChange = { values[opt.name] = it },
                 label = { Text(labelText) },
+                isError = opt.required && current.isBlank(),
                 supportingText = if (opt.help.isNotBlank()) {
                     { Text(opt.help, style = MaterialTheme.typography.bodySmall) }
                 } else null,
@@ -162,6 +164,7 @@ private fun OptionField(
                 value = current,
                 onValueChange = { values[opt.name] = it },
                 label = { Text(labelText) },
+                isError = opt.required && current.isBlank(),
                 supportingText = if (opt.help.isNotBlank()) {
                     { Text(opt.help, style = MaterialTheme.typography.bodySmall) }
                 } else null,
@@ -198,6 +201,7 @@ private fun ExamplesDropdownField(
             value = current,
             onValueChange = { onValueChange(it); menuExpanded = true },
             label = { Text(labelText) },
+            isError = opt.required && current.isBlank(),
             supportingText = if (opt.help.isNotBlank()) {
                 { Text(opt.help, style = MaterialTheme.typography.bodySmall) }
             } else null,

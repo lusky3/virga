@@ -394,7 +394,13 @@ internal fun AddRemoteDialog(
                             enabled = if (isCrypt) {
                                 nameUsable && cryptBaseRemote.isNotBlank() && cryptPassword.isNotBlank()
                             } else {
-                                nameUsable && type.isNotBlank()
+                                val formValid = schemaOptions
+                                    ?.filter { it.required }
+                                    ?.all { opt ->
+                                        val value = typedValues[opt.name] ?: opt.default.orEmpty()
+                                        value.isNotBlank()
+                                    } ?: true
+                                nameUsable && type.isNotBlank() && formValid
                             },
                         ) { Text(stringResource(R.string.remotes_add_create)) }
                     }
