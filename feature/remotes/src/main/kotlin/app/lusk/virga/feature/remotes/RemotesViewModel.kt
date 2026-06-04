@@ -34,6 +34,18 @@ import kotlinx.coroutines.withContext
 import java.util.UUID
 import javax.inject.Inject
 
+/**
+ * Returns the set of option names where [RemoteOption.isPassword] is true AND the
+ * option is present with a non-blank value in [values].
+ */
+internal fun sensitiveKeysFrom(
+    options: List<RemoteOption>,
+    values: Map<String, String>,
+): Set<String> = options
+    .filter { it.isPassword && values[it.name]?.isNotBlank() == true }
+    .map { it.name }
+    .toSet()
+
 data class RemotesUiState(
     val remotes: List<Remote> = emptyList(),
     val refreshing: Boolean = false,
@@ -209,8 +221,20 @@ class RemotesViewModel @Inject constructor(
             // Lowercase here so a remote still creates even if the keyboard
             // auto-capitalized the first letter (KeyboardCapitalization.None is
             // only a hint and some IMEs ignore it).
-            val result = repository.addRemote(name.trim(), type.trim().lowercase(), params)
-            if (result.isSuccess) pendingRemoteResult.created(name.trim())
+            val trimmedType = type.trim().lowercase()
+            val sensitiveKeys = allOptionsForBackend(trimmedType)?.let {
+                sensitiveKeysFrom(it, params)
+            } ?: emptySet()
+            val result = repository.addRemote(name.trim(), trimmedType, params, sensitiveKeys)
+            if (result.isSuccess) {
+                pendingRemoteResult.created(name.trim())
+                val connResult = repository.testConnectivity(name.trim())
+                if (connResult.isFailure) {
+                    transient.update {
+                        it.copy(message = context.getString(R.string.remotes_msg_connectivity_warning, name.trim()))
+                    }
+                }
+            }
             onResult(result.isSuccess, result.exceptionOrNull()?.toUserMessage())
         }
     }
@@ -478,14 +502,22 @@ class RemotesViewModel @Inject constructor(
                     ) + extras,
                 )
                 if (createResult.isSuccess) pendingRemoteResult.created(remoteName)
+                val connectivityWarning = if (createResult.isSuccess) {
+                    val connResult = repository.testConnectivity(remoteName)
+                    connResult.isFailure
+                } else false
                 transient.value = transient.value.copy(
                     oauthInProgress = false,
                     message = if (createResult.isSuccess) {
-                        context.getString(
-                            R.string.remotes_msg_added_remote,
-                            pending.provider.displayName,
-                            remoteName,
-                        )
+                        if (connectivityWarning) {
+                            context.getString(R.string.remotes_msg_connectivity_warning, remoteName)
+                        } else {
+                            context.getString(
+                                R.string.remotes_msg_added_remote,
+                                pending.provider.displayName,
+                                remoteName,
+                            )
+                        }
                     } else {
                         createResult.exceptionOrNull()?.toUserMessage()
                             ?: context.getString(R.string.remotes_msg_could_not_save)

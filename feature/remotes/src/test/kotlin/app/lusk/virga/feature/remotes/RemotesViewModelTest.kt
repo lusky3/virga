@@ -81,6 +81,8 @@ class RemotesViewModelTest {
                     "Sign-in failed: ${args[0]}"
                 R.string.remotes_msg_added_remote ->
                     "Added ${args[0]} remote \"${args[1]}\""
+                R.string.remotes_msg_connectivity_warning ->
+                    "Remote \"${args[0]}\" was saved, but could not verify connectivity. Check your credentials."
                 else -> "string#$id(${args.joinToString()})"
             }
         }
@@ -833,4 +835,69 @@ class RemotesViewModelTest {
     }
 
     private fun OAuthProvider.unused() = Unit  // silence unused-import warning for OAuthProvider import
+
+    // --- sensitiveKeys derivation & connectivity test --------------------------
+
+    @Test
+    fun `addRemote passes sensitiveKeys derived from schema`() = runTest(mainDispatcher.dispatcher) {
+        val passOpt = RemoteOption(
+            name = "pass", help = "", type = "string",
+            required = false, isPassword = true, default = null,
+            examples = emptyList(), advanced = false,
+        )
+        val hostOpt = RemoteOption(
+            name = "host", help = "", type = "string",
+            required = false, isPassword = false, default = null,
+            examples = emptyList(), advanced = false,
+        )
+        coEvery { repository.providers() } returns listOf(
+            RemoteProvider("ftp", "FTP", listOf(hostOpt, passOpt)),
+        )
+        coEvery { repository.addRemote(any(), any(), any(), any()) } returns Result.success(Unit)
+        coEvery { repository.testConnectivity(any()) } returns Result.success(Unit)
+        val vm = viewModel()
+        vm.ensureProvidersLoaded()
+        advanceUntilIdle()
+
+        vm.addRemote(name = "myftp", type = "ftp", paramsText = "host=x\npass=secret", onResult = { _, _ -> })
+        advanceUntilIdle()
+
+        coVerify {
+            repository.addRemote(
+                name = "myftp",
+                type = "ftp",
+                params = any(),
+                sensitiveKeys = setOf("pass"),
+            )
+        }
+    }
+
+    @Test
+    fun `addRemote runs connectivity test after creation`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.addRemote(any(), any(), any(), any()) } returns Result.success(Unit)
+        coEvery { repository.testConnectivity("myremote") } returns Result.success(Unit)
+        val vm = viewModel()
+
+        vm.addRemote(name = "myremote", type = "s3", paramsText = "", onResult = { _, _ -> })
+        advanceUntilIdle()
+
+        coVerify { repository.testConnectivity("myremote") }
+    }
+
+    @Test
+    fun `addRemote warns but keeps remote when connectivity test fails`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.addRemote(any(), any(), any(), any()) } returns Result.success(Unit)
+        coEvery { repository.testConnectivity("bad") } returns Result.failure(RuntimeException("timeout"))
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+        var resultSuccess: Boolean? = null
+
+        vm.addRemote(name = "bad", type = "s3", paramsText = "", onResult = { s, _ -> resultSuccess = s })
+        advanceUntilIdle()
+
+        assertThat(resultSuccess).isTrue()
+        assertThat(vm.uiState.value.message).contains("could not verify connectivity")
+        collector.cancel()
+    }
 }
