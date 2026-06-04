@@ -45,7 +45,7 @@ import app.lusk.virga.core.rclone.oauth.OAuthProviders
 
 private sealed interface AddStep {
     data object Picker : AddStep
-    data class CredentialForm(val type: String, val description: String) : AddStep
+    data class CredentialForm(val type: String, val description: String, val isOAuthByok: Boolean = false) : AddStep
     data class WrapperPlaceholder(val type: String) : AddStep
 }
 /**
@@ -222,7 +222,7 @@ internal fun AddRemoteDialog(
                                             step = AddStep.CredentialForm(entry.type, entry.description)
                                         }
                                     } else {
-                                        step = AddStep.CredentialForm(entry.type, entry.description)
+                                        step = AddStep.CredentialForm(entry.type, entry.description, isOAuthByok = true)
                                     }
                                 }
                                 SetupKind.Credential -> {
@@ -392,6 +392,16 @@ internal fun AddRemoteDialog(
                                 }
                             }
                         }
+                    }
+
+                    // Show OAuth BYOK hint when entering credentials for a non-bundled OAuth provider.
+                    if ((step as? AddStep.CredentialForm)?.isOAuthByok == true) {
+                        Text(
+                            stringResource(R.string.remotes_oauth_byok_hint, type.trim()),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = VirgaSpacing.xs),
+                        )
                     }
 
                     // Crypt wizard replaces generic typed / freeform fields when type == "crypt".

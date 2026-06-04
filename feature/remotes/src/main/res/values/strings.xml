@@ -57,6 +57,8 @@
     <string name="remotes_add_show_advanced">Show advanced options</string>
     <string name="remotes_add_hide_advanced">Hide advanced options</string>
     <string name="remotes_add_required_hint"> (required)</string>
+    <!-- OAuth BYOK (non-bundled provider) hint -->
+    <string name="remotes_oauth_byok_hint">This provider uses OAuth. Paste a token obtained via \"rclone authorize %1$s\" on your desktop, or enter your own client credentials below.</string>
 
     <!-- Crypt wizard (AddRemoteDialog — crypt backend type) -->
     <string name="remotes_crypt_title">Add encrypted remote</string>
