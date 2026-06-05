@@ -1,6 +1,7 @@
 package app.lusk.virga.feature.remotes
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -12,6 +13,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -22,6 +25,7 @@ import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -113,15 +117,22 @@ internal fun AddRemoteDialog(
     // "remote:path" spec downstream. Validate by EXCLUDING just those two rather than
     // an allow-list, so legitimate names like "My Drive" aren't rejected. Blank is
     // "not yet invalid" (no error until typed).
-    val nameValid = name.isBlank() || name.trim().none { it == ':' || it == '/' }
+    val nameError = when {
+        name.isBlank() -> null
+        name.length > 64 -> "Name must be 64 characters or fewer"
+        name.any { it in '\u0000'..'\u001F' } -> "Name can't contain control characters"
+        name.trim().any { it == ':' || it == '/' } -> null // handled by existing string
+        else -> null
+    }
+    val nameValid = name.isBlank() || (name.length <= 64 && name.none { it in '\u0000'..'\u001F' } && name.trim().none { it == ':' || it == '/' })
     val nameUsable = name.isNotBlank() && nameValid
     var type by rememberSaveable { mutableStateOf("") }
     var params by remember { mutableStateOf("") }
     var typeMenuExpanded by remember { mutableStateOf(false) }
 
-    // Step state: when the picker is available, start in Picker mode.
-    // Note: step is `remember` (not rememberSaveable) because AddStep is a sealed class
-    // and would require a custom Saver. On rotation the dialog resets to the Picker step.
+    // Note: step uses remember (not rememberSaveable) because AddStep is a sealed
+    // class requiring a custom Saver. On process death the dialog resets to Picker.
+    // This is acceptable: no data is lost (name/type are saveable), just navigation state.
     var step by remember { mutableStateOf<AddStep>(AddStep.Picker) }
 
     val isCrypt = type.trim().equals("crypt", ignoreCase = true)
@@ -205,7 +216,7 @@ internal fun AddRemoteDialog(
                 label = { Text(stringResource(R.string.remotes_add_field_name)) },
                 isError = !nameValid,
                 supportingText = if (!nameValid) {
-                    { Text(stringResource(R.string.remotes_add_name_invalid)) }
+                    { Text(nameError ?: stringResource(R.string.remotes_add_name_invalid)) }
                 } else {
                     null
                 },
@@ -217,6 +228,13 @@ internal fun AddRemoteDialog(
             )
 
             when {
+                // Step: Picker — show loading when provider schema hasn't loaded yet
+                step == AddStep.Picker && pickerEntries == null -> {
+                    Box(Modifier.fillMaxWidth().padding(VirgaSpacing.xl), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+
                 // Step: Picker — show the provider picker when available
                 step == AddStep.Picker && pickerEntries != null -> {
                     ProviderPicker(
@@ -286,6 +304,9 @@ internal fun AddRemoteDialog(
                             color = MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.bodySmall,
                         )
+                        TextButton(onClick = onEnsureProviders) {
+                            Text(stringResource(R.string.remotes_retry))
+                        }
                     }
 
                     Row(
@@ -293,7 +314,8 @@ internal fun AddRemoteDialog(
                         horizontalArrangement = Arrangement.End,
                     ) {
                         TextButton(onClick = { step = AddStep.Picker; type = "" }) {
-                            Text(stringResource(R.string.remotes_add_cancel))
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
+                            Text(stringResource(R.string.remotes_back))
                         }
                         TextButton(
                             onClick = {
@@ -466,6 +488,9 @@ internal fun AddRemoteDialog(
                             color = MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.bodySmall,
                         )
+                        TextButton(onClick = onEnsureProviders) {
+                            Text(stringResource(R.string.remotes_retry))
+                        }
                     }
 
                     Row(
@@ -474,7 +499,8 @@ internal fun AddRemoteDialog(
                     ) {
                         if (pickerEntries != null) {
                             TextButton(onClick = { step = AddStep.Picker; type = "" }) {
-                                Text(stringResource(R.string.remotes_add_cancel))
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
+                                Text(stringResource(R.string.remotes_back))
                             }
                         } else {
                             TextButton(onClick = onDismiss) { Text(stringResource(R.string.remotes_add_cancel)) }

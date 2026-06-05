@@ -155,6 +155,8 @@ class DaemonOAuthOrchestrator(
         }
     }
 
+    // TODO(0.3.0): Surface unknown required questions as form fields instead of
+    // auto-answering with defaults. Track which providers need this in ProviderCatalog.
     private fun defaultAnswer(option: JsonObject): String {
         val type = option["Type"]?.jsonPrimitive?.contentOrNull
         val default = option["Default"]

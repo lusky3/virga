@@ -93,7 +93,7 @@ class OAuthTokenExchanger @Inject constructor(
                     return@withContext Result.failure(
                         VirgaError.Auth(
                             remote = p.provider.id,
-                            message = "Token exchange failed (${response.code}): ${text.take(200)}",
+                            message = "Token exchange failed (${response.code}): ${text.take(50).replace(Regex("[a-zA-Z0-9_-]{20,}"), "[REDACTED]")}",
                         ),
                     )
                 }
@@ -148,7 +148,7 @@ class OAuthTokenExchanger @Inject constructor(
                     val text = response.body?.string().orEmpty()
                     if (!response.isSuccessful) {
                         return@withContext Result.failure(
-                            VirgaError.Auth("onedrive", "Graph /me/drive failed (${response.code}): ${text.take(200)}"),
+                            VirgaError.Auth("onedrive", "Graph /me/drive failed (${response.code}): ${text.take(50).replace(Regex("[a-zA-Z0-9_-]{20,}"), "[REDACTED]")}"),
                         )
                     }
                     val obj = json.parseToJsonElement(text) as? JsonObject

@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import app.lusk.virga.core.designsystem.component.RemoteProviderMark
 import app.lusk.virga.core.designsystem.theme.VirgaSpacing
@@ -59,6 +60,7 @@ internal fun ProviderPicker(
             keyboardOptions = KeyboardOptions(
                 capitalization = KeyboardCapitalization.None,
                 autoCorrectEnabled = false,
+                imeAction = ImeAction.Done,
             ),
             modifier = Modifier.fillMaxWidth(),
         )
