@@ -107,7 +107,7 @@ internal fun AddRemoteDialog(
 ) {
     LaunchedEffect(Unit) { onEnsureProviders() }
 
-    var name by remember { mutableStateOf("") }
+    var name by rememberSaveable { mutableStateOf("") }
     // rclone permits a broad set of remote-name characters (letters, digits, spaces,
     // _ . - +, …) — only ':' and '/' are genuinely dangerous, as they corrupt the
     // "remote:path" spec downstream. Validate by EXCLUDING just those two rather than
@@ -115,11 +115,13 @@ internal fun AddRemoteDialog(
     // "not yet invalid" (no error until typed).
     val nameValid = name.isBlank() || name.trim().none { it == ':' || it == '/' }
     val nameUsable = name.isNotBlank() && nameValid
-    var type by remember { mutableStateOf("") }
+    var type by rememberSaveable { mutableStateOf("") }
     var params by remember { mutableStateOf("") }
     var typeMenuExpanded by remember { mutableStateOf(false) }
 
     // Step state: when the picker is available, start in Picker mode.
+    // Note: step is `remember` (not rememberSaveable) because AddStep is a sealed class
+    // and would require a custom Saver. On rotation the dialog resets to the Picker step.
     var step by remember { mutableStateOf<AddStep>(AddStep.Picker) }
 
     val isCrypt = type.trim().equals("crypt", ignoreCase = true)
@@ -614,18 +616,18 @@ private fun DaemonOAuthForm(
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
         Text(
-            text = "Connect to $providerName",
+            text = stringResource(R.string.remotes_daemon_oauth_title, providerName),
             style = MaterialTheme.typography.titleMedium,
         )
         Text(
-            text = "Optionally enter your own API credentials. Leave blank to use the defaults.",
+            text = stringResource(R.string.remotes_daemon_oauth_subtitle),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         OutlinedTextField(
             value = clientId,
             onValueChange = { clientId = it },
-            label = { Text("Client ID (optional)") },
+            label = { Text(stringResource(R.string.remotes_daemon_oauth_client_id)) },
             singleLine = true,
             enabled = !oauthInProgress,
             modifier = Modifier.fillMaxWidth(),
@@ -633,7 +635,7 @@ private fun DaemonOAuthForm(
         OutlinedTextField(
             value = clientSecret,
             onValueChange = { clientSecret = it },
-            label = { Text("Client Secret (optional)") },
+            label = { Text(stringResource(R.string.remotes_daemon_oauth_client_secret)) },
             singleLine = true,
             enabled = !oauthInProgress,
             modifier = Modifier.fillMaxWidth(),
@@ -645,16 +647,16 @@ private fun DaemonOAuthForm(
                 horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
             ) {
                 CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                Text("Waiting for authorization…", style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.remotes_daemon_oauth_waiting), style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = onCancel) { Text("Cancel") }
+                TextButton(onClick = onCancel) { Text(stringResource(R.string.remotes_daemon_oauth_cancel)) }
             }
         } else {
             Button(
                 onClick = { onConnect(clientId, clientSecret) },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Connect")
+                Text(stringResource(R.string.remotes_daemon_oauth_connect))
             }
         }
     }

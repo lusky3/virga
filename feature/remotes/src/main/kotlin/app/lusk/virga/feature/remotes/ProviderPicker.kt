@@ -87,6 +87,15 @@ internal fun ProviderPicker(
                 }
             }
         }
+
+        if (filtered.isEmpty() && query.isNotBlank()) {
+            Text(
+                stringResource(R.string.remotes_picker_no_results),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(VirgaSpacing.md),
+            )
+        }
     }
 }
 
@@ -95,6 +104,7 @@ private fun ProviderRow(entry: PickerEntry, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 48.dp)
             .clickable(onClick = onClick)
             .padding(vertical = VirgaSpacing.sm, horizontal = VirgaSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,

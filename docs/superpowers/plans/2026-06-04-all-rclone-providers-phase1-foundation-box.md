@@ -61,109 +61,21 @@ Each later phase gets its own plan written via this same skill when we reach it.
 - Modify: `core/rclone/src/main/kotlin/app/lusk/virga/core/rclone/RcloneEngineImpl.kt:147-167`
 - Test: `core/rclone/src/test/kotlin/app/lusk/virga/core/rclone/RcloneEngineImplTest.kt`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
-Add these two tests to `RcloneEngineImplTest`. They capture the `config/create` params with a MockK slot and assert the `opt.obscure` flag. Imports `io.mockk.slot` and `io.mockk.CapturingSlot` are needed (add to the import block if absent).
+- [x] **Step 2: Run the tests, verify they fail to compile**
 
-```kotlin
-@Test fun `createRemote sets opt obscure when sensitiveKeys present`() = runTest(testDispatcher) {
-    coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
-    coEvery { daemonManager.start(any()) } returns fakeDaemon
-    every { daemonManager.isAlive(fakeDaemon) } returns true
-    coEvery { configManager.persistAndCleanup() } returns Unit
-    coEvery { daemonManager.stop(fakeDaemon) } returns Unit
-    val params = slot<kotlinx.serialization.json.JsonObject>()
-    coEvery { apiClient.call(any(), any(), any(), "config/create", capture(params)) } returns buildJsonObject {}
+- [x] **Step 3: Add the parameter to the interface**
 
-    engine.createRemote("sftp1", "sftp", mapOf("pass" to "hunter2"), sensitiveKeys = setOf("pass"))
+- [x] **Step 4: Implement in the engine**
 
-    val opt = params.captured["opt"]!!.jsonObject
-    assertThat(opt["obscure"]?.jsonPrimitive?.booleanOrNull).isTrue()
-}
+- [x] **Step 5: Run the tests, verify they pass**
 
-@Test fun `createRemote omits opt obscure for token-only OAuth create`() = runTest(testDispatcher) {
-    coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
-    coEvery { daemonManager.start(any()) } returns fakeDaemon
-    every { daemonManager.isAlive(fakeDaemon) } returns true
-    coEvery { configManager.persistAndCleanup() } returns Unit
-    coEvery { daemonManager.stop(fakeDaemon) } returns Unit
-    val params = slot<kotlinx.serialization.json.JsonObject>()
-    coEvery { apiClient.call(any(), any(), any(), "config/create", capture(params)) } returns buildJsonObject {}
+All 33 tests pass.
 
-    engine.createRemote("gd", "drive", mapOf("token" to """{"access_token":"x"}"""))
+- [x] **Step 6: Commit**
 
-    val opt = params.captured["opt"]!!.jsonObject
-    assertThat(opt["obscure"]).isNull()
-}
-```
-
-- [ ] **Step 2: Run the tests, verify they fail to compile**
-
-Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*RcloneEngineImplTest"`
-Expected: compilation error — `createRemote` has no `sensitiveKeys` parameter.
-
-- [ ] **Step 3: Add the parameter to the interface**
-
-In `RcloneEngine.kt`, replace the `createRemote` declaration (line 65):
-
-```kotlin
-    /**
-     * Creates a remote via `config/create`. [sensitiveKeys] names the parameters
-     * holding secret values (passwords, secret keys); when non-empty the call asks
-     * rclone to obscure them before writing the config. Leave it empty for OAuth
-     * creates — the `token` JSON must never be obscured.
-     */
-    suspend fun createRemote(
-        name: String,
-        type: String,
-        params: Map<String, String>,
-        sensitiveKeys: Set<String> = emptySet(),
-    )
-```
-
-- [ ] **Step 4: Implement in the engine**
-
-In `RcloneEngineImpl.kt`, replace the `createRemote` override (lines 147-167):
-
-```kotlin
-    override suspend fun createRemote(
-        name: String,
-        type: String,
-        params: Map<String, String>,
-        sensitiveKeys: Set<String>,
-    ) {
-        mutatingConfig { d ->
-            rc(d, "config/create", buildJsonObject {
-                put("name", name)
-                put("type", type)
-                putJsonObject("parameters") { params.forEach { (k, v) -> put(k, v) } }
-                putJsonObject("opt") {
-                    // nonInteractive: the OAuth token (when present) is already supplied,
-                    // so rclone must not start its own "Waiting for code..." browser flow.
-                    put("nonInteractive", true)
-                    // Only ask rclone to obscure when the caller flagged secret values.
-                    // rclone obscures password-typed options; an OAuth token create passes
-                    // no sensitiveKeys, so the pre-formatted token JSON is left untouched.
-                    if (sensitiveKeys.isNotEmpty()) put("obscure", true)
-                }
-            })
-        }
-    }
-```
-
-- [ ] **Step 5: Run the tests, verify they pass**
-
-Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*RcloneEngineImplTest"`
-Expected: PASS, including the pre-existing `createRemote` tests (they call the 3-arg form, which still resolves via the default `sensitiveKeys = emptySet()`).
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add core/rclone/src/main/kotlin/app/lusk/virga/core/rclone/RcloneEngine.kt \
-        core/rclone/src/main/kotlin/app/lusk/virga/core/rclone/RcloneEngineImpl.kt \
-        core/rclone/src/test/kotlin/app/lusk/virga/core/rclone/RcloneEngineImplTest.kt
-git commit -m "Add sensitiveKeys to createRemote so only password creates obscure"
-```
+`6ac5051 Add sensitiveKeys to createRemote so only password creates obscure`
 
 ---
 
@@ -173,66 +85,21 @@ git commit -m "Add sensitiveKeys to createRemote so only password creates obscur
 - Modify: `core/data/src/main/kotlin/app/lusk/virga/core/data/RemoteRepository.kt:52-54`
 - Test: `core/data/src/test/kotlin/app/lusk/virga/core/data/RemoteRepositoryTest.kt`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
-Add to `RemoteRepositoryTest`:
+- [x] **Step 2: Run it, verify failure**
 
-```kotlin
-@Test fun `addRemote forwards sensitiveKeys to the engine`() = runTest {
-    coEvery { engine.createRemote(any(), any(), any(), any()) } returns Unit
-    coEvery { engine.listRemotes() } returns listOf(Remote("sftp1", "sftp"))
-    remoteDao.stubReplaceAll()  // use whatever stub the other tests use; see existing setUp
+- [x] **Step 3: Update the repository**
 
-    repository.addRemote("sftp1", "sftp", mapOf("pass" to "p"), sensitiveKeys = setOf("pass"))
+- [x] **Step 4: Fix the two existing stubs**
 
-    coVerify { engine.createRemote("sftp1", "sftp", mapOf("pass" to "p"), setOf("pass")) }
-}
-```
+- [x] **Step 5: Run tests, verify pass**
 
-Note: match the existing test's MockK setup for `remoteDao`/`syncTaskDao` (see `RemoteRepositoryTest` `setUp`/`@BeforeEach`). If the existing `addRemote` tests stub `engine.createRemote("new","drive",any())` with the 3-arg matcher, widen them to the 4-arg matcher in the next step.
+All 15 tests pass.
 
-- [ ] **Step 2: Run it, verify failure**
+- [x] **Step 6: Commit**
 
-Run: `./gradlew :core:data:testDebugUnitTest --tests "*RemoteRepositoryTest"`
-Expected: compile error (no `sensitiveKeys` param on `addRemote`) or unresolved 4-arg `createRemote` stub.
-
-- [ ] **Step 3: Update the repository**
-
-In `RemoteRepository.kt`, replace `addRemote` (lines 52-54):
-
-```kotlin
-    suspend fun addRemote(
-        name: String,
-        type: String,
-        params: Map<String, String>,
-        sensitiveKeys: Set<String> = emptySet(),
-    ): Result<Unit> =
-        runCatching { engine.createRemote(name, type, params, sensitiveKeys) }
-            .mapCatching { refresh().getOrThrow() }
-```
-
-- [ ] **Step 4: Fix the two existing stubs**
-
-In `RemoteRepositoryTest` lines ~68 and ~74, widen the matchers so the 4-arg engine call still matches:
-
-```kotlin
-coEvery { engine.createRemote("new", "drive", any(), any()) } returns Unit
-// ...
-coVerify { engine.createRemote("new", "drive", mapOf("client_id" to "abc"), emptySet()) }
-```
-
-- [ ] **Step 5: Run tests, verify pass**
-
-Run: `./gradlew :core:data:testDebugUnitTest --tests "*RemoteRepositoryTest"`
-Expected: PASS.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add core/data/src/main/kotlin/app/lusk/virga/core/data/RemoteRepository.kt \
-        core/data/src/test/kotlin/app/lusk/virga/core/data/RemoteRepositoryTest.kt
-git commit -m "Thread sensitiveKeys through RemoteRepository.addRemote"
-```
+`668fa81 Thread sensitiveKeys through RemoteRepository.addRemote`
 
 ---
 

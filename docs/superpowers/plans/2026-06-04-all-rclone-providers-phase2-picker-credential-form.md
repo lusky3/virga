@@ -50,7 +50,7 @@
 - Test: `core/rclone/src/test/kotlin/app/lusk/virga/core/rclone/RcloneEngineImplTest.kt`
 - Test: `core/data/src/test/kotlin/app/lusk/virga/core/data/RemoteRepositoryTest.kt`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `RcloneEngineImplTest`:
 
@@ -104,12 +104,12 @@ fun testConnectivity_delegates_to_engine() = runTest {
 }
 ```
 
-- [ ] **Step 2: Run, verify compile failure**
+- [x] **Step 2: Run, verify compile failure**
 
 Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*RcloneEngineImplTest*testConnectivity*"`
 Expected: compile error — `testConnectivity` does not exist.
 
-- [ ] **Step 3: Add `testConnectivity` to the interface**
+- [x] **Step 3: Add `testConnectivity` to the interface**
 
 In `RcloneEngine.kt`, after `about`:
 
@@ -123,7 +123,7 @@ In `RcloneEngine.kt`, after `about`:
     suspend fun testConnectivity(remoteName: String): Result<Unit>
 ```
 
-- [ ] **Step 4: Implement in `RcloneEngineImpl`**
+- [x] **Step 4: Implement in `RcloneEngineImpl`**
 
 ```kotlin
     override suspend fun testConnectivity(remoteName: String): Result<Unit> = runCatching {
@@ -141,7 +141,7 @@ In `RcloneEngine.kt`, after `about`:
     }
 ```
 
-- [ ] **Step 5: Add `testConnectivity` to `RemoteRepository`**
+- [x] **Step 5: Add `testConnectivity` to `RemoteRepository`**
 
 ```kotlin
     /** Lightweight connectivity check — verifies the remote responds. */
@@ -149,12 +149,12 @@ In `RcloneEngine.kt`, after `about`:
         runCatching { engine.testConnectivity(remoteName).getOrThrow() }
 ```
 
-- [ ] **Step 6: Run tests, verify pass**
+- [x] **Step 6: Run tests, verify pass**
 
 Run: `./gradlew :core:rclone:testDebugUnitTest :core:data:testDebugUnitTest`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add core/rclone/src/main/kotlin/app/lusk/virga/core/rclone/RcloneEngine.kt \

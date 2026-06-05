@@ -136,12 +136,15 @@ class DaemonOAuthOrchestrator(
                 // Launch the oauthstatus poller BEFORE the blocking answer.
                 val scope = CoroutineScope(currentCoroutineContext())
                 val pollerJob = scope.launch { pollForAuthUrl(daemon) }
-                // This call BLOCKS until the OAuth redirect arrives.
-                response = rc(daemon, "config/create", buildJsonObject {
-                    put("state", stateToken)
-                    put("result", "true")
-                })
-                pollerJob.cancel()
+                try {
+                    // This call BLOCKS until the OAuth redirect arrives.
+                    response = rc(daemon, "config/create", buildJsonObject {
+                        put("state", stateToken)
+                        put("result", "true")
+                    })
+                } finally {
+                    pollerJob.cancel()
+                }
             } else {
                 val answer = defaultAnswer(option)
                 response = rc(daemon, "config/create", buildJsonObject {

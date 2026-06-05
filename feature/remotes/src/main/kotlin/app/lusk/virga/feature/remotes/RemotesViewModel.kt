@@ -113,7 +113,9 @@ class RemotesViewModel @Inject constructor(
         providersLoading = true
         viewModelScope.launch {
             try {
-                _providers.value = repository.providers()
+                val loaded = repository.providers()
+                _providers.value = loaded
+                _catalog = if (loaded.isNullOrEmpty()) null else ProviderCatalog(loaded)
             } finally {
                 providersLoading = false
             }
@@ -146,8 +148,8 @@ class RemotesViewModel @Inject constructor(
     }
 
     /** The [ProviderCatalog] built from the loaded schema, or null before load. */
-    private val catalog: ProviderCatalog?
-        get() = _providers.value?.let { if (it.isEmpty()) null else ProviderCatalog(it) }
+    private var _catalog: ProviderCatalog? = null
+    private val catalog: ProviderCatalog? get() = _catalog
 
     /** Picker entries for the Add-remote picker, or null when schema is not loaded. */
     fun pickerEntries(): List<PickerEntry>? = catalog?.pickerEntries()
@@ -466,6 +468,7 @@ class RemotesViewModel @Inject constructor(
             } catch (e: Throwable) {
                 transient.update { it.copy(oauthInProgress = false, message = e.toUserMessage()) }
             } finally {
+                transient.update { it.copy(oauthInProgress = false) }
                 daemonOAuthOrchestrator = null
             }
         }
