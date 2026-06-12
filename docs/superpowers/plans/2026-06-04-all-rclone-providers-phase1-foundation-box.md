@@ -1,6 +1,6 @@
 # All rclone providers — Phase 1: classification foundation + Box bundled OAuth
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Lay the classification + obscuring foundation the rest of 0.2.0 builds on, and ship Box as a fourth bundled OAuth provider, without touching the picker/wrapper UI yet.
 
@@ -112,7 +112,7 @@ All 15 tests pass.
 - Modify: `core/rclone/src/main/kotlin/app/lusk/virga/core/rclone/oauth/OAuthTokenExchanger.kt:36-48,72-79`
 - Test: `core/rclone/src/test/kotlin/app/lusk/virga/core/rclone/oauth/OAuthTokenExchangerTest.kt`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `OAuthTokenExchangerTest`. It enqueues a token response, exchanges with a `clientSecret`, and reads the recorded request body.
 
@@ -143,12 +143,12 @@ fun exchange_omitsClientSecretWhenAbsent() = runTest {
 }
 ```
 
-- [ ] **Step 2: Run it, verify failure**
+- [x] **Step 2: Run it, verify failure**
 
 Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*OAuthTokenExchangerTest"`
 Expected: compile error — `PendingAuth` has no `clientSecret`.
 
-- [ ] **Step 3: Add `clientSecret` to `PendingAuth`**
+- [x] **Step 3: Add `clientSecret` to `PendingAuth`**
 
 In `OAuthTokenExchanger.kt`, add the field to `PendingAuth` (after `redirectUri`, around line 41):
 
@@ -159,7 +159,7 @@ In `OAuthTokenExchanger.kt`, add the field to `PendingAuth` (after `redirectUri`
         val clientSecret: String? = null,
 ```
 
-- [ ] **Step 4: Send it in `exchange`**
+- [x] **Step 4: Send it in `exchange`**
 
 In `exchange` (lines 72-79), build the form body conditionally:
 
@@ -175,12 +175,12 @@ In `exchange` (lines 72-79), build the form body conditionally:
             .build()
 ```
 
-- [ ] **Step 5: Run tests, verify pass**
+- [x] **Step 5: Run tests, verify pass**
 
 Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*OAuthTokenExchangerTest"`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add core/rclone/src/main/kotlin/app/lusk/virga/core/rclone/oauth/OAuthTokenExchanger.kt \
@@ -196,7 +196,7 @@ git commit -m "Send client_secret in OAuth token exchange when the provider need
 - Modify: `core/rclone/src/main/kotlin/app/lusk/virga/core/rclone/oauth/OAuthProvider.kt`
 - Test: create `core/rclone/src/test/kotlin/app/lusk/virga/core/rclone/oauth/OAuthProvidersTest.kt`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `OAuthProvidersTest.kt`:
 
@@ -227,12 +227,12 @@ class OAuthProvidersTest {
 }
 ```
 
-- [ ] **Step 2: Run it, verify failure**
+- [x] **Step 2: Run it, verify failure**
 
 Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*OAuthProvidersTest"`
 Expected: compile error — `requiresClientSecret` does not exist; `byId("box")` returns null.
 
-- [ ] **Step 3: Add the field and the Box provider**
+- [x] **Step 3: Add the field and the Box provider**
 
 In `OAuthProvider.kt`, replace the data class and update the comment, then add Box and extend `All`:
 
@@ -280,12 +280,12 @@ Update `All`:
     val All = listOf(GoogleDrive, OneDrive, Dropbox, Box)
 ```
 
-- [ ] **Step 4: Run tests, verify pass**
+- [x] **Step 4: Run tests, verify pass**
 
 Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*OAuthProvidersTest"`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add core/rclone/src/main/kotlin/app/lusk/virga/core/rclone/oauth/OAuthProvider.kt \
@@ -301,7 +301,7 @@ git commit -m "Add Box as a fourth bundled OAuth provider (needs client_secret)"
 - Modify: `core/rclone/src/main/kotlin/app/lusk/virga/core/rclone/oauth/OAuthConfig.kt`
 - Test: create `core/rclone/src/test/kotlin/app/lusk/virga/core/rclone/oauth/OAuthConfigTest.kt`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `OAuthConfigTest.kt`:
 
@@ -324,12 +324,12 @@ class OAuthConfigTest {
 }
 ```
 
-- [ ] **Step 2: Run it, verify failure**
+- [x] **Step 2: Run it, verify failure**
 
 Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*OAuthConfigTest"`
 Expected: compile error — no `clientSecrets` constructor parameter.
 
-- [ ] **Step 3: Add the field and accessor**
+- [x] **Step 3: Add the field and accessor**
 
 In `OAuthConfig.kt`, add the parameter and method:
 
@@ -354,12 +354,12 @@ data class OAuthConfig(
 
 (The existing `companion object` with `googleAndroidRedirect` stays unchanged below this.)
 
-- [ ] **Step 4: Run tests, verify pass**
+- [x] **Step 4: Run tests, verify pass**
 
 Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*OAuthConfigTest"`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add core/rclone/src/main/kotlin/app/lusk/virga/core/rclone/oauth/OAuthConfig.kt \
@@ -377,7 +377,7 @@ git commit -m "Add clientSecrets map to OAuthConfig"
 - Modify: `feature/remotes/src/main/kotlin/app/lusk/virga/feature/remotes/RemotesViewModel.kt:355-385`
 - Test: `feature/remotes/src/test/kotlin/app/lusk/virga/feature/remotes/RemotesViewModelTest.kt`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `RemotesViewModelTest`. Match the existing VM-test construction (the `setUp`/`@BeforeEach` already builds a `RemotesViewModel` with mocked collaborators; reuse those mocks — `oauthConfig`, `oauthStore`, `tokenExchanger`, `oauthKeyStore`). The test drives `startOAuth(Box, "boxremote")` and verifies the pending auth captured by `oauthStore.startPending` carries the secret.
 
@@ -400,12 +400,12 @@ Add to `RemotesViewModelTest`. Match the existing VM-test construction (the `set
 
 (`oauthKeyStore.clientId` is a `suspend` function in `startOAuth`; if the existing tests stub it with `coEvery`, use `coEvery` here too. Match the existing stubs' style.)
 
-- [ ] **Step 2: Run it, verify failure**
+- [x] **Step 2: Run it, verify failure**
 
 Run: `./gradlew :feature:remotes:testDebugUnitTest --tests "*RemotesViewModelTest"`
 Expected: FAIL — `pending.captured.clientSecret` is null (not yet wired) or `oauthConfig.clientSecret` is unstubbed.
 
-- [ ] **Step 3: Wire the secret in `startOAuth`**
+- [x] **Step 3: Wire the secret in `startOAuth`**
 
 In `RemotesViewModel.kt`, inside `startOAuth`, after `redirectUri` is computed and before building `PendingAuth`, add:
 
@@ -416,12 +416,12 @@ In `RemotesViewModel.kt`, inside `startOAuth`, after `redirectUri` is computed a
 
 Then add `clientSecret = clientSecret,` to the `PendingAuth(...)` constructor call (alongside `redirectUri` and `remoteName`).
 
-- [ ] **Step 4: Run tests, verify pass**
+- [x] **Step 4: Run tests, verify pass**
 
 Run: `./gradlew :feature:remotes:testDebugUnitTest --tests "*RemotesViewModelTest"`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add feature/remotes/src/main/kotlin/app/lusk/virga/feature/remotes/RemotesViewModel.kt \
@@ -440,7 +440,7 @@ git commit -m "Carry the Box client secret through startOAuth"
 - Modify: `app/src/main/kotlin/app/lusk/virga/di/OAuthConfigModule.kt`
 - Modify: `.github/workflows/release.yml:121-135`
 
-- [ ] **Step 1: Add a secret helper and Box BuildConfig fields**
+- [x] **Step 1: Add a secret helper and Box BuildConfig fields**
 
 In `app/build.gradle.kts`, next to the existing `oauthClientId` helper (lines 20-22), add a secret helper:
 
@@ -458,7 +458,7 @@ In the `buildConfigField` block (after the Dropbox line ~91), add:
         buildConfigField("String", "OAUTH_CLIENT_SECRET_BOX", "\"${oauthClientSecret("box")}\"")
 ```
 
-- [ ] **Step 2: Wire them into `OAuthConfigModule`**
+- [x] **Step 2: Wire them into `OAuthConfigModule`**
 
 In `OAuthConfigModule.kt`, add Box to `clientIds` and a `clientSecrets` map:
 
@@ -480,7 +480,7 @@ In `OAuthConfigModule.kt`, add Box to `clientIds` and a `clientSecrets` map:
 
 Box uses the default HTTPS App Link redirect (`REDIRECT_URI`), so it needs no `redirectUris` override. Register `https://lusk.app/virga/oauth/callback` as a redirect URI in the Box developer console (verify-on-your-side note for the release step).
 
-- [ ] **Step 3: Pass the Box env into the release build step**
+- [x] **Step 3: Pass the Box env into the release build step**
 
 In `.github/workflows/release.yml`, in the "Build FOSS release APKs" step `env:` block (after the Dropbox line ~128), add:
 
@@ -489,12 +489,12 @@ In `.github/workflows/release.yml`, in the "Build FOSS release APKs" step `env:`
           VIRGA_OAUTH_CLIENT_SECRET_BOX: ${{ secrets.OAUTH_CLIENT_SECRET_BOX }}
 ```
 
-- [ ] **Step 4: Verify the release variant compiles**
+- [x] **Step 4: Verify the release variant compiles**
 
 Run: `./gradlew :app:assembleFossRelease -x lint` (or `compileFossReleaseKotlin` for speed)
 Expected: BUILD SUCCESSFUL. BuildConfig fields resolve; `OAuthConfigModule` compiles with the new maps.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/build.gradle.kts \
@@ -515,7 +515,7 @@ git commit -m "Wire Box OAuth client id + secret into BuildConfig, DI, and relea
 - Modify: `feature/remotes/src/main/kotlin/app/lusk/virga/feature/remotes/AddRemoteScreen.kt:69` and `RemotesScreen.kt:235` (callers that pass `optionsForBackend`)
 - Test: `feature/remotes/src/test/kotlin/app/lusk/virga/feature/remotes/RemotesViewModelTest.kt`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `RemotesViewModelTest`. It seeds the provider schema with one normal and one advanced option, then asserts the new accessor returns both. Match how the existing tests seed `providers` — `repository.providers()` is mocked, and `ensureProvidersLoaded()` populates the StateFlow. Use the existing `repository` mock.
 
@@ -542,12 +542,12 @@ Add to `RemotesViewModelTest`. It seeds the provider schema with one normal and 
 }
 ```
 
-- [ ] **Step 2: Run it, verify failure**
+- [x] **Step 2: Run it, verify failure**
 
 Run: `./gradlew :feature:remotes:testDebugUnitTest --tests "*RemotesViewModelTest"`
 Expected: compile error — `allOptionsForBackend` does not exist.
 
-- [ ] **Step 3: Add the accessor**
+- [x] **Step 3: Add the accessor**
 
 In `RemotesViewModel.kt`, after `optionsForBackend` (line 115), add:
 
@@ -565,7 +565,7 @@ In `RemotesViewModel.kt`, after `optionsForBackend` (line 115), add:
     }
 ```
 
-- [ ] **Step 4: Use it in the dialog**
+- [x] **Step 4: Use it in the dialog**
 
 In `AddRemoteDialog.kt`:
 - Change the parameter (line 66) from `optionsForBackend: (String) -> List<RemoteOption>?,` to `allOptionsForBackend: (String) -> List<RemoteOption>?,`.
@@ -575,17 +575,17 @@ In both callers — `AddRemoteScreen.kt:69` and `RemotesScreen.kt:235` — chang
 `optionsForBackend = viewModel::optionsForBackend,` to
 `allOptionsForBackend = viewModel::allOptionsForBackend,`.
 
-- [ ] **Step 5: Run tests, verify pass**
+- [x] **Step 5: Run tests, verify pass**
 
 Run: `./gradlew :feature:remotes:testDebugUnitTest --tests "*RemotesViewModelTest"`
 Expected: PASS.
 
-- [ ] **Step 6: Verify the feature module compiles (Compose wiring)**
+- [x] **Step 6: Verify the feature module compiles (Compose wiring)**
 
 Run: `./gradlew :feature:remotes:compileFossDebugKotlin` (or `:feature:remotes:assembleFossDebug`)
 Expected: BUILD SUCCESSFUL — the renamed parameter resolves at both call sites.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add feature/remotes/src/main/kotlin/app/lusk/virga/feature/remotes/RemotesViewModel.kt \
@@ -607,7 +607,7 @@ git commit -m "Feed the full option list to the credential form so advanced opti
 - Create: `core/rclone/src/test/kotlin/app/lusk/virga/core/rclone/ProviderCatalogTest.kt`
 - Create: `core/rclone/src/test/resources/config-providers-sample.json`
 
-- [ ] **Step 1: Add the fixture**
+- [x] **Step 1: Add the fixture**
 
 Create `core/rclone/src/test/resources/config-providers-sample.json` — a trimmed but real-shaped `config/providers` payload. Include enough backends to exercise every `SetupKind` and the override map.
 
@@ -649,7 +649,7 @@ Create `core/rclone/src/test/resources/config-providers-sample.json` — a trimm
 }
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Create `ProviderCatalogTest.kt`. It loads the fixture through the existing `parseProviders` mapper, then asserts classification, ordering, and the `local` exclusion.
 
@@ -716,12 +716,12 @@ class ProviderCatalogTest {
 
 Note the deliberate tension between the two "pinned" tests: the pin list defines a *preferred order*, but only backends actually present in the schema appear. Fix the first test's expectation in Step 4 once the real ordering is implemented (it should read `containsExactly("drive", "box").inOrder()` for this fixture, since dropbox/onedrive are absent). The two tests together lock the "pin order, but never invent absent providers" behavior.
 
-- [ ] **Step 3: Run the tests, verify they fail**
+- [x] **Step 3: Run the tests, verify they fail**
 
 Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*ProviderCatalogTest"`
 Expected: compile error — `ProviderCatalog`, `SetupKind` do not exist.
 
-- [ ] **Step 4: Implement `ProviderCatalog`**
+- [x] **Step 4: Implement `ProviderCatalog`**
 
 Create `ProviderCatalog.kt`:
 
@@ -802,7 +802,7 @@ class ProviderCatalog(private val providers: List<RemoteProvider>) {
 }
 ```
 
-- [ ] **Step 5: Correct the first pinned-order assertion**
+- [x] **Step 5: Correct the first pinned-order assertion**
 
 The fixture has no `dropbox`/`onedrive` backend, so for this fixture the pinned top is `drive`, `box` (in PINNED order), then `s3`. Update the `popular providers are pinned` test's expectation to:
 
@@ -814,12 +814,12 @@ The fixture has no `dropbox`/`onedrive` backend, so for this fixture the pinned 
     }
 ```
 
-- [ ] **Step 6: Run the tests, verify they pass**
+- [x] **Step 6: Run the tests, verify they pass**
 
 Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*ProviderCatalogTest"`
 Expected: PASS (all classification, ordering, and exclusion tests green).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add core/rclone/src/main/kotlin/app/lusk/virga/core/rclone/ProviderCatalog.kt \
@@ -832,17 +832,17 @@ git commit -m "Add ProviderCatalog classification layer over config/providers"
 
 ## Task 10: Full-suite gate + lint
 
-- [ ] **Step 1: Run the whole unit-test suite**
+- [x] **Step 1: Run the whole unit-test suite**
 
 Run: `./gradlew test`
 Expected: BUILD SUCCESSFUL — every module's unit tests pass (this is the same gate `release.yml` runs).
 
-- [ ] **Step 2: Run lint on the foss debug variant**
+- [x] **Step 2: Run lint on the foss debug variant**
 
 Run: `./gradlew lintFossDebug`
 Expected: no new errors. (Pre-existing baseline warnings are fine; a new error must be fixed before proceeding.)
 
-- [ ] **Step 3: Final commit if lint auto-touched anything**
+- [x] **Step 3: Final commit if lint auto-touched anything**
 
 ```bash
 git add -A

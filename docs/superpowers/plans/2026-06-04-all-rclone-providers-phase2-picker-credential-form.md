@@ -1,6 +1,6 @@
 # All rclone providers — Phase 2: Picker + schema-driven credential form
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Replace the hardcoded `RcloneBackendTypes` dropdown with a searchable provider picker backed by `ProviderCatalog.pickerEntries()`, grouped by `SetupKind`. Wire the picker into the add-remote flow so selecting a provider routes to the correct creation path. Derive `sensitiveKeys` from the schema's `isPassword` options and pass them through `addRemote`. Add a connectivity test (`operations/about`) after successful remote creation.
 
@@ -176,7 +176,7 @@ git commit -m "Add testConnectivity (about with listDir fallback) to engine and 
 - Create: `feature/remotes/src/test/kotlin/app/lusk/virga/feature/remotes/SensitiveKeysTest.kt`
 - Modify: `feature/remotes/src/test/kotlin/app/lusk/virga/feature/remotes/RemotesViewModelTest.kt`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `SensitiveKeysTest.kt` — pure unit test for the derivation function:
 
@@ -260,12 +260,12 @@ fun addRemote_passes_sensitiveKeys_derived_from_schema() = runTest(mainDispatche
 }
 ```
 
-- [ ] **Step 2: Run, verify failure**
+- [x] **Step 2: Run, verify failure**
 
 Run: `./gradlew :feature:remotes:testDebugUnitTest --tests "*SensitiveKeysTest*"`
 Expected: compile error — `sensitiveKeysFrom` does not exist.
 
-- [ ] **Step 3: Implement the derivation function**
+- [x] **Step 3: Implement the derivation function**
 
 In `RemotesViewModel.kt`, add an `internal` top-level function (testable without the VM):
 
@@ -286,7 +286,7 @@ internal fun sensitiveKeysFrom(
     .toSet()
 ```
 
-- [ ] **Step 4: Wire it into `addRemote`**
+- [x] **Step 4: Wire it into `addRemote`**
 
 In `RemotesViewModel.addRemote`, after building `params` from the `key=value` lines, derive and pass `sensitiveKeys`:
 
@@ -315,12 +315,12 @@ In `RemotesViewModel.addRemote`, after building `params` from the `key=value` li
     }
 ```
 
-- [ ] **Step 5: Run tests, verify pass**
+- [x] **Step 5: Run tests, verify pass**
 
 Run: `./gradlew :feature:remotes:testDebugUnitTest --tests "*SensitiveKeysTest*" --tests "*RemotesViewModelTest*addRemote_passes*"`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add feature/remotes/src/main/kotlin/app/lusk/virga/feature/remotes/RemotesViewModel.kt \
@@ -339,7 +339,7 @@ git commit -m "Derive sensitiveKeys from schema isPassword and pass to addRemote
 - Modify: `feature/remotes/src/main/kotlin/app/lusk/virga/feature/remotes/RemotesViewModel.kt`
 - Modify: `feature/remotes/src/test/kotlin/app/lusk/virga/feature/remotes/RemotesViewModelTest.kt`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `RemotesViewModelTest`:
 
@@ -382,12 +382,12 @@ fun addRemote_warns_but_keeps_remote_when_connectivity_test_fails() = runTest(ma
 }
 ```
 
-- [ ] **Step 2: Run, verify failure**
+- [x] **Step 2: Run, verify failure**
 
 Run: `./gradlew :feature:remotes:testDebugUnitTest --tests "*RemotesViewModelTest*connectivity*"`
 Expected: FAIL — `repository.testConnectivity` is never called; no warning message emitted.
 
-- [ ] **Step 3: Add the connectivity test to `addRemote`**
+- [x] **Step 3: Add the connectivity test to `addRemote`**
 
 In `RemotesViewModel.addRemote`, after the successful `repository.addRemote`, add:
 
@@ -411,7 +411,7 @@ Add the string resource (will need to be added to `strings.xml`):
 <string name="remotes_msg_connectivity_warning">Remote \"%1$s\" was saved, but could not verify connectivity. Check your credentials.</string>
 ```
 
-- [ ] **Step 4: Add the mock context getString stub for the new string**
+- [x] **Step 4: Add the mock context getString stub for the new string**
 
 In `RemotesViewModelTest`, in the mock `context` setup, add:
 
@@ -420,12 +420,12 @@ R.string.remotes_msg_connectivity_warning ->
     "Remote \"${args[0]}\" was saved, but could not verify connectivity. Check your credentials."
 ```
 
-- [ ] **Step 5: Run tests, verify pass**
+- [x] **Step 5: Run tests, verify pass**
 
 Run: `./gradlew :feature:remotes:testDebugUnitTest --tests "*RemotesViewModelTest*connectivity*"`
 Expected: PASS.
 
-- [ ] **Step 6: Also add connectivity test to the OAuth success path**
+- [x] **Step 6: Also add connectivity test to the OAuth success path**
 
 In `onOAuthResult` → `OAuthResult.Success`, after the successful `addRemote` + `pendingRemoteResult.created(remoteName)`:
 
@@ -439,12 +439,12 @@ In `onOAuthResult` → `OAuthResult.Success`, after the successful `addRemote` +
 
 And append `connectWarning` to the success message.
 
-- [ ] **Step 7: Run full VM tests, verify pass**
+- [x] **Step 7: Run full VM tests, verify pass**
 
 Run: `./gradlew :feature:remotes:testDebugUnitTest --tests "*RemotesViewModelTest*"`
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add feature/remotes/src/main/kotlin/app/lusk/virga/feature/remotes/RemotesViewModel.kt \
@@ -463,7 +463,7 @@ git commit -m "Run connectivity test after remote creation; warn on failure"
 - Modify: `feature/remotes/src/main/kotlin/app/lusk/virga/feature/remotes/RemotesViewModel.kt`
 - Modify: `feature/remotes/src/test/kotlin/app/lusk/virga/feature/remotes/RemotesViewModelTest.kt`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `RemotesViewModelTest`:
 
@@ -516,12 +516,12 @@ fun setupKind_classifies_providers_correctly() = runTest(mainDispatcher.dispatch
 }
 ```
 
-- [ ] **Step 2: Run, verify compile failure**
+- [x] **Step 2: Run, verify compile failure**
 
 Run: `./gradlew :feature:remotes:testDebugUnitTest --tests "*RemotesViewModelTest*picker*"`
 Expected: compile error — `pickerEntries()` and `setupKindFor()` do not exist on the VM.
 
-- [ ] **Step 3: Expose catalog accessors**
+- [x] **Step 3: Expose catalog accessors**
 
 In `RemotesViewModel.kt`, add:
 
@@ -545,12 +545,12 @@ import app.lusk.virga.core.rclone.ProviderCatalog
 import app.lusk.virga.core.rclone.SetupKind
 ```
 
-- [ ] **Step 4: Run tests, verify pass**
+- [x] **Step 4: Run tests, verify pass**
 
 Run: `./gradlew :feature:remotes:testDebugUnitTest --tests "*RemotesViewModelTest*picker*" --tests "*RemotesViewModelTest*setupKind*"`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add feature/remotes/src/main/kotlin/app/lusk/virga/feature/remotes/RemotesViewModel.kt \
@@ -567,7 +567,7 @@ git commit -m "Expose ProviderCatalog picker entries and setupKind from RemotesV
 **Files:**
 - Create: `feature/remotes/src/main/kotlin/app/lusk/virga/feature/remotes/ProviderPicker.kt`
 
-- [ ] **Step 1: Create the ProviderPicker Composable**
+- [x] **Step 1: Create the ProviderPicker Composable**
 
 ```kotlin
 package app.lusk.virga.feature.remotes
@@ -688,7 +688,7 @@ private fun ProviderRow(entry: PickerEntry, onClick: () -> Unit) {
 }
 ```
 
-- [ ] **Step 2: Add string resources**
+- [x] **Step 2: Add string resources**
 
 In `feature/remotes/src/main/res/values/strings.xml`:
 
@@ -697,12 +697,12 @@ In `feature/remotes/src/main/res/values/strings.xml`:
 <string name="remotes_picker_wrappers_header">Advanced · wrap a remote</string>
 ```
 
-- [ ] **Step 3: Verify the feature module compiles**
+- [x] **Step 3: Verify the feature module compiles**
 
 Run: `./gradlew :feature:remotes:compileFossDebugKotlin`
 Expected: BUILD SUCCESSFUL.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add feature/remotes/src/main/kotlin/app/lusk/virga/feature/remotes/ProviderPicker.kt \
@@ -721,7 +721,7 @@ git commit -m "Add ProviderPicker searchable Composable backed by ProviderCatalo
 - Modify: `feature/remotes/src/main/kotlin/app/lusk/virga/feature/remotes/AddRemoteScreen.kt`
 - Modify: `feature/remotes/src/main/kotlin/app/lusk/virga/feature/remotes/RemotesScreen.kt`
 
-- [ ] **Step 1: Redesign `AddRemoteDialog` state machine**
+- [x] **Step 1: Redesign `AddRemoteDialog` state machine**
 
 The dialog transitions through these steps:
 1. **Picker** — user sees the provider list (when schema is loaded) or the legacy dropdown (fallback).
@@ -739,7 +739,7 @@ private sealed interface AddStep {
 }
 ```
 
-- [ ] **Step 2: Refactor `AddRemoteDialog` to use the picker**
+- [x] **Step 2: Refactor `AddRemoteDialog` to use the picker**
 
 Add new parameters to `AddRemoteDialog`:
 
@@ -760,7 +760,7 @@ Replace the `ExposedDropdownMenuBox` for type selection with a conditional:
 
 The name field stays at the top across all steps. A "Back" button on the form/placeholder returns to the picker.
 
-- [ ] **Step 3: Update callers to pass new params**
+- [x] **Step 3: Update callers to pass new params**
 
 In `AddRemoteScreen.kt` and `RemotesScreen.kt`, pass:
 
@@ -771,21 +771,21 @@ setupKindFor = viewModel::setupKindFor,
 
 (Both already have `viewModel` in scope and call `ensureProvidersLoaded` via the dialog's `LaunchedEffect`.)
 
-- [ ] **Step 4: Handle the legacy fallback**
+- [x] **Step 4: Handle the legacy fallback**
 
 When `pickerEntries` is null (providers failed to load or are still loading), the existing `RcloneBackendTypes` dropdown + freeform flow remains available. The UX degrades gracefully: users can still type a backend type and get the freeform editor.
 
-- [ ] **Step 5: Verify compile**
+- [x] **Step 5: Verify compile**
 
 Run: `./gradlew :feature:remotes:compileFossDebugKotlin`
 Expected: BUILD SUCCESSFUL.
 
-- [ ] **Step 6: Run all feature:remotes tests to check nothing regressed**
+- [x] **Step 6: Run all feature:remotes tests to check nothing regressed**
 
 Run: `./gradlew :feature:remotes:testDebugUnitTest`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add feature/remotes/src/main/kotlin/app/lusk/virga/feature/remotes/AddRemoteDialog.kt \
@@ -803,7 +803,7 @@ git commit -m "Replace hardcoded backend dropdown with ProviderPicker; route by 
 **Files:**
 - Modify: `feature/remotes/src/main/kotlin/app/lusk/virga/feature/remotes/AddRemoteDialog.kt`
 
-- [ ] **Step 1: Add validation logic**
+- [x] **Step 1: Add validation logic**
 
 In the `AddStep.CredentialForm` branch of the dialog, compute form validity:
 
@@ -815,7 +815,7 @@ val formValid = requiredOptions.all { opt ->
 }
 ```
 
-- [ ] **Step 2: Gate the Create button**
+- [x] **Step 2: Gate the Create button**
 
 Change the `enabled` condition of the Create `TextButton` for the credential form step:
 
@@ -823,7 +823,7 @@ Change the `enabled` condition of the Create `TextButton` for the credential for
 enabled = nameUsable && formValid,
 ```
 
-- [ ] **Step 3: Show error state on empty required fields**
+- [x] **Step 3: Show error state on empty required fields**
 
 In `TypedOptionFields` → `OptionField`, add `isError` to `OutlinedTextField` when the option is required and its value is blank:
 
@@ -831,12 +831,12 @@ In `TypedOptionFields` → `OptionField`, add `isError` to `OutlinedTextField` w
 isError = opt.required && current.isBlank(),
 ```
 
-- [ ] **Step 4: Verify compile**
+- [x] **Step 4: Verify compile**
 
 Run: `./gradlew :feature:remotes:compileFossDebugKotlin`
 Expected: BUILD SUCCESSFUL.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add feature/remotes/src/main/kotlin/app/lusk/virga/feature/remotes/AddRemoteDialog.kt \
@@ -848,17 +848,17 @@ git commit -m "Disable Create until required schema fields are filled; show erro
 
 ## Task 8: Full-suite gate + lint
 
-- [ ] **Step 1: Run the whole unit-test suite**
+- [x] **Step 1: Run the whole unit-test suite**
 
 Run: `./gradlew test`
 Expected: BUILD SUCCESSFUL — every module's unit tests pass.
 
-- [ ] **Step 2: Run lint on the foss debug variant**
+- [x] **Step 2: Run lint on the foss debug variant**
 
 Run: `./gradlew lintFossDebug`
 Expected: no new errors.
 
-- [ ] **Step 3: Final commit if lint auto-touched anything**
+- [x] **Step 3: Final commit if lint auto-touched anything**
 
 ```bash
 git add -A

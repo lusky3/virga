@@ -1,6 +1,6 @@
 # All rclone providers — Phase 4B: Daemon-mediated OAuth
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Enable OAuth for every non-bundled provider (pCloud, Yandex, Mega, etc.) by driving rclone's interactive `config/create` state machine over the RC API. The daemon starts a local webserver on `127.0.0.1:53682`, rclone emits the auth URL via `config/oauthstatus`, and the browser redirect completes the flow without Virga needing provider-specific client registrations.
 
@@ -119,7 +119,7 @@ Request: `{}` — cancels the in-flight OAuth webserver.
 
 ### Step 1: Write the failing tests
 
-- [ ] Create `DaemonOAuthOrchestratorTest.kt` with a mock `RcApiClient` (or a minimal RC call lambda). Test the following scenarios:
+- [x] Create `DaemonOAuthOrchestratorTest.kt` with a mock `RcApiClient` (or a minimal RC call lambda). Test the following scenarios:
 
 ```kotlin
 package app.lusk.virga.core.rclone.oauth
@@ -232,12 +232,12 @@ class DaemonOAuthOrchestratorTest {
 
 ### Step 2: Run tests, verify they fail to compile
 
-- [ ] Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*DaemonOAuthOrchestratorTest"`
+- [x] Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*DaemonOAuthOrchestratorTest"`
   Expected: compile error — `DaemonOAuthOrchestrator` does not exist.
 
 ### Step 3: Implement `DaemonOAuthOrchestrator`
 
-- [ ] Create `DaemonOAuthOrchestrator.kt`:
+- [x] Create `DaemonOAuthOrchestrator.kt`:
 
 ```kotlin
 package app.lusk.virga.core.rclone.oauth
@@ -481,12 +481,12 @@ The restructured `runStateMachine` handles this by detecting the question name b
 
 ### Step 4: Run tests, verify they pass
 
-- [ ] Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*DaemonOAuthOrchestratorTest"`
+- [x] Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*DaemonOAuthOrchestratorTest"`
   Expected: PASS.
 
 ### Step 5: Commit
 
-- [ ] ```bash
+- [x] ```bash
 git add core/rclone/src/main/kotlin/app/lusk/virga/core/rclone/oauth/DaemonOAuthOrchestrator.kt \
         core/rclone/src/test/kotlin/app/lusk/virga/core/rclone/oauth/DaemonOAuthOrchestratorTest.kt
 git commit -m "Add DaemonOAuthOrchestrator: drives rclone config/create state machine for OAuth"
@@ -505,7 +505,7 @@ git commit -m "Add DaemonOAuthOrchestrator: drives rclone config/create state ma
 
 ### Step 1: Write the failing test
 
-- [ ] Add to `RcloneEngineImplTest`:
+- [x] Add to `RcloneEngineImplTest`:
 
 ```kotlin
 @Test
@@ -545,12 +545,12 @@ fun `withDaemonForOAuth rejects when leases are held`() = runTest {
 
 ### Step 2: Run, verify failure
 
-- [ ] Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*RcloneEngineImplTest*withDaemonForOAuth*"`
+- [x] Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*RcloneEngineImplTest*withDaemonForOAuth*"`
   Expected: compile error — method doesn't exist.
 
 ### Step 3: Add to the interface
 
-- [ ] In `RcloneEngine.kt`, add:
+- [x] In `RcloneEngine.kt`, add:
 
 ```kotlin
     /**
@@ -564,7 +564,7 @@ fun `withDaemonForOAuth rejects when leases are held`() = runTest {
 
 ### Step 4: Implement in `RcloneEngineImpl`
 
-- [ ] Add after `mutatingConfig`:
+- [x] Add after `mutatingConfig`:
 
 ```kotlin
     override suspend fun <T> withDaemonForOAuth(block: suspend (RcloneDaemon) -> T): T {
@@ -593,12 +593,12 @@ fun `withDaemonForOAuth rejects when leases are held`() = runTest {
 
 ### Step 5: Run tests, verify pass
 
-- [ ] Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*RcloneEngineImplTest*withDaemonForOAuth*"`
+- [x] Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*RcloneEngineImplTest*withDaemonForOAuth*"`
   Expected: PASS.
 
 ### Step 6: Commit
 
-- [ ] ```bash
+- [x] ```bash
 git add core/rclone/src/main/kotlin/app/lusk/virga/core/rclone/RcloneEngine.kt \
         core/rclone/src/main/kotlin/app/lusk/virga/core/rclone/RcloneEngineImpl.kt \
         core/rclone/src/test/kotlin/app/lusk/virga/core/rclone/RcloneEngineImplTest.kt
@@ -618,7 +618,7 @@ git commit -m "Add withDaemonForOAuth: long-lived daemon session for interactive
 
 ### Step 1: Write the failing tests
 
-- [ ] Add to `RemotesViewModelTest`:
+- [x] Add to `RemotesViewModelTest`:
 
 ```kotlin
 @Test
@@ -673,12 +673,12 @@ fun `cancelDaemonOAuth stops the orchestrator`() = runTest {
 
 ### Step 2: Run, verify failure
 
-- [ ] Run: `./gradlew :feature:remotes:testDebugUnitTest --tests "*RemotesViewModelTest*DaemonOAuth*"`
+- [x] Run: `./gradlew :feature:remotes:testDebugUnitTest --tests "*RemotesViewModelTest*DaemonOAuth*"`
   Expected: compile error — `startDaemonOAuth` / `cancelDaemonOAuth` don't exist.
 
 ### Step 3: Implement in the ViewModel
 
-- [ ] Add to `RemotesViewModel`:
+- [x] Add to `RemotesViewModel`:
 
 ```kotlin
     private var daemonOAuthOrchestrator: DaemonOAuthOrchestrator? = null
@@ -763,12 +763,12 @@ fun `cancelDaemonOAuth stops the orchestrator`() = runTest {
 
 ### Step 4: Run tests, verify pass
 
-- [ ] Run: `./gradlew :feature:remotes:testDebugUnitTest --tests "*RemotesViewModelTest*DaemonOAuth*"`
+- [x] Run: `./gradlew :feature:remotes:testDebugUnitTest --tests "*RemotesViewModelTest*DaemonOAuth*"`
   Expected: PASS.
 
 ### Step 5: Commit
 
-- [ ] ```bash
+- [x] ```bash
 git add feature/remotes/src/main/kotlin/app/lusk/virga/feature/remotes/RemotesViewModel.kt \
         feature/remotes/src/test/kotlin/app/lusk/virga/feature/remotes/RemotesViewModelTest.kt \
         core/data/src/main/kotlin/app/lusk/virga/core/data/RemoteRepository.kt
@@ -790,7 +790,7 @@ git commit -m "Wire DaemonOAuthOrchestrator into RemotesViewModel"
 
 ### Step 1: Sketch the UI tree (no test — Compose Preview validates)
 
-- [ ] In `AddRemoteDialog.kt`, add a new branch for `SetupKind.OAuth(bundled = false)`:
+- [x] In `AddRemoteDialog.kt`, add a new branch for `SetupKind.OAuth(bundled = false)`:
 
 ```kotlin
 is SetupKind.OAuth -> if (!setupKind.bundled) {
@@ -812,7 +812,7 @@ is SetupKind.OAuth -> if (!setupKind.bundled) {
 
 ### Step 2: Implement `DaemonOAuthForm` Composable
 
-- [ ] Add a `@Composable` in the same file (or a dedicated `DaemonOAuthForm.kt` if it grows):
+- [x] Add a `@Composable` in the same file (or a dedicated `DaemonOAuthForm.kt` if it grows):
 
 ```kotlin
 @Composable
@@ -875,12 +875,12 @@ private fun DaemonOAuthForm(
 
 ### Step 3: Verify Compose compiles
 
-- [ ] Run: `./gradlew :feature:remotes:compileFossDebugKotlin`
+- [x] Run: `./gradlew :feature:remotes:compileFossDebugKotlin`
   Expected: BUILD SUCCESSFUL.
 
 ### Step 4: Commit
 
-- [ ] ```bash
+- [x] ```bash
 git add feature/remotes/src/main/kotlin/app/lusk/virga/feature/remotes/AddRemoteDialog.kt
 git commit -m "Add DaemonOAuthForm UI for non-bundled OAuth providers"
 ```
@@ -899,7 +899,7 @@ git commit -m "Add DaemonOAuthForm UI for non-bundled OAuth providers"
 
 ### Step 1: Write timeout test in orchestrator
 
-- [ ] Add to `DaemonOAuthOrchestratorTest`:
+- [x] Add to `DaemonOAuthOrchestratorTest`:
 
 ```kotlin
 @Test
@@ -923,7 +923,7 @@ fun `times out after configured duration and calls oauthstop`() = runTest {
 
 ### Step 2: Write process-death recovery test in VM
 
-- [ ] Add to `RemotesViewModelTest`:
+- [x] Add to `RemotesViewModelTest`:
 
 ```kotlin
 @Test
@@ -937,7 +937,7 @@ fun `oauthInProgress resets to false on VM init if no orchestrator is active`() 
 
 ### Step 3: Add string resource for timeout
 
-- [ ] Add to `feature/remotes/src/main/res/values/strings.xml`:
+- [x] Add to `feature/remotes/src/main/res/values/strings.xml`:
 
 ```xml
 <string name="remotes_msg_oauth_timed_out">Authorization timed out. Please try again.</string>
@@ -945,13 +945,13 @@ fun `oauthInProgress resets to false on VM init if no orchestrator is active`() 
 
 ### Step 4: Run tests, verify pass
 
-- [ ] Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*DaemonOAuthOrchestratorTest*timeout*"`
-- [ ] Run: `./gradlew :feature:remotes:testDebugUnitTest --tests "*RemotesViewModelTest*oauthInProgress*"`
+- [x] Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*DaemonOAuthOrchestratorTest*timeout*"`
+- [x] Run: `./gradlew :feature:remotes:testDebugUnitTest --tests "*RemotesViewModelTest*oauthInProgress*"`
   Expected: PASS.
 
 ### Step 5: Commit
 
-- [ ] ```bash
+- [x] ```bash
 git add core/rclone/src/main/kotlin/app/lusk/virga/core/rclone/oauth/DaemonOAuthOrchestrator.kt \
         core/rclone/src/test/kotlin/app/lusk/virga/core/rclone/oauth/DaemonOAuthOrchestratorTest.kt \
         feature/remotes/src/main/kotlin/app/lusk/virga/feature/remotes/RemotesViewModel.kt \
@@ -972,7 +972,7 @@ git commit -m "Daemon OAuth timeout + cancellation + process-death recovery"
 
 ### Step 1: Write the failing tests
 
-- [ ] Add to `DaemonOAuthOrchestratorTest`:
+- [x] Add to `DaemonOAuthOrchestratorTest`:
 
 ```kotlin
 @Test
@@ -1027,12 +1027,12 @@ fun `answers boolean questions with their default as string`() = runTest {
 
 ### Step 2: Run, verify failure or adjust
 
-- [ ] Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*DaemonOAuthOrchestratorTest*questions*"`
+- [x] Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*DaemonOAuthOrchestratorTest*questions*"`
   Expected: PASS if the default-answering logic from Task 1 already handles this. If not, update.
 
 ### Step 3: Refine the answer logic
 
-- [ ] In the orchestrator, ensure the `else` branch handles types correctly:
+- [x] In the orchestrator, ensure the `else` branch handles types correctly:
 
 ```kotlin
     private fun defaultAnswer(option: JsonObject?): String {
@@ -1049,12 +1049,12 @@ fun `answers boolean questions with their default as string`() = runTest {
 
 ### Step 4: Run full orchestrator tests
 
-- [ ] Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*DaemonOAuthOrchestratorTest"`
+- [x] Run: `./gradlew :core:rclone:testDebugUnitTest --tests "*DaemonOAuthOrchestratorTest"`
   Expected: PASS.
 
 ### Step 5: Commit
 
-- [ ] ```bash
+- [x] ```bash
 git add core/rclone/src/main/kotlin/app/lusk/virga/core/rclone/oauth/DaemonOAuthOrchestrator.kt \
         core/rclone/src/test/kotlin/app/lusk/virga/core/rclone/oauth/DaemonOAuthOrchestratorTest.kt
 git commit -m "Handle multi-question state machines: answer pre/post-OAuth questions with defaults"
@@ -1064,17 +1064,17 @@ git commit -m "Handle multi-question state machines: answer pre/post-OAuth quest
 
 ## Task 7: Full-suite gate
 
-- [ ] **Step 1: Run the whole unit-test suite**
+- [x] **Step 1: Run the whole unit-test suite**
 
 Run: `./gradlew test`
 Expected: BUILD SUCCESSFUL.
 
-- [ ] **Step 2: Run lint**
+- [x] **Step 2: Run lint**
 
 Run: `./gradlew lintFossDebug`
 Expected: no new errors.
 
-- [ ] **Step 3: Final commit if needed**
+- [x] **Step 3: Final commit if needed**
 
 ```bash
 git add -A
