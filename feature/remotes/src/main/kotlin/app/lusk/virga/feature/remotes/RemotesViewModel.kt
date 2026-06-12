@@ -464,7 +464,7 @@ class RemotesViewModel @Inject constructor(
                     }
                 }
                 // Refresh remote list after successful daemon config
-                repository.refresh()
+                runCatching { repository.refresh() }
             } catch (e: Throwable) {
                 transient.update { it.copy(oauthInProgress = false, message = e.toUserMessage()) }
             } finally {

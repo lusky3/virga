@@ -79,6 +79,8 @@ class DaemonOAuthOrchestrator(
                 throw e
             } catch (e: Throwable) {
                 _state.value = State.Failed(e.message ?: "Unknown error")
+            } finally {
+                this@DaemonOAuthOrchestrator.daemon = null
             }
         }
     }

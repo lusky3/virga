@@ -118,6 +118,14 @@ jobs:
           # the single signing path shared with local release builds.
           echo "VIRGA_KEYSTORE_FILE=$RUNNER_TEMP/keystore/release.jks" >> "$GITHUB_ENV"
 
+      - name: Verify signing secrets available
+        if: env.HAS_KEYSTORE != 'true'
+        env:
+          HAS_KEYSTORE: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' }}
+        run: |
+          echo "::error::Release signing keystore not configured. Aborting."
+          exit 1
+
       - name: Build FOSS release APKs
         # When the keystore env vars are present, the Gradle signingConfig signs
         # the APKs in-build (no separate apksigner step). Without them (forks /
