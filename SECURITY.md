@@ -10,8 +10,9 @@ Please report security issues via GitHub private vulnerability reporting on this
 
 Box's OAuth implementation does not support PKCE for mobile/installed-app clients.
 This means the `client_secret` must be included in the token exchange request.
-The secret is embedded in the APK — this is industry standard for Box mobile apps
-(Box's own SDKs do the same).
+The secret is embedded in the APK — embedding the secret is a common pattern for
+Box mobile integrations, since Box does not support PKCE-only public clients for
+this flow.
 
 Mitigations:
 

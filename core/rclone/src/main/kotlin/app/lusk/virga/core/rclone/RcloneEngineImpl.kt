@@ -12,6 +12,7 @@ import app.lusk.virga.core.common.model.SyncProgress
 import app.lusk.virga.core.rclone.api.RcApiClient
 import app.lusk.virga.core.rclone.config.RcloneConfigManager
 import app.lusk.virga.core.rclone.daemon.RcloneDaemonManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -370,10 +371,15 @@ class RcloneEngineImpl @Inject constructor(
         return try {
             rc(d, "operations/about", buildJsonObject { put("fs", fs) })
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            // Caller cancellation must propagate, not be reported as a connectivity failure.
+            throw e
         } catch (_: Throwable) {
             try {
                 rc(d, "operations/list", buildJsonObject { put("fs", fs); put("remote", "") })
                 Result.success(Unit)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Throwable) {
                 Result.failure(e)
             }

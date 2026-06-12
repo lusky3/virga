@@ -14,6 +14,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonPrimitive
@@ -689,6 +690,20 @@ class RcloneEngineImplTest {
 
         assertThat(result.isFailure).isTrue()
         assertThat(result.exceptionOrNull()).isInstanceOf(VirgaError.Network::class.java)
+    }
+
+    @Test fun `testConnectivity rethrows cancellation without falling back to listDir`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "operations/about", any()) } throws
+            CancellationException("caller cancelled")
+
+        engine.startDaemon()
+        assertThrows<CancellationException> { engine.testConnectivity("gdrive") }
+
+        // Cancellation must propagate; the fallback RC call must never fire.
+        coVerify(exactly = 0) { apiClient.call(any(), any(), any(), "operations/list", any()) }
     }
 
     // --- config mutations are refused while a sync holds a lease ---
