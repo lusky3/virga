@@ -12,15 +12,35 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.util.concurrent.CopyOnWriteArrayList
 
+/**
+ * All mocked rclone responses below use the REAL `config/create` protocol
+ * shapes recorded in a spike against rclone v1.74.3 (`rc --loopback` and a
+ * live `rcd` daemon):
+ *
+ * - Question: `{"State": "<token>", "Option": {Name, Type, DefaultStr, Help, ...},
+ *   "Error": "", "Result": ""}`
+ * - Continuation request: `{"name", "type", "parameters", "opt": {"nonInteractive":
+ *   true, "continue": true, "all": true, "state": "<token>", "result": "<answer>"}}`
+ * - Terminal success: `{"State": "", "Option": null, "Error": "", "Result": ""}` —
+ *   Result is an empty string, NOT the remote name.
+ *
+ * `config/oauthstatus` / `config/oauthstop` do not exist in rclone 1.74 and
+ * must never be called.
+ */
 @OptIn(ExperimentalCoroutinesApi::class)
 class DaemonOAuthOrchestratorTest {
 
@@ -34,8 +54,8 @@ class DaemonOAuthOrchestratorTest {
     private lateinit var apiClient: RcApiClient
     private lateinit var daemon: RcloneDaemon
 
-    /** Track which RC commands were called and with what state transitions. */
-    private val calledCommands = CopyOnWriteArrayList<String>()
+    /** Every params object POSTed to config/create, in call order. */
+    private val requests = CopyOnWriteArrayList<JsonObject>()
 
     @BeforeEach
     fun setUp() {
@@ -46,291 +66,271 @@ class DaemonOAuthOrchestratorTest {
             user = "u",
             pass = "p",
         )
-        calledCommands.clear()
+        requests.clear()
     }
 
-    @Test
-    fun `happy path - single question then OAuth completes`() = runTest(testDispatcher) {
-        var configCreateCalls = 0
+    // ---------------------------------------------------------------- helpers
+
+    /** A question response as rclone 1.74 actually shapes it. */
+    private fun question(
+        stateToken: String,
+        name: String,
+        type: String = "string",
+        defaultStr: String = "",
+        help: String = "",
+    ): JsonObject = buildJsonObject {
+        put("State", stateToken)
+        put("Error", "")
+        put("Result", "")
+        putJsonObject("Option") {
+            put("Name", name)
+            put("Type", type)
+            put("DefaultStr", defaultStr)
+            put("Help", help)
+        }
+    }
+
+    /** Terminal success: empty State, null Option, EMPTY Result. */
+    private fun terminal(): JsonObject = buildJsonObject {
+        put("State", "")
+        put("Error", "")
+        put("Result", "")
+        put("Option", JsonNull)
+    }
+
+    /** Mocks config/create to reply with [responses] in sequence, capturing requests. */
+    private fun enqueueResponses(vararg responses: JsonObject) {
         coEvery {
             apiClient.call(any(), any(), any(), "config/create", any())
         } answers {
-            configCreateCalls++
-            when (configCreateCalls) {
-                1 -> buildJsonObject {
-                    put("State", "tok1")
-                    putJsonObject("Option") {
-                        put("Name", "config_is_local")
-                        put("Type", "bool")
-                        put("Default", true)
-                    }
-                }
-                else -> buildJsonObject {
-                    put("State", "")
-                    put("Result", "myremote")
-                }
-            }
+            requests.add(arg(4))
+            responses[(requests.size - 1).coerceAtMost(responses.lastIndex)]
         }
+    }
 
-        coEvery {
-            apiClient.call(any(), any(), any(), "config/oauthstatus", any())
-        } returns buildJsonObject { put("url", "https://pcloud.example/oauth") }
+    private fun JsonObject.opt(): JsonObject = getValue("opt").jsonObject
+
+    private fun JsonObject.optStr(key: String): String? =
+        opt()[key]?.jsonPrimitive?.contentOrNull
+
+    private fun assertNoInventedEndpointsCalled() {
+        coVerify(exactly = 0) {
+            apiClient.call(any(), any(), any(), match { it != "config/create" }, any())
+        }
+    }
+
+    // ------------------------------------------------------------------ tests
+
+    @Test
+    fun `happy path - walks questions, pastes token, completes`() = runTest(testDispatcher) {
+        val pasteHelp = "Execute rclone authorize \"drive\" then paste the result."
+        enqueueResponses(
+            question("*all-set,0,false", "client_id"),
+            question("*oauth-islocal,teamdrive,,", "config_is_local", type = "bool", defaultStr = "true"),
+            question("*oauth-authorize,teamdrive,,", "config_token", help = pasteHelp),
+            question("teamdrive_ok", "config_change_team_drive", type = "bool", defaultStr = "false"),
+            terminal(),
+        )
 
         val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
-        orchestrator.start("myremote", "pcloud", null, null, daemon, this)
+        orchestrator.start("myremote", "drive", null, null, daemon, this)
+        runCurrent()
+
+        // Machine paused on config_token, surfacing rclone's Help instructions.
+        assertThat(orchestrator.state.value).isEqualTo(
+            DaemonOAuthOrchestrator.State.AwaitingTokenPaste(pasteHelp),
+        )
+
+        orchestrator.submitToken("""{"access_token":"tok"}""")
         advanceUntilIdle()
 
-        // Verify terminal state — Complete means the full state machine ran successfully.
-        assertThat(orchestrator.state.value).isEqualTo(DaemonOAuthOrchestrator.State.Complete("myremote"))
+        // Terminal Result is "" in the real protocol — Complete must carry the
+        // requested name, not the (empty) Result.
+        assertThat(orchestrator.state.value)
+            .isEqualTo(DaemonOAuthOrchestrator.State.Complete("myremote"))
+
+        // Initial request: opt carries nonInteractive+all; no continuation fields,
+        // and crucially no top-level state/result (rejected by real rclone).
+        val initial = requests[0]
+        assertThat(initial["name"]?.jsonPrimitive?.contentOrNull).isEqualTo("myremote")
+        assertThat(initial["type"]?.jsonPrimitive?.contentOrNull).isEqualTo("drive")
+        assertThat(initial.optStr("nonInteractive")).isEqualTo("true")
+        assertThat(initial.optStr("all")).isEqualTo("true")
+        assertThat(initial.opt()["continue"]).isNull()
+        assertThat(initial["state"]).isNull()
+        assertThat(initial["result"]).isNull()
+
+        // Every continuation repeats name/type/parameters and answers inside opt.
+        for (req in requests.drop(1)) {
+            assertThat(req["name"]?.jsonPrimitive?.contentOrNull).isEqualTo("myremote")
+            assertThat(req["type"]?.jsonPrimitive?.contentOrNull).isEqualTo("drive")
+            assertThat(req["parameters"]).isInstanceOf(JsonObject::class.java)
+            assertThat(req.optStr("continue")).isEqualTo("true")
+            assertThat(req.optStr("nonInteractive")).isEqualTo("true")
+            assertThat(req.optStr("all")).isEqualTo("true")
+        }
+        assertThat(requests[1].optStr("state")).isEqualTo("*all-set,0,false")
+        assertThat(requests[1].optStr("result")).isEqualTo("")
+        // config_is_local is always answered "false" (paste-token branch).
+        assertThat(requests[2].optStr("state")).isEqualTo("*oauth-islocal,teamdrive,,")
+        assertThat(requests[2].optStr("result")).isEqualTo("false")
+        assertThat(requests[3].optStr("state")).isEqualTo("*oauth-authorize,teamdrive,,")
+        assertThat(requests[3].optStr("result")).isEqualTo("""{"access_token":"tok"}""")
+        assertThat(requests[4].optStr("state")).isEqualTo("teamdrive_ok")
+        assertThat(requests[4].optStr("result")).isEqualTo("false")
+
+        assertNoInventedEndpointsCalled()
     }
 
     @Test
-    fun `emits Failed when config_create returns an error`() = runTest(testDispatcher) {
-        coEvery {
-            apiClient.call(any(), any(), any(), "config/create", any())
-        } returns buildJsonObject {
-            put("State", "")
-            put("Error", "remote already exists")
-        }
+    fun `emits Failed when rclone reports an in-band error`() = runTest(testDispatcher) {
+        enqueueResponses(
+            buildJsonObject {
+                put("State", "")
+                put("Error", "couldn't find backend called \"nope\"")
+                put("Result", "")
+                put("Option", JsonNull)
+            },
+        )
 
         val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
-        orchestrator.start("bad", "pcloud", null, null, daemon, this)
+        orchestrator.start("bad", "nope", null, null, daemon, this)
         advanceUntilIdle()
 
         assertThat(orchestrator.state.value).isEqualTo(
-            DaemonOAuthOrchestrator.State.Failed("remote already exists"),
+            DaemonOAuthOrchestrator.State.Failed("couldn't find backend called \"nope\""),
         )
     }
 
     @Test
-    fun `cancel calls oauthstop`() = runTest(testDispatcher) {
-        var configCreateCalls = 0
+    fun `emits Failed when the RC call throws`() = runTest(testDispatcher) {
+        // Real rclone answers protocol mistakes with HTTP 500, which RcApiClient
+        // surfaces as an exception.
         coEvery {
             apiClient.call(any(), any(), any(), "config/create", any())
-        } coAnswers {
-            configCreateCalls++
-            when (configCreateCalls) {
-                1 -> buildJsonObject {
-                    put("State", "tok1")
-                    putJsonObject("Option") {
-                        put("Name", "config_is_local")
-                        put("Type", "bool")
-                        put("Default", true)
-                    }
-                }
-                else -> {
-                    kotlinx.coroutines.delay(10_000L)
-                    buildJsonObject {}
-                }
-            }
-        }
-
-        coEvery {
-            apiClient.call(any(), any(), any(), "config/oauthstatus", any())
-        } returns buildJsonObject {}
-
-        coEvery {
-            apiClient.call(any(), any(), any(), "config/oauthstop", any())
-        } returns buildJsonObject {}
-
-        val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
-        orchestrator.start("myremote", "pcloud", null, null, daemon, this)
-        advanceTimeBy(500)
-        orchestrator.cancel()
-        advanceUntilIdle()
-
-        coVerify { apiClient.call(any(), any(), any(), "config/oauthstop", any()) }
-    }
-
-    @Test
-    fun `passes client_id and client_secret as parameters when provided`() = runTest(testDispatcher) {
-        val capturedParams = CopyOnWriteArrayList<JsonObject>()
-        coEvery {
-            apiClient.call(any(), any(), any(), "config/create", any())
-        } answers {
-            capturedParams.add(arg(4))
-            buildJsonObject {
-                put("State", "")
-                put("Result", "myremote")
-            }
-        }
-
-        val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
-        orchestrator.start("myremote", "pcloud", "my-id", "my-secret", daemon, this)
-        advanceUntilIdle()
-
-        assertThat(capturedParams).isNotEmpty()
-        val initial = capturedParams.first()
-        val parameters = initial["parameters"] as? JsonObject
-        assertThat(parameters?.get("client_id")?.toString()?.trim('"')).isEqualTo("my-id")
-        assertThat(parameters?.get("client_secret")?.toString()?.trim('"')).isEqualTo("my-secret")
-    }
-
-    @Test
-    fun `times out after configured duration and calls oauthstop`() = runTest(testDispatcher) {
-        var configCreateCalls = 0
-        coEvery {
-            apiClient.call(any(), any(), any(), "config/create", any())
-        } coAnswers {
-            configCreateCalls++
-            when (configCreateCalls) {
-                1 -> buildJsonObject {
-                    put("State", "tok1")
-                    putJsonObject("Option") {
-                        put("Name", "config_is_local")
-                        put("Type", "bool")
-                        put("Default", true)
-                    }
-                }
-                else -> {
-                    kotlinx.coroutines.delay(10_000L)
-                    buildJsonObject {}
-                }
-            }
-        }
-
-        coEvery {
-            apiClient.call(any(), any(), any(), "config/oauthstatus", any())
-        } returns buildJsonObject {}
-
-        coEvery {
-            apiClient.call(any(), any(), any(), "config/oauthstop", any())
-        } returns buildJsonObject {}
-
-        val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers, timeoutMs = 500, pollIntervalMs = 50)
-        orchestrator.start("x", "pcloud", null, null, daemon, this)
-        advanceTimeBy(600)
-        advanceUntilIdle()
-
-        assertThat(orchestrator.state.value).isEqualTo(DaemonOAuthOrchestrator.State.TimedOut)
-        coVerify { apiClient.call(any(), any(), any(), "config/oauthstop", any()) }
-    }
-
-    @Test
-    fun `answers non-OAuth questions with defaults`() = runTest(testDispatcher) {
-        var configCreateCalls = 0
-        val capturedAnswers = mutableMapOf<String, String>()
-
-        coEvery {
-            apiClient.call(any(), any(), any(), "config/create", any())
-        } answers {
-            configCreateCalls++
-            val params = arg<JsonObject>(4)
-            if (configCreateCalls == 2) {
-                capturedAnswers["scope"] = params["result"]?.toString()?.trim('"') ?: ""
-            }
-            when (configCreateCalls) {
-                1 -> buildJsonObject {
-                    put("State", "tok1")
-                    putJsonObject("Option") {
-                        put("Name", "scope")
-                        put("Type", "string")
-                        put("Default", "drive")
-                    }
-                }
-                2 -> buildJsonObject {
-                    put("State", "tok2")
-                    putJsonObject("Option") {
-                        put("Name", "config_is_local")
-                        put("Type", "bool")
-                        put("Default", true)
-                    }
-                }
-                else -> buildJsonObject {
-                    put("State", "")
-                    put("Result", "mygdrive")
-                }
-            }
-        }
-
-        coEvery {
-            apiClient.call(any(), any(), any(), "config/oauthstatus", any())
-        } returns buildJsonObject { put("url", "https://drive.example/oauth") }
-
-        val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
-        orchestrator.start("mygdrive", "drive", null, null, daemon, this)
-        advanceUntilIdle()
-
-        assertThat(capturedAnswers["scope"]).isEqualTo("drive")
-        assertThat(orchestrator.state.value).isEqualTo(DaemonOAuthOrchestrator.State.Complete("mygdrive"))
-    }
-
-    @Test
-    fun `answers boolean questions with their default as string`() = runTest(testDispatcher) {
-        var configCreateCalls = 0
-        val capturedAnswers = mutableMapOf<String, String>()
-
-        coEvery {
-            apiClient.call(any(), any(), any(), "config/create", any())
-        } answers {
-            configCreateCalls++
-            val params = arg<JsonObject>(4)
-            if (configCreateCalls == 2) {
-                capturedAnswers["advanced_config"] = params["result"]?.toString()?.trim('"') ?: ""
-            }
-            when (configCreateCalls) {
-                1 -> buildJsonObject {
-                    put("State", "tok1")
-                    putJsonObject("Option") {
-                        put("Name", "advanced_config")
-                        put("Type", "bool")
-                        put("Default", false)
-                    }
-                }
-                else -> buildJsonObject {
-                    put("State", "")
-                    put("Result", "x")
-                }
-            }
-        }
+        } throws RuntimeException("Didn't find key \"name\" in input")
 
         val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
         orchestrator.start("x", "drive", null, null, daemon, this)
         advanceUntilIdle()
 
-        assertThat(capturedAnswers["advanced_config"]).isEqualTo("false")
+        assertThat(orchestrator.state.value).isEqualTo(
+            DaemonOAuthOrchestrator.State.Failed("Didn't find key \"name\" in input"),
+        )
     }
 
     @Test
-    fun `answers post-OAuth questions with defaults until terminal`() = runTest(testDispatcher) {
-        var configCreateCalls = 0
+    fun `times out while waiting for a pasted token`() = runTest(testDispatcher) {
+        enqueueResponses(
+            question("*oauth-islocal,x,,", "config_is_local", type = "bool", defaultStr = "true"),
+            question("*oauth-authorize,x,,", "config_token"),
+        )
 
-        coEvery {
-            apiClient.call(any(), any(), any(), "config/create", any())
-        } answers {
-            configCreateCalls++
-            when (configCreateCalls) {
-                1 -> buildJsonObject {
-                    put("State", "tok1")
-                    putJsonObject("Option") {
-                        put("Name", "config_is_local")
-                        put("Type", "bool")
-                        put("Default", true)
-                    }
-                }
-                2 -> buildJsonObject {
-                    put("State", "tok2")
-                    putJsonObject("Option") {
-                        put("Name", "config_drive_id")
-                        put("Type", "string")
-                        put("Default", "")
-                    }
-                }
-                else -> buildJsonObject {
-                    put("State", "")
-                    put("Result", "mygdrive")
-                }
-            }
-        }
+        val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers, timeoutMs = 500)
+        orchestrator.start("x", "drive", null, null, daemon, this)
+        runCurrent()
+        assertThat(orchestrator.state.value)
+            .isInstanceOf(DaemonOAuthOrchestrator.State.AwaitingTokenPaste::class.java)
 
-        coEvery {
-            apiClient.call(any(), any(), any(), "config/oauthstatus", any())
-        } returns buildJsonObject { put("url", "https://drive.example/oauth") }
+        advanceTimeBy(600)
+        advanceUntilIdle()
+
+        assertThat(orchestrator.state.value).isEqualTo(DaemonOAuthOrchestrator.State.TimedOut)
+        assertNoInventedEndpointsCalled()
+    }
+
+    @Test
+    fun `cancel while awaiting token emits Cancelled without extra RC calls`() = runTest(testDispatcher) {
+        enqueueResponses(
+            question("*oauth-islocal,x,,", "config_is_local", type = "bool", defaultStr = "true"),
+            question("*oauth-authorize,x,,", "config_token"),
+        )
+
+        val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
+        orchestrator.start("x", "drive", null, null, daemon, this)
+        runCurrent()
+        assertThat(orchestrator.state.value)
+            .isInstanceOf(DaemonOAuthOrchestrator.State.AwaitingTokenPaste::class.java)
+
+        orchestrator.cancel()
+        advanceUntilIdle()
+
+        assertThat(orchestrator.state.value).isEqualTo(DaemonOAuthOrchestrator.State.Cancelled)
+        // config/oauthstop does not exist in rclone 1.74 — nothing may call it.
+        assertNoInventedEndpointsCalled()
+    }
+
+    @Test
+    fun `passes client_id and client_secret inside parameters`() = runTest(testDispatcher) {
+        enqueueResponses(terminal())
+
+        val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
+        orchestrator.start("myremote", "pcloud", "my-id", "my-secret", daemon, this)
+        advanceUntilIdle()
+
+        assertThat(requests).isNotEmpty()
+        val parameters = requests.first().getValue("parameters").jsonObject
+        assertThat(parameters["client_id"]?.jsonPrimitive?.contentOrNull).isEqualTo("my-id")
+        assertThat(parameters["client_secret"]?.jsonPrimitive?.contentOrNull).isEqualTo("my-secret")
+        assertThat(orchestrator.state.value)
+            .isEqualTo(DaemonOAuthOrchestrator.State.Complete("myremote"))
+    }
+
+    @Test
+    fun `answers ordinary questions with their DefaultStr`() = runTest(testDispatcher) {
+        enqueueResponses(
+            question("*all-set,6,false", "scope", defaultStr = "drive"),
+            question("*all-advanced", "config_fs_advanced", type = "bool", defaultStr = "false"),
+            terminal(),
+        )
 
         val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
         orchestrator.start("mygdrive", "drive", null, null, daemon, this)
         advanceUntilIdle()
 
-        assertThat(orchestrator.state.value).isEqualTo(DaemonOAuthOrchestrator.State.Complete("mygdrive"))
+        assertThat(requests[1].optStr("result")).isEqualTo("drive")
+        assertThat(requests[2].optStr("result")).isEqualTo("false")
+        assertThat(orchestrator.state.value)
+            .isEqualTo(DaemonOAuthOrchestrator.State.Complete("mygdrive"))
+    }
+
+    @Test
+    fun `fails when rclone re-asks with the same state token`() = runTest(testDispatcher) {
+        // MED-7 guard: identical consecutive State means our answer was rejected;
+        // bail instead of re-answering identically until the timeout.
+        enqueueResponses(
+            question("tok1", "scope", defaultStr = "drive"),
+            question("tok1", "scope", defaultStr = "drive"),
+        )
+
+        val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
+        orchestrator.start("x", "drive", null, null, daemon, this)
+        advanceUntilIdle()
+
+        val state = orchestrator.state.value
+        assertThat(state).isInstanceOf(DaemonOAuthOrchestrator.State.Failed::class.java)
+        assertThat((state as DaemonOAuthOrchestrator.State.Failed).message).contains("tok1")
+        // Exactly 2 calls: initial + one continuation. No infinite re-ask loop.
+        assertThat(requests).hasSize(2)
+    }
+
+    @Test
+    fun `fails on a non-terminal response with null Option`() = runTest(testDispatcher) {
+        enqueueResponses(
+            buildJsonObject {
+                put("State", "tok1")
+                put("Error", "")
+                put("Result", "")
+                put("Option", JsonNull)
+            },
+        )
+
+        val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
+        orchestrator.start("x", "drive", null, null, daemon, this)
+        advanceUntilIdle()
+
+        assertThat(orchestrator.state.value).isEqualTo(
+            DaemonOAuthOrchestrator.State.Failed("Unexpected response from rclone"),
+        )
     }
 }
