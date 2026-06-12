@@ -10,19 +10,23 @@ import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.common.model.RemoteOption
 import app.lusk.virga.core.common.model.RemoteProvider
 import app.lusk.virga.core.common.model.RemoteQuota
+import app.lusk.virga.core.rclone.oauth.DaemonOAuthOrchestrator
 import app.lusk.virga.core.rclone.oauth.OAuthConfig
 import app.lusk.virga.core.rclone.oauth.OAuthProvider
 import app.lusk.virga.core.rclone.oauth.OAuthProviders
 import app.lusk.virga.core.rclone.oauth.OAuthResult
 import app.lusk.virga.core.rclone.oauth.OAuthStore
 import app.lusk.virga.core.rclone.oauth.OAuthTokenExchanger
+import app.lusk.virga.core.rclone.RcloneDaemon
 import app.lusk.virga.core.rclone.SetupKind
 import com.google.common.truth.Truth.assertThat
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -67,6 +71,9 @@ class RemotesViewModelTest {
                 R.string.remotes_msg_could_not_save -> "Could not save remote."
                 R.string.remotes_msg_config_imported -> "Config imported."
                 R.string.remotes_msg_import_too_large -> "Config file is too large to import (max 256 KB)."
+                R.string.remotes_msg_freeform_no_obscure ->
+                    "Heads up: the provider schema wasn't available, so any password values were stored " +
+                        "without obscuring. Re-create this remote once the schema loads if it contains secrets."
                 else -> "string#$id"
             }
         }
@@ -952,6 +959,47 @@ class RemotesViewModelTest {
         collector.cancel()
     }
 
+    @Test
+    fun `addRemote without provider schema surfaces freeform no-obscure warning`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.addRemote(any(), any(), any(), any()) } returns Result.success(Unit)
+        coEvery { repository.testConnectivity(any()) } returns Result.success(Unit)
+        // Schema never loaded → allOptionsForBackend returns null → sensitive keys
+        // can't be derived, so passwords are stored un-obscured. Warn, don't block.
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+        var resultSuccess: Boolean? = null
+
+        vm.addRemote(name = "raw", type = "webdav", paramsText = "url=x\npass=secret", onResult = { s, _ -> resultSuccess = s })
+        advanceUntilIdle()
+
+        assertThat(resultSuccess).isTrue()
+        assertThat(vm.uiState.value.message).contains("without obscuring")
+        collector.cancel()
+    }
+
+    @Test
+    fun `addRemote with provider schema does not surface no-obscure warning`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.providers() } returns listOf(
+            RemoteProvider("ftp", "FTP", listOf(
+                RemoteOption("host", "", "string", false, false, null, emptyList(), false),
+            )),
+        )
+        coEvery { repository.addRemote(any(), any(), any(), any()) } returns Result.success(Unit)
+        coEvery { repository.testConnectivity(any()) } returns Result.success(Unit)
+        val vm = viewModel()
+        vm.ensureProvidersLoaded()
+        advanceUntilIdle()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.addRemote(name = "myftp", type = "ftp", paramsText = "host=x", onResult = { _, _ -> })
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.message ?: "").doesNotContain("without obscuring")
+        collector.cancel()
+    }
+
     // --- startDaemonOAuth / cancelDaemonOAuth -----------------------------------
 
     @Test
@@ -970,24 +1018,168 @@ class RemotesViewModelTest {
         collector.cancel()
     }
 
+    /**
+     * A scripted stand-in for the orchestrator the VM news up internally.
+     * The real one can't be driven from this module's tests: speaking the
+     * config/create protocol needs kotlinx-serialization-json, which isn't on
+     * the feature test compile classpath. The VM exposes a factory seam instead.
+     */
+    private fun scriptedOrchestrator(
+        states: MutableStateFlow<DaemonOAuthOrchestrator.State>,
+    ): DaemonOAuthOrchestrator = mockk(relaxUnitFun = true) {
+        every { state } returns states
+    }
+
+    /** Mocks withDaemonForOAuth to execute its block (as the engine does, minus the Mutex). */
+    private fun executeDaemonBlock() {
+        coEvery { repository.withDaemonForOAuth<Any?>(any()) } coAnswers {
+            firstArg<suspend (RcloneDaemon) -> Any?>()(mockk(relaxed = true))
+        }
+    }
+
     @Test
     fun `startDaemonOAuth sets oauthInProgress false after completion`() = runTest(mainDispatcher.dispatcher) {
-        // Invoke the block with a mock daemon so the orchestrator runs the state
-        // machine. The relaxed apiClient returns an empty JsonObject which makes
-        // the orchestrator reach State.Failed immediately.
-        val mockDaemon: app.lusk.virga.core.rclone.RcloneDaemon = mockk(relaxed = true)
-        coEvery { repository.withDaemonForOAuth<Unit>(any()) } coAnswers {
-            val block = firstArg<suspend (app.lusk.virga.core.rclone.RcloneDaemon) -> Unit>()
-            block(mockDaemon)
-        }
+        val states = MutableStateFlow<DaemonOAuthOrchestrator.State>(
+            DaemonOAuthOrchestrator.State.Complete("mypcloud"),
+        )
+        executeDaemonBlock()
+        coEvery { repository.testConnectivity(any()) } returns Result.success(Unit)
         coEvery { repository.refresh() } returns Result.success(Unit)
         val vm = viewModel()
+        vm.daemonOAuthOrchestratorFactory = { scriptedOrchestrator(states) }
         val collector = backgroundScope.launch { vm.uiState.collect {} }
         advanceUntilIdle()
 
         vm.startDaemonOAuth(type = "pcloud", name = "mypcloud")
         advanceUntilIdle()
 
+        assertThat(vm.uiState.value.oauthInProgress).isFalse()
+        collector.cancel()
+    }
+
+    @Test
+    fun `startDaemonOAuth runs testConnectivity only AFTER withDaemonForOAuth returns`() = runTest(mainDispatcher.dispatcher) {
+        // Deadlock regression (CRITICAL): the engine holds a NON-reentrant Mutex
+        // for the whole withDaemonForOAuth block, and testConnectivity acquires
+        // that same Mutex — calling it from inside the block deadlocks
+        // permanently. Verify the call happens strictly after the block returned.
+        val states = MutableStateFlow<DaemonOAuthOrchestrator.State>(
+            DaemonOAuthOrchestrator.State.Complete("mypcloud"),
+        )
+        var insideBlock = false
+        var connectivityCalledInsideBlock: Boolean? = null
+        coEvery { repository.withDaemonForOAuth<Any?>(any()) } coAnswers {
+            insideBlock = true
+            val result = firstArg<suspend (RcloneDaemon) -> Any?>()(mockk(relaxed = true))
+            insideBlock = false
+            result
+        }
+        coEvery { repository.testConnectivity("mypcloud") } coAnswers {
+            connectivityCalledInsideBlock = insideBlock
+            Result.success(Unit)
+        }
+        coEvery { repository.refresh() } returns Result.success(Unit)
+        val vm = viewModel()
+        vm.daemonOAuthOrchestratorFactory = { scriptedOrchestrator(states) }
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.startDaemonOAuth(type = "pcloud", name = "mypcloud")
+        advanceUntilIdle()
+
+        assertThat(connectivityCalledInsideBlock).isFalse()
+        coVerifyOrder {
+            repository.withDaemonForOAuth<Any?>(any())
+            repository.testConnectivity("mypcloud")
+        }
+        assertThat(vm.uiState.value.oauthInProgress).isFalse()
+        collector.cancel()
+    }
+
+    @Test
+    fun `second startDaemonOAuth while in progress is a no-op`() = runTest(mainDispatcher.dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        coEvery { repository.withDaemonForOAuth<Any?>(any()) } coAnswers {
+            gate.await()
+            DaemonOAuthOrchestrator.State.Cancelled
+        }
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.startDaemonOAuth(type = "pcloud", name = "one")
+        runCurrent()
+        assertThat(vm.uiState.value.oauthInProgress).isTrue()
+
+        // Second tap during the active flow must not re-enter withDaemonForOAuth.
+        vm.startDaemonOAuth(type = "pcloud", name = "two")
+        runCurrent()
+        coVerify(exactly = 1) { repository.withDaemonForOAuth<Any?>(any()) }
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertThat(vm.uiState.value.oauthInProgress).isFalse()
+        coVerify(exactly = 1) { repository.withDaemonForOAuth<Any?>(any()) }
+        collector.cancel()
+    }
+
+    @Test
+    fun `awaiting token paste surfaces prompt and submitDaemonOAuthToken forwards it`() = runTest(mainDispatcher.dispatcher) {
+        val states = MutableStateFlow<DaemonOAuthOrchestrator.State>(DaemonOAuthOrchestrator.State.Starting)
+        val orchestrator = scriptedOrchestrator(states)
+        every { orchestrator.submitToken(any()) } answers {
+            // The real orchestrator resumes its state machine and completes.
+            states.value = DaemonOAuthOrchestrator.State.Complete("mypcloud")
+        }
+        executeDaemonBlock()
+        coEvery { repository.testConnectivity(any()) } returns Result.success(Unit)
+        coEvery { repository.refresh() } returns Result.success(Unit)
+        val vm = viewModel()
+        vm.daemonOAuthOrchestratorFactory = { orchestrator }
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.startDaemonOAuth(type = "pcloud", name = "mypcloud")
+        runCurrent()
+        states.value = DaemonOAuthOrchestrator.State.AwaitingTokenPaste(
+            "Execute rclone authorize \"pcloud\" then paste the result.",
+        )
+        runCurrent()
+
+        // Not a terminal state: the prompt shows while the flow stays in progress.
+        assertThat(vm.uiState.value.daemonOAuthTokenPrompt).contains("rclone authorize")
+        assertThat(vm.uiState.value.oauthInProgress).isTrue()
+
+        vm.submitDaemonOAuthToken("""{"access_token":"tok"}""")
+        advanceUntilIdle()
+
+        verify { orchestrator.submitToken("""{"access_token":"tok"}""") }
+        assertThat(vm.uiState.value.daemonOAuthTokenPrompt).isNull()
+        assertThat(vm.uiState.value.oauthInProgress).isFalse()
+        coVerify { repository.testConnectivity("mypcloud") }
+        collector.cancel()
+    }
+
+    @Test
+    fun `daemon oauth failure clears paste prompt`() = runTest(mainDispatcher.dispatcher) {
+        val states = MutableStateFlow<DaemonOAuthOrchestrator.State>(
+            DaemonOAuthOrchestrator.State.AwaitingTokenPaste("paste it"),
+        )
+        executeDaemonBlock()
+        val vm = viewModel()
+        vm.daemonOAuthOrchestratorFactory = { scriptedOrchestrator(states) }
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.startDaemonOAuth(type = "pcloud", name = "mypcloud")
+        runCurrent()
+        assertThat(vm.uiState.value.daemonOAuthTokenPrompt).isEqualTo("paste it")
+
+        states.value = DaemonOAuthOrchestrator.State.Failed("token exchange failed")
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.daemonOAuthTokenPrompt).isNull()
+        assertThat(vm.uiState.value.message).contains("token exchange failed")
         assertThat(vm.uiState.value.oauthInProgress).isFalse()
         collector.cancel()
     }

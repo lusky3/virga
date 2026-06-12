@@ -66,6 +66,10 @@ data class RemotesUiState(
     /** Bumped by [RemotesViewModel.refresh]; cards key their quota fetch on it so
      *  a pull-to-refresh re-fires the lazy fetch even though the card stays composed. */
     val quotaEpoch: Int = 0,
+    /** rclone's instructions for the daemon-OAuth paste-token prompt (run
+     *  `rclone authorize` on another machine, paste the result back); null
+     *  when no token is being awaited. */
+    val daemonOAuthTokenPrompt: String? = null,
 )
 
 @HiltViewModel
@@ -241,18 +245,22 @@ class RemotesViewModel @Inject constructor(
             // auto-capitalized the first letter (KeyboardCapitalization.None is
             // only a hint and some IMEs ignore it).
             val trimmedType = type.trim().lowercase()
-            val sensitiveKeys = allOptionsForBackend(trimmedType)?.let {
-                sensitiveKeysFrom(it, params)
-            } ?: emptySet()
+            val options = allOptionsForBackend(trimmedType)
+            val sensitiveKeys = options?.let { sensitiveKeysFrom(it, params) } ?: emptySet()
             val result = repository.addRemote(name.trim(), trimmedType, params, sensitiveKeys)
             if (result.isSuccess) {
                 pendingRemoteResult.created(name.trim())
                 val connResult = repository.testConnectivity(name.trim())
-                if (connResult.isFailure) {
-                    transient.update {
-                        it.copy(message = context.getString(R.string.remotes_msg_connectivity_warning, name.trim()))
-                    }
+                val warning = when {
+                    connResult.isFailure ->
+                        context.getString(R.string.remotes_msg_connectivity_warning, name.trim())
+                    // Schema unavailable → sensitive keys couldn't be derived, so
+                    // any password values went to disk un-obscured. Warn, don't block.
+                    options == null ->
+                        context.getString(R.string.remotes_msg_freeform_no_obscure)
+                    else -> null
                 }
+                if (warning != null) transient.update { it.copy(message = warning) }
             }
             onResult(result.isSuccess, result.exceptionOrNull()?.toUserMessage())
         }
@@ -344,6 +352,9 @@ class RemotesViewModel @Inject constructor(
          *  starting daemon) could otherwise leave the "checking…" bar spinning
          *  forever — this guarantees it always resolves. */
         private const val QUOTA_TIMEOUT_MS = 12_000L
+        /** Daemon OAuth flow cap — generous because the paste-token flow has the
+         *  user run `rclone authorize` on another machine and paste the result. */
+        private const val DAEMON_OAUTH_TIMEOUT_MS = 600_000L
     }
 
     fun clearMessage() {
@@ -377,6 +388,8 @@ class RemotesViewModel @Inject constructor(
         val refreshing: Boolean = false,
         val oauthInProgress: Boolean = false,
         val message: String? = null,
+        /** Paste-token instructions from the daemon OAuth flow; null = no prompt. */
+        val daemonOAuthTokenPrompt: String? = null,
     )
 
     private fun combineState(): StateFlow<RemotesUiState> =
@@ -390,6 +403,7 @@ class RemotesViewModel @Inject constructor(
                 quotas = quota.quotas,
                 quotaLoading = quota.loading,
                 quotaEpoch = quota.epoch,
+                daemonOAuthTokenPrompt = t.daemonOAuthTokenPrompt,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RemotesUiState())
 
@@ -408,6 +422,19 @@ class RemotesViewModel @Inject constructor(
 
     private var daemonOAuthOrchestrator: DaemonOAuthOrchestrator? = null
 
+    /**
+     * Test seam: unit tests substitute a scripted orchestrator here because
+     * driving the real one needs kotlinx-serialization-json responses, which
+     * the feature test compile classpath doesn't expose. Production code
+     * always uses this default factory.
+     */
+    internal var daemonOAuthOrchestratorFactory: () -> DaemonOAuthOrchestrator = {
+        // 600s rather than the orchestrator's 120s default: the paste-token
+        // flow has the user run `rclone authorize` on ANOTHER machine and
+        // paste the result back, which routinely takes several minutes.
+        DaemonOAuthOrchestrator(apiClient, dispatchers, timeoutMs = DAEMON_OAUTH_TIMEOUT_MS)
+    }
+
     /** Starts daemon-mediated OAuth for a non-bundled provider. Observe [launchUrl] for the auth URL. */
     fun startDaemonOAuth(
         type: String,
@@ -415,63 +442,96 @@ class RemotesViewModel @Inject constructor(
         clientId: String? = null,
         clientSecret: String? = null,
     ) {
+        // Double-start guard: a second tap while a flow is live must not build a
+        // second orchestrator or re-enter withDaemonForOAuth. The flag is flipped
+        // synchronously (before the launch) so back-to-back taps can't race it.
+        if (transient.value.oauthInProgress) return
+        transient.update { it.copy(oauthInProgress = true, message = null) }
         viewModelScope.launch {
-            transient.update { it.copy(oauthInProgress = true, message = null) }
             try {
-                repository.withDaemonForOAuth { daemon ->
-                    val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
+                // INVARIANT: the engine holds its NON-REENTRANT Mutex for this
+                // whole block — any repository/engine call made inside it
+                // (testConnectivity, refresh, …) re-acquires that Mutex and
+                // deadlocks permanently. Only drive the orchestrator in here;
+                // the terminal state is returned out of the block and ALL
+                // follow-up repository work happens after the lock is released.
+                val terminal = repository.withDaemonForOAuth { daemon ->
+                    val orchestrator = daemonOAuthOrchestratorFactory()
                     daemonOAuthOrchestrator = orchestrator
                     orchestrator.start(name.trim(), type, clientId, clientSecret, daemon, this)
                     // Observe orchestrator state until terminal.
                     orchestrator.state.first { s ->
                         when (s) {
+                            // Legacy compat: the current orchestrator never emits this.
                             is DaemonOAuthOrchestrator.State.AwaitingAuth -> {
                                 _launchUrl.value = s.url
                                 false // keep collecting
                             }
-                            is DaemonOAuthOrchestrator.State.Complete -> {
-                                pendingRemoteResult.created(s.remoteName)
-                                val connResult = repository.testConnectivity(s.remoteName)
-                                transient.update {
-                                    it.copy(
-                                        oauthInProgress = false,
-                                        message = if (connResult.isFailure) {
-                                            context.getString(R.string.remotes_msg_connectivity_warning, s.remoteName)
-                                        } else null,
-                                    )
-                                }
-                                true // terminal
+                            // Not terminal: surface rclone's paste instructions and
+                            // keep collecting; submitDaemonOAuthToken resumes the flow.
+                            is DaemonOAuthOrchestrator.State.AwaitingTokenPaste -> {
+                                transient.update { t -> t.copy(daemonOAuthTokenPrompt = s.instructions) }
+                                false
                             }
-                            is DaemonOAuthOrchestrator.State.Failed -> {
-                                transient.update { it.copy(oauthInProgress = false, message = s.message) }
-                                true // terminal
-                            }
-                            is DaemonOAuthOrchestrator.State.TimedOut -> {
-                                transient.update {
-                                    it.copy(
-                                        oauthInProgress = false,
-                                        message = context.getString(R.string.remotes_msg_oauth_timed_out),
-                                    )
-                                }
-                                true // terminal
-                            }
-                            is DaemonOAuthOrchestrator.State.Cancelled -> {
-                                transient.update { it.copy(oauthInProgress = false) }
-                                true // terminal
-                            }
+                            is DaemonOAuthOrchestrator.State.Complete,
+                            is DaemonOAuthOrchestrator.State.Failed,
+                            DaemonOAuthOrchestrator.State.TimedOut,
+                            DaemonOAuthOrchestrator.State.Cancelled,
+                            -> true // terminal
                             else -> false // Idle, Starting — keep collecting
                         }
                     }
                 }
-                // Refresh remote list after successful daemon config
-                runCatching { repository.refresh() }
+                // Lock released; the engine has persisted the daemon-written
+                // config. Repository calls are safe again — and connectivity
+                // now tests the PERSISTED config, not the daemon's working copy.
+                when (terminal) {
+                    is DaemonOAuthOrchestrator.State.Complete -> {
+                        pendingRemoteResult.created(terminal.remoteName)
+                        val connResult = repository.testConnectivity(terminal.remoteName)
+                        runCatching { repository.refresh() }
+                        transient.update {
+                            it.copy(
+                                oauthInProgress = false,
+                                daemonOAuthTokenPrompt = null,
+                                message = if (connResult.isFailure) {
+                                    context.getString(R.string.remotes_msg_connectivity_warning, terminal.remoteName)
+                                } else null,
+                            )
+                        }
+                    }
+                    is DaemonOAuthOrchestrator.State.Failed -> transient.update {
+                        it.copy(oauthInProgress = false, daemonOAuthTokenPrompt = null, message = terminal.message)
+                    }
+                    DaemonOAuthOrchestrator.State.TimedOut -> transient.update {
+                        it.copy(
+                            oauthInProgress = false,
+                            daemonOAuthTokenPrompt = null,
+                            message = context.getString(R.string.remotes_msg_oauth_timed_out),
+                        )
+                    }
+                    DaemonOAuthOrchestrator.State.Cancelled -> transient.update {
+                        it.copy(oauthInProgress = false, daemonOAuthTokenPrompt = null)
+                    }
+                    else -> Unit // unreachable: first{} only returns terminal states
+                }
             } catch (e: Throwable) {
                 transient.update { it.copy(oauthInProgress = false, message = e.toUserMessage()) }
             } finally {
-                transient.update { it.copy(oauthInProgress = false) }
+                transient.update { it.copy(oauthInProgress = false, daemonOAuthTokenPrompt = null) }
                 daemonOAuthOrchestrator = null
             }
         }
+    }
+
+    /**
+     * Forwards the token the user pasted (output of `rclone authorize` run on
+     * another machine) to the in-flight daemon OAuth flow and dismisses the
+     * prompt. No-op when no flow is awaiting a token.
+     */
+    fun submitDaemonOAuthToken(token: String) {
+        daemonOAuthOrchestrator?.submitToken(token)
+        transient.update { it.copy(daemonOAuthTokenPrompt = null) }
     }
 
     fun cancelDaemonOAuth() {
