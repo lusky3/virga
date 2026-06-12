@@ -1,0 +1,165 @@
+package app.lusk.virga.feature.remotes
+
+import app.lusk.virga.core.common.dispatchers.DispatcherProvider
+import app.lusk.virga.core.common.error.toUserMessage
+import app.lusk.virga.core.data.PendingRemoteResult
+import app.lusk.virga.core.data.RemoteRepository
+import app.lusk.virga.core.rclone.api.RcApiClient
+import app.lusk.virga.core.rclone.oauth.DaemonOAuthOrchestrator
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+/**
+ * Drives the daemon-mediated OAuth flow for non-bundled providers on behalf of
+ * [RemotesViewModel]. Extracted as a collaborator so the VM stays focused on
+ * screen state; the VM's public API ([RemotesViewModel.startDaemonOAuth] etc.)
+ * delegates here unchanged.
+ *
+ * [transient] is the VM's transient UI state, shared (not copied) so the
+ * double-start guard in [start] also blocks while a bundled Custom-Tabs OAuth
+ * flow has `oauthInProgress` set, exactly as before the extraction.
+ */
+internal class DaemonOAuthFlow(
+    private val scope: CoroutineScope,
+    private val repository: RemoteRepository,
+    private val apiClient: RcApiClient,
+    private val dispatchers: DispatcherProvider,
+    private val pendingRemoteResult: PendingRemoteResult,
+    private val transient: MutableStateFlow<RemotesTransientState>,
+    private val strings: Strings,
+    private val onLaunchUrl: (String) -> Unit,
+) {
+
+    /** String resolution stays with the VM, which owns the Android Context. */
+    interface Strings {
+        fun connectivityWarning(remoteName: String): String
+        fun oauthTimedOut(): String
+    }
+
+    private var orchestrator: DaemonOAuthOrchestrator? = null
+
+    /**
+     * Test seam: unit tests substitute a scripted orchestrator here because
+     * driving the real one needs kotlinx-serialization-json responses, which
+     * the feature test compile classpath doesn't expose. Production code
+     * always uses this default factory.
+     */
+    internal var orchestratorFactory: () -> DaemonOAuthOrchestrator = {
+        // 600s rather than the orchestrator's 120s default: the paste-token
+        // flow has the user run `rclone authorize` on ANOTHER machine and
+        // paste the result back, which routinely takes several minutes.
+        DaemonOAuthOrchestrator(apiClient, dispatchers, timeoutMs = DAEMON_OAUTH_TIMEOUT_MS)
+    }
+
+    /** Starts daemon-mediated OAuth for a non-bundled provider. The auth URL surfaces via [onLaunchUrl]. */
+    fun start(
+        type: String,
+        name: String,
+        clientId: String? = null,
+        clientSecret: String? = null,
+    ) {
+        // Double-start guard: a second tap while a flow is live must not build a
+        // second orchestrator or re-enter withDaemonForOAuth. The flag is flipped
+        // synchronously (before the launch) so back-to-back taps can't race it.
+        if (transient.value.oauthInProgress) return
+        transient.update { it.copy(oauthInProgress = true, message = null) }
+        scope.launch {
+            try {
+                // INVARIANT: the engine holds its NON-REENTRANT Mutex for this
+                // whole block — any repository/engine call made inside it
+                // (testConnectivity, refresh, …) re-acquires that Mutex and
+                // deadlocks permanently. Only drive the orchestrator in here;
+                // the terminal state is returned out of the block and ALL
+                // follow-up repository work happens after the lock is released.
+                val terminal = repository.withDaemonForOAuth { daemon ->
+                    val orchestrator = orchestratorFactory()
+                    this@DaemonOAuthFlow.orchestrator = orchestrator
+                    orchestrator.start(name.trim(), type, clientId, clientSecret, daemon, this)
+                    // Observe orchestrator state until terminal.
+                    orchestrator.state.first { s ->
+                        when (s) {
+                            // Legacy compat: the current orchestrator never emits this.
+                            is DaemonOAuthOrchestrator.State.AwaitingAuth -> {
+                                onLaunchUrl(s.url)
+                                false // keep collecting
+                            }
+                            // Not terminal: surface rclone's paste instructions and
+                            // keep collecting; submitToken resumes the flow.
+                            is DaemonOAuthOrchestrator.State.AwaitingTokenPaste -> {
+                                transient.update { t -> t.copy(daemonOAuthTokenPrompt = s.instructions) }
+                                false
+                            }
+                            is DaemonOAuthOrchestrator.State.Complete,
+                            is DaemonOAuthOrchestrator.State.Failed,
+                            DaemonOAuthOrchestrator.State.TimedOut,
+                            DaemonOAuthOrchestrator.State.Cancelled,
+                            -> true // terminal
+                            else -> false // Idle, Starting — keep collecting
+                        }
+                    }
+                }
+                // Lock released; the engine has persisted the daemon-written
+                // config. Repository calls are safe again — and connectivity
+                // now tests the PERSISTED config, not the daemon's working copy.
+                when (terminal) {
+                    is DaemonOAuthOrchestrator.State.Complete -> {
+                        pendingRemoteResult.created(terminal.remoteName)
+                        val connResult = repository.testConnectivity(terminal.remoteName)
+                        runCatching { repository.refresh() }
+                        transient.update {
+                            it.copy(
+                                oauthInProgress = false,
+                                daemonOAuthTokenPrompt = null,
+                                message = if (connResult.isFailure) {
+                                    strings.connectivityWarning(terminal.remoteName)
+                                } else null,
+                            )
+                        }
+                    }
+                    is DaemonOAuthOrchestrator.State.Failed -> transient.update {
+                        it.copy(oauthInProgress = false, daemonOAuthTokenPrompt = null, message = terminal.message)
+                    }
+                    DaemonOAuthOrchestrator.State.TimedOut -> transient.update {
+                        it.copy(
+                            oauthInProgress = false,
+                            daemonOAuthTokenPrompt = null,
+                            message = strings.oauthTimedOut(),
+                        )
+                    }
+                    DaemonOAuthOrchestrator.State.Cancelled -> transient.update {
+                        it.copy(oauthInProgress = false, daemonOAuthTokenPrompt = null)
+                    }
+                    else -> Unit // unreachable: first{} only returns terminal states
+                }
+            } catch (e: Throwable) {
+                transient.update { it.copy(oauthInProgress = false, message = e.toUserMessage()) }
+            } finally {
+                transient.update { it.copy(oauthInProgress = false, daemonOAuthTokenPrompt = null) }
+                orchestrator = null
+            }
+        }
+    }
+
+    /**
+     * Forwards the token the user pasted (output of `rclone authorize` run on
+     * another machine) to the in-flight daemon OAuth flow and dismisses the
+     * prompt. No-op when no flow is awaiting a token.
+     */
+    fun submitToken(token: String) {
+        orchestrator?.submitToken(token)
+        transient.update { it.copy(daemonOAuthTokenPrompt = null) }
+    }
+
+    fun cancel() {
+        orchestrator?.cancel()
+    }
+
+    private companion object {
+        /** Daemon OAuth flow cap — generous because the paste-token flow has the
+         *  user run `rclone authorize` on another machine and paste the result. */
+        const val DAEMON_OAUTH_TIMEOUT_MS = 600_000L
+    }
+}

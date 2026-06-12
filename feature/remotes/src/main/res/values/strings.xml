@@ -49,6 +49,8 @@
     <string name="remotes_daemon_oauth_waiting">Waiting for authorization…</string>
     <string name="remotes_daemon_oauth_cancel">Cancel</string>
     <string name="remotes_daemon_oauth_connect">Connect</string>
+    <string name="remotes_daemon_oauth_paste_label">Authorization token</string>
+    <string name="remotes_daemon_oauth_paste_submit">Submit</string>
     <!-- Bring-your-own OAuth keys -->
     <string name="remotes_byo_chip_custom">%1$s (your key)</string>
     <string name="remotes_byo_toggle">Use your own keys (recommended for regular use)</string>

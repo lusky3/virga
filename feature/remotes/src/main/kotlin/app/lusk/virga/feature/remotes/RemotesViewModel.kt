@@ -21,14 +21,11 @@ import app.lusk.virga.core.rclone.oauth.DaemonOAuthOrchestrator
 import app.lusk.virga.core.rclone.oauth.OAuthConfig
 import app.lusk.virga.core.rclone.oauth.OAuthProvider
 import app.lusk.virga.core.rclone.oauth.OAuthProviders
-import app.lusk.virga.core.rclone.oauth.OAuthResult
 import app.lusk.virga.core.rclone.oauth.OAuthStore
 import app.lusk.virga.core.rclone.oauth.OAuthTokenExchanger
-import app.lusk.virga.core.rclone.oauth.Pkce
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -37,7 +34,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.UUID
 import javax.inject.Inject
 
 /**
@@ -69,6 +65,19 @@ data class RemotesUiState(
     /** rclone's instructions for the daemon-OAuth paste-token prompt (run
      *  `rclone authorize` on another machine, paste the result back); null
      *  when no token is being awaited. */
+    val daemonOAuthTokenPrompt: String? = null,
+)
+
+/**
+ * The VM-owned transient slice of [RemotesUiState]. Top-level (not nested in the
+ * VM) because the OAuth flow collaborators ([DaemonOAuthFlow], [SystemOAuthFlow])
+ * share the same `MutableStateFlow` instance and apply their updates to it.
+ */
+internal data class RemotesTransientState(
+    val refreshing: Boolean = false,
+    val oauthInProgress: Boolean = false,
+    val message: String? = null,
+    /** Paste-token instructions from the daemon OAuth flow; null = no prompt. */
     val daemonOAuthTokenPrompt: String? = null,
 )
 
@@ -166,14 +175,14 @@ class RemotesViewModel @Inject constructor(
         viewModelScope.launch {
             oauthStore.results.collect { result ->
                 if (result != null) {
-                    onOAuthResult(result)
+                    systemOAuth.onResult(result)
                     oauthStore.clearResult()
                 }
             }
         }
     }
 
-    private val transient = MutableStateFlow(TransientState())
+    private val transient = MutableStateFlow(RemotesTransientState())
 
     /** Quota fetch results, in-flight set, and the refresh epoch, kept in one flow
      *  so [combineState] stays within the 5-argument [combine] overload. */
@@ -352,9 +361,6 @@ class RemotesViewModel @Inject constructor(
          *  starting daemon) could otherwise leave the "checking…" bar spinning
          *  forever — this guarantees it always resolves. */
         private const val QUOTA_TIMEOUT_MS = 12_000L
-        /** Daemon OAuth flow cap — generous because the paste-token flow has the
-         *  user run `rclone authorize` on another machine and paste the result. */
-        private const val DAEMON_OAUTH_TIMEOUT_MS = 600_000L
     }
 
     fun clearMessage() {
@@ -384,14 +390,6 @@ class RemotesViewModel @Inject constructor(
         }
     }
 
-    private data class TransientState(
-        val refreshing: Boolean = false,
-        val oauthInProgress: Boolean = false,
-        val message: String? = null,
-        /** Paste-token instructions from the daemon OAuth flow; null = no prompt. */
-        val daemonOAuthTokenPrompt: String? = null,
-    )
-
     private fun combineState(): StateFlow<RemotesUiState> =
         combine(repository.remotes, transient, oauthKeyStore.clientIds, _quotaState) { remotes, t, customIds, quota ->
             RemotesUiState(
@@ -420,20 +418,42 @@ class RemotesViewModel @Inject constructor(
 
     // --- OAuth ----------------------------------------------------------
 
-    private var daemonOAuthOrchestrator: DaemonOAuthOrchestrator? = null
+    /** Daemon-mediated OAuth flow for non-bundled providers — see [DaemonOAuthFlow]. */
+    private val daemonOAuth = DaemonOAuthFlow(
+        scope = viewModelScope,
+        repository = repository,
+        apiClient = apiClient,
+        dispatchers = dispatchers,
+        pendingRemoteResult = pendingRemoteResult,
+        transient = transient,
+        strings = object : DaemonOAuthFlow.Strings {
+            override fun connectivityWarning(remoteName: String): String =
+                context.getString(R.string.remotes_msg_connectivity_warning, remoteName)
+            override fun oauthTimedOut(): String =
+                context.getString(R.string.remotes_msg_oauth_timed_out)
+        },
+        onLaunchUrl = { _launchUrl.value = it },
+    )
 
-    /**
-     * Test seam: unit tests substitute a scripted orchestrator here because
-     * driving the real one needs kotlinx-serialization-json responses, which
-     * the feature test compile classpath doesn't expose. Production code
-     * always uses this default factory.
-     */
-    internal var daemonOAuthOrchestratorFactory: () -> DaemonOAuthOrchestrator = {
-        // 600s rather than the orchestrator's 120s default: the paste-token
-        // flow has the user run `rclone authorize` on ANOTHER machine and
-        // paste the result back, which routinely takes several minutes.
-        DaemonOAuthOrchestrator(apiClient, dispatchers, timeoutMs = DAEMON_OAUTH_TIMEOUT_MS)
-    }
+    /** Bundled (Custom Tabs + PKCE) OAuth flow — see [SystemOAuthFlow]. */
+    private val systemOAuth = SystemOAuthFlow(
+        context = context,
+        repository = repository,
+        oauthConfig = oauthConfig,
+        oauthStore = oauthStore,
+        tokenExchanger = tokenExchanger,
+        oauthKeyStore = oauthKeyStore,
+        pendingRemoteResult = pendingRemoteResult,
+        transient = transient,
+        onLaunchUrl = { _launchUrl.value = it },
+    )
+
+    /** Test seam — see [DaemonOAuthFlow.orchestratorFactory]. */
+    internal var daemonOAuthOrchestratorFactory: () -> DaemonOAuthOrchestrator
+        get() = daemonOAuth.orchestratorFactory
+        set(value) {
+            daemonOAuth.orchestratorFactory = value
+        }
 
     /** Starts daemon-mediated OAuth for a non-bundled provider. Observe [launchUrl] for the auth URL. */
     fun startDaemonOAuth(
@@ -441,240 +461,24 @@ class RemotesViewModel @Inject constructor(
         name: String,
         clientId: String? = null,
         clientSecret: String? = null,
-    ) {
-        // Double-start guard: a second tap while a flow is live must not build a
-        // second orchestrator or re-enter withDaemonForOAuth. The flag is flipped
-        // synchronously (before the launch) so back-to-back taps can't race it.
-        if (transient.value.oauthInProgress) return
-        transient.update { it.copy(oauthInProgress = true, message = null) }
-        viewModelScope.launch {
-            try {
-                // INVARIANT: the engine holds its NON-REENTRANT Mutex for this
-                // whole block — any repository/engine call made inside it
-                // (testConnectivity, refresh, …) re-acquires that Mutex and
-                // deadlocks permanently. Only drive the orchestrator in here;
-                // the terminal state is returned out of the block and ALL
-                // follow-up repository work happens after the lock is released.
-                val terminal = repository.withDaemonForOAuth { daemon ->
-                    val orchestrator = daemonOAuthOrchestratorFactory()
-                    daemonOAuthOrchestrator = orchestrator
-                    orchestrator.start(name.trim(), type, clientId, clientSecret, daemon, this)
-                    // Observe orchestrator state until terminal.
-                    orchestrator.state.first { s ->
-                        when (s) {
-                            // Legacy compat: the current orchestrator never emits this.
-                            is DaemonOAuthOrchestrator.State.AwaitingAuth -> {
-                                _launchUrl.value = s.url
-                                false // keep collecting
-                            }
-                            // Not terminal: surface rclone's paste instructions and
-                            // keep collecting; submitDaemonOAuthToken resumes the flow.
-                            is DaemonOAuthOrchestrator.State.AwaitingTokenPaste -> {
-                                transient.update { t -> t.copy(daemonOAuthTokenPrompt = s.instructions) }
-                                false
-                            }
-                            is DaemonOAuthOrchestrator.State.Complete,
-                            is DaemonOAuthOrchestrator.State.Failed,
-                            DaemonOAuthOrchestrator.State.TimedOut,
-                            DaemonOAuthOrchestrator.State.Cancelled,
-                            -> true // terminal
-                            else -> false // Idle, Starting — keep collecting
-                        }
-                    }
-                }
-                // Lock released; the engine has persisted the daemon-written
-                // config. Repository calls are safe again — and connectivity
-                // now tests the PERSISTED config, not the daemon's working copy.
-                when (terminal) {
-                    is DaemonOAuthOrchestrator.State.Complete -> {
-                        pendingRemoteResult.created(terminal.remoteName)
-                        val connResult = repository.testConnectivity(terminal.remoteName)
-                        runCatching { repository.refresh() }
-                        transient.update {
-                            it.copy(
-                                oauthInProgress = false,
-                                daemonOAuthTokenPrompt = null,
-                                message = if (connResult.isFailure) {
-                                    context.getString(R.string.remotes_msg_connectivity_warning, terminal.remoteName)
-                                } else null,
-                            )
-                        }
-                    }
-                    is DaemonOAuthOrchestrator.State.Failed -> transient.update {
-                        it.copy(oauthInProgress = false, daemonOAuthTokenPrompt = null, message = terminal.message)
-                    }
-                    DaemonOAuthOrchestrator.State.TimedOut -> transient.update {
-                        it.copy(
-                            oauthInProgress = false,
-                            daemonOAuthTokenPrompt = null,
-                            message = context.getString(R.string.remotes_msg_oauth_timed_out),
-                        )
-                    }
-                    DaemonOAuthOrchestrator.State.Cancelled -> transient.update {
-                        it.copy(oauthInProgress = false, daemonOAuthTokenPrompt = null)
-                    }
-                    else -> Unit // unreachable: first{} only returns terminal states
-                }
-            } catch (e: Throwable) {
-                transient.update { it.copy(oauthInProgress = false, message = e.toUserMessage()) }
-            } finally {
-                transient.update { it.copy(oauthInProgress = false, daemonOAuthTokenPrompt = null) }
-                daemonOAuthOrchestrator = null
-            }
-        }
-    }
+    ) = daemonOAuth.start(type, name, clientId, clientSecret)
 
     /**
      * Forwards the token the user pasted (output of `rclone authorize` run on
      * another machine) to the in-flight daemon OAuth flow and dismisses the
      * prompt. No-op when no flow is awaiting a token.
      */
-    fun submitDaemonOAuthToken(token: String) {
-        daemonOAuthOrchestrator?.submitToken(token)
-        transient.update { it.copy(daemonOAuthTokenPrompt = null) }
-    }
+    fun submitDaemonOAuthToken(token: String) = daemonOAuth.submitToken(token)
 
-    fun cancelDaemonOAuth() {
-        daemonOAuthOrchestrator?.cancel()
-    }
+    fun cancelDaemonOAuth() = daemonOAuth.cancel()
 
     /** Starts the OAuth flow for [provider]; observe [launchUrl] to launch Custom Tabs. */
     fun startOAuth(provider: OAuthProvider, remoteName: String) {
-        viewModelScope.launch {
-            // Prefer the user's own client ID over the shared built-in one.
-            val override = oauthKeyStore.clientId(provider.id)
-            val clientId = override ?: oauthConfig.clientId(provider.id)
-            if (clientId.isBlank()) {
-                transient.value = transient.value.copy(
-                    message = context.getString(R.string.remotes_msg_oauth_not_configured, provider.displayName),
-                )
-                return@launch
-            }
-            // Google derives its redirect from the client ID, so a BYO Google client
-            // needs its redirect recomputed from the user's ID (not the built-in).
-            val redirectUri = if (provider.id == OAuthProviders.GoogleDrive.id && override != null) {
-                OAuthConfig.googleAndroidRedirect(clientId, oauthConfig.redirectUri(provider.id))
-            } else {
-                oauthConfig.redirectUri(provider.id)
-            }
-            val clientSecret = oauthConfig.clientSecret(provider.id)
-            val pending = OAuthTokenExchanger.PendingAuth(
-                provider = provider,
-                state = UUID.randomUUID().toString(),
-                verifier = Pkce.newVerifier(),
-                clientId = clientId,
-                clientSecret = clientSecret,
-                redirectUri = redirectUri,
-                remoteName = remoteName,
-            )
-            oauthStore.startPending(pending)
-            transient.value = transient.value.copy(oauthInProgress = true, message = null)
-            _launchUrl.value = tokenExchanger.authorizeUrl(pending)
-        }
+        viewModelScope.launch { systemOAuth.start(provider, remoteName) }
     }
 
     /** Called by the screen once it has handed [launchUrl] to Custom Tabs. */
     fun onLaunchUrlConsumed() {
         _launchUrl.value = null
-    }
-
-    /**
-     * Maps a provider-supplied OAuth2 `error` code (RFC 6749 §4.1.2.1) to a friendly,
-     * localized message. Unknown values are surfaced whitespace-collapsed and length-
-     * capped rather than echoing arbitrary provider text verbatim into the UI.
-     */
-    private fun friendlyOAuthError(raw: String): String = when (raw.trim().lowercase()) {
-        "access_denied" -> context.getString(R.string.remotes_oauth_err_access_denied)
-        "invalid_scope" -> context.getString(R.string.remotes_oauth_err_invalid_scope)
-        "server_error" -> context.getString(R.string.remotes_oauth_err_server_error)
-        "temporarily_unavailable" -> context.getString(R.string.remotes_oauth_err_temporarily_unavailable)
-        else -> raw.replace(Regex("\\s+"), " ").trim().take(120)
-    }
-
-    private suspend fun onOAuthResult(result: OAuthResult) {
-        when (result) {
-            is OAuthResult.Error -> {
-                // Only tear down the in-flight auth for an error whose state matches
-                // the pending one. consume() validates + clears atomically, so an
-                // error redirect injected by another app (missing or non-matching
-                // state) is a no-op against an unrelated pending flow.
-                val state = result.state
-                if (state != null && oauthStore.consume(state) != null) {
-                    transient.update {
-                        it.copy(
-                            oauthInProgress = false,
-                            message = context.getString(
-                                R.string.remotes_msg_sign_in_failed,
-                                friendlyOAuthError(result.message),
-                            ),
-                        )
-                    }
-                } else {
-                    // Unmatched / state-less error (e.g. a fabricated redirect injected
-                    // by another app). Don't disturb the pending auth — the genuine
-                    // redirect still completes via the Success path — but clear the
-                    // spinner so a stuck oauthInProgress can't trap the UI forever.
-                    transient.update { it.copy(oauthInProgress = false) }
-                }
-            }
-            is OAuthResult.Success -> {
-                val pending = oauthStore.consume(result.state)
-                if (pending == null || pending.remoteName.isBlank()) {
-                    transient.value = transient.value.copy(
-                        oauthInProgress = false,
-                        message = context.getString(R.string.remotes_msg_state_mismatch),
-                    )
-                    return
-                }
-                val remoteName = pending.remoteName
-                val tokenResult = tokenExchanger.exchange(pending, result.code)
-                val tokenJson = tokenResult.getOrElse { error ->
-                    transient.value = transient.value.copy(
-                        oauthInProgress = false,
-                        message = error.toUserMessage(),
-                    )
-                    return
-                }
-                // Some backends (OneDrive) need extra config derived from the
-                // token (drive_id/drive_type) before the remote can list.
-                val extras = tokenExchanger.providerConfigExtras(pending.provider, tokenJson).getOrElse { error ->
-                    transient.value = transient.value.copy(
-                        oauthInProgress = false,
-                        message = error.toUserMessage(),
-                    )
-                    return
-                }
-                val createResult = repository.addRemote(
-                    name = remoteName,
-                    type = pending.provider.type,
-                    params = mapOf(
-                        "token" to tokenJson,
-                        "client_id" to pending.clientId,
-                    ) + extras,
-                )
-                if (createResult.isSuccess) pendingRemoteResult.created(remoteName)
-                val connectivityWarning = if (createResult.isSuccess) {
-                    val connResult = repository.testConnectivity(remoteName)
-                    connResult.isFailure
-                } else false
-                transient.value = transient.value.copy(
-                    oauthInProgress = false,
-                    message = if (createResult.isSuccess) {
-                        if (connectivityWarning) {
-                            context.getString(R.string.remotes_msg_connectivity_warning, remoteName)
-                        } else {
-                            context.getString(
-                                R.string.remotes_msg_added_remote,
-                                pending.provider.displayName,
-                                remoteName,
-                            )
-                        }
-                    } else {
-                        createResult.exceptionOrNull()?.toUserMessage()
-                            ?: context.getString(R.string.remotes_msg_could_not_save)
-                    },
-                )
-            }
-        }
     }
 }

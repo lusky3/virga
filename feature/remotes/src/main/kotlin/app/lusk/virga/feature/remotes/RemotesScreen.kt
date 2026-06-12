@@ -238,6 +238,7 @@ fun RemotesScreen(
             setupKindFor = viewModel::setupKindFor,
             existingRemotes = state.remotes,
             oauthInProgress = state.oauthInProgress,
+            daemonOAuthTokenPrompt = state.daemonOAuthTokenPrompt,
             onDismiss = { showAdd = false; manualError = null },
             onManualConfirm = { name, type, params ->
                 manualError = null
@@ -261,6 +262,7 @@ fun RemotesScreen(
             onDaemonOAuth = { type, name, clientId, clientSecret ->
                 viewModel.startDaemonOAuth(type, name, clientId, clientSecret)
             },
+            onSubmitDaemonOAuthToken = viewModel::submitDaemonOAuthToken,
             onCancelDaemonOAuth = viewModel::cancelDaemonOAuth,
             onSaveClientId = viewModel::saveClientId,
             onClearClientId = viewModel::clearClientId,
