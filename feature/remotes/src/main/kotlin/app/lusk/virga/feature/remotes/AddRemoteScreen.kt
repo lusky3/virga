@@ -41,7 +41,6 @@ fun AddRemoteScreen(
     // Any increase over the count when we arrived means a remote was added — this is the
     // one signal that also covers the asynchronous OAuth completion (which has no inline
     // success callback). Guarded so onDone fires once.
-    val initialCount = remember { state.remotes.size }
     var finished by remember { mutableStateOf(false) }
     fun finishOnce() {
         if (!finished) {
@@ -50,8 +49,16 @@ fun AddRemoteScreen(
         }
     }
 
+    // Arm the baseline on the first REAL emission, not the first frame. uiState is
+    // stateIn(WhileSubscribed) so the initial composition always sees remotes=emptyList()
+    // before the flow delivers the loaded list; capturing the count then (latch == null)
+    // means a user who already has ≥1 remote wouldn't get the screen popped out from
+    // under them the moment the list loads.
+    var initialCount by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(state.remotes.size) {
-        if (state.remotes.size > initialCount) finishOnce()
+        val base = initialCount
+        if (base == null) initialCount = state.remotes.size
+        else if (state.remotes.size > base) finishOnce()
     }
     // Launching the OAuth custom tab does NOT dismiss the sheet (it's just another
     // activity on top); the sheet stays so the user returns to it, and the count-increase

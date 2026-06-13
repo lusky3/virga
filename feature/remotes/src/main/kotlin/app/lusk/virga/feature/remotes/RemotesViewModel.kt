@@ -169,18 +169,6 @@ class RemotesViewModel @Inject constructor(
     /** Classification of a backend type for routing the Add-remote flow. */
     fun setupKindFor(type: String): SetupKind = catalog?.setupKind(type) ?: SetupKind.Credential
 
-    init {
-        // Observe the redirect activity's results for the lifetime of the VM.
-        viewModelScope.launch {
-            oauthStore.results.collect { result ->
-                if (result != null) {
-                    systemOAuth.onResult(result)
-                    oauthStore.clearResult()
-                }
-            }
-        }
-    }
-
     private val transient = MutableStateFlow(RemotesTransientState())
 
     /** Quota fetch results, in-flight set, and the refresh epoch, kept in one flow
@@ -454,5 +442,23 @@ class RemotesViewModel @Inject constructor(
     /** Called by the screen once it has handed [launchUrl] to Custom Tabs. */
     fun onLaunchUrlConsumed() {
         _launchUrl.value = null
+    }
+
+    // Declared LAST so the collector runs only after systemOAuth (and transient)
+    // are initialized. viewModelScope uses Dispatchers.Main.immediate and the VM
+    // is built on the main thread, so the launch body executes synchronously inside
+    // the constructor, and OAuthStore retains a result across VM teardown — a
+    // collector placed earlier would touch the not-yet-initialized systemOAuth and
+    // NPE when the user returns from a backgrounded OAuth redirect.
+    init {
+        // Observe the redirect activity's results for the lifetime of the VM.
+        viewModelScope.launch {
+            oauthStore.results.collect { result ->
+                if (result != null) {
+                    systemOAuth.onResult(result)
+                    oauthStore.clearResult()
+                }
+            }
+        }
     }
 }

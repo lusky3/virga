@@ -247,6 +247,29 @@ class RemotesViewModelTest {
     }
 
     @Test
+    fun `VM construction with a pre-emitted OAuth result does not throw and handles it`() =
+        runTest(mainDispatcher.dispatcher) {
+            // UI-H1 regression: OAuthStore retains the last result across VM teardown
+            // (the redirect-while-backgrounded case). On Dispatchers.Main.immediate the
+            // init collector runs synchronously inside the constructor and the retained
+            // value is delivered at once — so if the collector is declared before
+            // systemOAuth, it touches a not-yet-initialized field and NPEs. Pre-emit a
+            // result, THEN construct, and assert construction succeeds + the result is
+            // handled (no pending → state-mismatch) and cleared.
+            store.emit(OAuthResult.Success(state = "stale-state", code = "stale-code"))
+
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            assertThat(vm.uiState.value.message).contains("state mismatch")
+            assertThat(vm.uiState.value.oauthInProgress).isFalse()
+            // The collector consumed the retained result so it isn't reprocessed.
+            assertThat(store.results.value).isNull()
+            collector.cancel()
+        }
+
+    @Test
     fun oauthError_withForeignState_isIgnored() = runTest(mainDispatcher.dispatcher) {
         every { tokenExchanger.authorizeUrl(any()) } returns "https://x"
         val vm = viewModel()
