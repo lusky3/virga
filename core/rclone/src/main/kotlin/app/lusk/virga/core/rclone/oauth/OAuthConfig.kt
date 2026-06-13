@@ -23,17 +23,10 @@ data class OAuthConfig(
     val clientIds: Map<String, String>,
     /** Per-provider override; if absent, [defaultRedirectUri] is used. */
     val redirectUris: Map<String, String> = emptyMap(),
-    /** Per-provider client secret; only providers that need one (Box) appear here. */
-    val clientSecrets: Map<String, String> = emptyMap(),
 ) {
     fun clientId(providerId: String): String = clientIds[providerId].orEmpty()
     fun redirectUri(providerId: String): String =
         redirectUris[providerId] ?: defaultRedirectUri
-
-    /** Configured client secret for [providerId], or null when it is a public client
-     *  or the secret is unset (blank treated as unset). */
-    fun clientSecret(providerId: String): String? =
-        clientSecrets[providerId]?.ifBlank { null }
 
     companion object {
         /**

@@ -869,44 +869,6 @@ class RemotesViewModelTest {
         collector.cancel()
     }
 
-    // --- startOAuth clientSecret carry-through ---------------------------------
-
-    @Test
-    fun `startOAuth attaches the client secret for Box`() = runTest(mainDispatcher.dispatcher) {
-        val cfg = config().copy(
-            clientIds = config().clientIds + (OAuthProviders.Box.id to "box-id"),
-            clientSecrets = mapOf(OAuthProviders.Box.id to "box-secret"),
-        )
-        every { tokenExchanger.authorizeUrl(any()) } returns "https://account.box.com/auth"
-        val vm = viewModel(cfg)
-        val collector = backgroundScope.launch { vm.uiState.collect {} }
-        advanceUntilIdle()
-
-        vm.startOAuth(OAuthProviders.Box, "boxremote")
-        advanceUntilIdle()
-
-        val pendingSlot = slot<OAuthTokenExchanger.PendingAuth>()
-        coVerify { tokenExchanger.authorizeUrl(capture(pendingSlot)) }
-        assertThat(pendingSlot.captured.clientSecret).isEqualTo("box-secret")
-        collector.cancel()
-    }
-
-    @Test
-    fun `startOAuth leaves clientSecret null for Drive`() = runTest(mainDispatcher.dispatcher) {
-        every { tokenExchanger.authorizeUrl(any()) } returns "https://accounts.google.example/auth"
-        val vm = viewModel()
-        val collector = backgroundScope.launch { vm.uiState.collect {} }
-        advanceUntilIdle()
-
-        vm.startOAuth(OAuthProviders.GoogleDrive, "gd")
-        advanceUntilIdle()
-
-        val pendingSlot = slot<OAuthTokenExchanger.PendingAuth>()
-        coVerify { tokenExchanger.authorizeUrl(capture(pendingSlot)) }
-        assertThat(pendingSlot.captured.clientSecret).isNull()
-        collector.cancel()
-    }
-
     private fun OAuthProvider.unused() = Unit  // silence unused-import warning for OAuthProvider import
 
     // --- ProviderCatalog exposure -----------------------------------------------

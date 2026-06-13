@@ -42,7 +42,7 @@ class ProviderCatalog(private val providers: List<RemoteProvider>) {
         "token" in optionNames && "client_id" in optionNames
 
     companion object {
-        val BUNDLED_OAUTH = setOf("drive", "dropbox", "onedrive", "box")
+        val BUNDLED_OAUTH = setOf("drive", "dropbox", "onedrive")
         val WRAPPERS = setOf(
             "crypt", "union", "alias", "combine", "chunker", "compress", "cache", "hasher",
         )

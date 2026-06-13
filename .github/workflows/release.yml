@@ -147,8 +147,6 @@ jobs:
           VIRGA_OAUTH_CLIENT_ID_GDRIVE: ${{ secrets.OAUTH_CLIENT_ID_GDRIVE }}
           VIRGA_OAUTH_CLIENT_ID_ONEDRIVE: ${{ secrets.OAUTH_CLIENT_ID_ONEDRIVE }}
           VIRGA_OAUTH_CLIENT_ID_DROPBOX: ${{ secrets.OAUTH_CLIENT_ID_DROPBOX }}
-          VIRGA_OAUTH_CLIENT_ID_BOX: ${{ secrets.OAUTH_CLIENT_ID_BOX }}
-          VIRGA_OAUTH_CLIENT_SECRET_BOX: ${{ secrets.OAUTH_CLIENT_SECRET_BOX }}
           VIRGA_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           # Key alias is non-sensitive and stored as an Actions *variable*.
           VIRGA_KEY_ALIAS: ${{ vars.RELEASE_KEY_ALIAS }}

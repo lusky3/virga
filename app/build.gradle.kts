@@ -21,10 +21,6 @@ fun oauthClientId(provider: String): String =
     System.getenv("VIRGA_OAUTH_CLIENT_ID_${provider.uppercase()}")
         ?: localProps.getProperty("oauthClientId.$provider")
         ?: ""
-fun oauthClientSecret(provider: String): String =
-    System.getenv("VIRGA_OAUTH_CLIENT_SECRET_${provider.uppercase()}")
-        ?: localProps.getProperty("oauthClientSecret.$provider")
-        ?: ""
 
 // Sentry DSN for opt-in crash reporting. Like the OAuth client IDs it is developer-
 // specific and kept out of git (local.properties / env). An empty default means crash
@@ -94,8 +90,6 @@ android {
         buildConfigField("String", "OAUTH_CLIENT_ID_ONEDRIVE", "\"${oauthClientId("onedrive")}\"")
         buildConfigField("String", "OAUTH_CLIENT_ID_DROPBOX", "\"${oauthClientId("dropbox")}\"")
         buildConfigField("String", "OAUTH_CLIENT_ID_PCLOUD", "\"${oauthClientId("pcloud")}\"")
-        buildConfigField("String", "OAUTH_CLIENT_ID_BOX", "\"${oauthClientId("box")}\"")
-        buildConfigField("String", "OAUTH_CLIENT_SECRET_BOX", "\"${oauthClientSecret("box")}\"")
 
         // Opt-in crash reporting endpoint (empty = disabled). Read at runtime by
         // CrashReporter, which only initializes Sentry when this is non-blank AND the

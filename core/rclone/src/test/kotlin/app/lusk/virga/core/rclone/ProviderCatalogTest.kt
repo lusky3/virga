@@ -27,12 +27,13 @@ class ProviderCatalogTest {
     @Test
     fun `OAuth backends are detected by token plus client_id`() {
         assertThat(catalog.setupKind("pcloud")).isEqualTo(SetupKind.OAuth(bundled = false))
+        // Box is OAuth but no longer bundled — routes to the daemon/BYOK sub-flow.
+        assertThat(catalog.setupKind("box")).isEqualTo(SetupKind.OAuth(bundled = false))
     }
 
     @Test
-    fun `the four allowlisted OAuth backends are bundled`() {
+    fun `allowlisted OAuth backends are bundled`() {
         assertThat(catalog.setupKind("drive")).isEqualTo(SetupKind.OAuth(bundled = true))
-        assertThat(catalog.setupKind("box")).isEqualTo(SetupKind.OAuth(bundled = true))
     }
 
     @Test
