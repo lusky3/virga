@@ -39,6 +39,9 @@ class OAuthTokenExchanger @Inject constructor(
         val verifier: String,
         val clientId: String,
         val redirectUri: String,
+        /** Sent as `client_secret` in the token exchange when the provider needs one
+         *  (Box). Null for public PKCE clients (Drive/Dropbox/OneDrive). */
+        val clientSecret: String? = null,
         /**
          * Remote name the user typed before the round-trip. Carried in the
          * (singleton-stored) pending auth so it survives ViewModel/process
@@ -76,6 +79,7 @@ class OAuthTokenExchanger @Inject constructor(
             .add("redirect_uri", p.redirectUri)
             .add("client_id", p.clientId)
             .add("code_verifier", p.verifier)
+            .apply { if (!p.clientSecret.isNullOrBlank()) add("client_secret", p.clientSecret) }
             .build()
         val request = Request.Builder()
             .url(p.provider.tokenEndpoint)
@@ -89,7 +93,7 @@ class OAuthTokenExchanger @Inject constructor(
                     return@withContext Result.failure(
                         VirgaError.Auth(
                             remote = p.provider.id,
-                            message = "Token exchange failed (${response.code}): ${text.take(200)}",
+                            message = "Token exchange failed (${response.code}): ${text.take(50).replace(Regex("[a-zA-Z0-9_-]{20,}"), "[REDACTED]")}",
                         ),
                     )
                 }
@@ -144,7 +148,7 @@ class OAuthTokenExchanger @Inject constructor(
                     val text = response.body?.string().orEmpty()
                     if (!response.isSuccessful) {
                         return@withContext Result.failure(
-                            VirgaError.Auth("onedrive", "Graph /me/drive failed (${response.code}): ${text.take(200)}"),
+                            VirgaError.Auth("onedrive", "Graph /me/drive failed (${response.code}): ${text.take(50).replace(Regex("[a-zA-Z0-9_-]{20,}"), "[REDACTED]")}"),
                         )
                     }
                     val obj = json.parseToJsonElement(text) as? JsonObject

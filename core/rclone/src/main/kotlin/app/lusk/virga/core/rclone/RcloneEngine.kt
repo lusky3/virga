@@ -62,7 +62,12 @@ interface RcloneEngine {
     suspend fun providers(): List<RemoteProvider>
 
     suspend fun listRemotes(): List<Remote>
-    suspend fun createRemote(name: String, type: String, params: Map<String, String>)
+    suspend fun createRemote(
+        name: String,
+        type: String,
+        params: Map<String, String>,
+        sensitiveKeys: Set<String> = emptySet(),
+    )
 
     /**
      * Creates a `crypt:` remote that wraps [baseRemoteSpec] (e.g. "gdrive:encrypted").
@@ -106,6 +111,21 @@ interface RcloneEngine {
      * when the backend does not report it.
      */
     suspend fun about(remoteName: String): RemoteQuota
+
+    /**
+     * Provides a daemon for a long-running config-mutating operation (daemon OAuth).
+     * The daemon stays alive for the entire [block]. On success, persists the updated
+     * config and tears down. On failure/cancellation, cleans up without persisting.
+     * Rejects if syncs hold leases (same as [createRemote]).
+     */
+    suspend fun <T> withDaemonForOAuth(block: suspend (RcloneDaemon) -> T): T
+
+    /**
+     * Tests connectivity to [remoteName] by attempting `operations/about`, falling
+     * back to `operations/list` if the backend doesn't support about.
+     * Returns [Result.success] if either succeeds, [Result.failure] if both fail.
+     */
+    suspend fun testConnectivity(remoteName: String): Result<Unit>
 
     /** Emits progress until the sync completes; the terminal emission has full counts. */
     fun sync(source: String, dest: String, options: SyncOptions): Flow<SyncProgress>

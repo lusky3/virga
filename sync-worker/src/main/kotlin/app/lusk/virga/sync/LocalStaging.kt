@@ -56,14 +56,19 @@ class LocalStaging @Inject constructor(
         val fullyStaged: Boolean = true,
     )
 
-    /** Prepare the local path rclone should operate on. */
-    suspend fun prepare(sourcePath: String, direction: SyncDirection): StagedSource =
+    /**
+     * Prepare the local path rclone should operate on. [runId] suffixes the stage
+     * dir so concurrent runs of the same task (or two tasks sharing a SAF source)
+     * never collide — without it both keyed only on the source hash and the
+     * leading deleteRecursively() would wipe each other's in-flight stage.
+     */
+    suspend fun prepare(sourcePath: String, direction: SyncDirection, runId: Long): StagedSource =
         withContext(Dispatchers.IO) {
             if (!sourcePath.startsWith("content://")) {
                 return@withContext StagedSource(localPath = sourcePath, isStaged = false)
             }
             val hash = sourcePath.hashCode().toUInt().toString(16)
-            val stageDir = File(context.cacheDir, "saf-stage/$hash")
+            val stageDir = File(context.cacheDir, "saf-stage/$hash-$runId")
             stageDir.deleteRecursively()
             stageDir.mkdirs()
 

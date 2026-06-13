@@ -14,7 +14,14 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -35,6 +42,7 @@ import java.io.File
  * Note: add `testImplementation("io.mockk:mockk:<version>")` to the rclone
  * module's build.gradle.kts if not already present.
  */
+@OptIn(ExperimentalCoroutinesApi::class) // advanceUntilIdle (cancellation-safe teardown tests)
 class RcloneEngineImplTest {
 
     private val daemonManager = mockk<RcloneDaemonManager>()
@@ -55,6 +63,13 @@ class RcloneEngineImplTest {
         // overloads the engine uses (providers()/importConfig() log on failure).
         mockkStatic(Log::class)
         every { Log.w(any<String>(), any<String>(), any<Throwable>()) } returns 0
+        // One-shot ops now run under a refcount lease (rclone-M2/M3): an isolated call
+        // acquires the daemon then releases it, and the last release tears the daemon down
+        // (daemonManager.stop) + re-encrypts the config (persistAndCleanup). Default-stub
+        // both so single-call ops don't trip the strict mock; tests that assert specific
+        // teardown behavior override these.
+        coEvery { daemonManager.stop(any()) } returns Unit
+        coEvery { configManager.persistAndCleanup() } returns Unit
         engine = RcloneEngineImpl(daemonManager, configManager, apiClient, dispatchers)
         fakeDaemon = RcloneDaemon(
             process = mockk { every { isAlive } returns true },
@@ -98,6 +113,74 @@ class RcloneEngineImplTest {
 
         engine.startDaemon()
         engine.stopDaemon()
+
+        coVerify { daemonManager.stop(fakeDaemon) }
+        coVerify { configManager.persistAndCleanup() }
+    }
+
+    // --- cancellation-safe teardown (NonCancellable) ---
+    //
+    // These prove rclone-H1: a teardown whose calling job is cancelled MID-FLIGHT must
+    // still stop the rclone process and persist/discard the plaintext config. Each stubs
+    // daemonManager.stop with a virtual `delay`, launches the teardown UNDISPATCHED so it
+    // reaches that suspension, then cancels the job before advancing the clock. Under the
+    // old `withContext(dispatchers.io)` the post-stop work (persist/cleanup) would be
+    // skipped once the job was cancelled; under `withContext(NonCancellable)` it runs.
+
+    @Test fun `stopDaemon teardown completes after the calling scope is cancelled`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } coAnswers { delay(1_000) }
+        coEvery { configManager.persistAndCleanup() } returns Unit
+
+        engine.startDaemon()
+
+        val job = launch(start = CoroutineStart.UNDISPATCHED) { engine.stopDaemon() }
+        job.cancel()                 // cancelled while parked inside stop()'s delay
+        advanceUntilIdle()           // NonCancellable lets the delay + persist finish
+        job.join()
+
+        coVerify { daemonManager.stop(fakeDaemon) }
+        coVerify { configManager.persistAndCleanup() } // post-stop work survived cancellation
+    }
+
+    @Test fun `releaseDaemon teardown completes after the calling scope is cancelled`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } coAnswers { delay(1_000) }
+        coEvery { configManager.persistAndCleanup() } returns Unit
+
+        engine.acquireDaemon() // leases = 1; last release must tear down
+
+        val job = launch(start = CoroutineStart.UNDISPATCHED) { engine.releaseDaemon() }
+        job.cancel()
+        advanceUntilIdle()
+        job.join()
+
+        // Daemon torn down + plaintext re-encrypted despite cancellation: no surviving
+        // process, no lease leak.
+        coVerify { daemonManager.stop(fakeDaemon) }
+        coVerify { configManager.persistAndCleanup() }
+    }
+
+    @Test fun `mutatingConfig teardown completes after the calling scope is cancelled`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } coAnswers { delay(1_000) }
+        coEvery { configManager.persistAndCleanup() } returns Unit
+        coEvery { apiClient.call(any(), any(), any(), "config/create", any()) } returns buildJsonObject {}
+
+        // User backs out mid-createRemote: the calling scope is cancelled, but the finally
+        // teardown (NonCancellable) must still stop the daemon + persist the config.
+        val job = launch(start = CoroutineStart.UNDISPATCHED) {
+            engine.createRemote("newdrive", "drive", mapOf("client_id" to "abc"))
+        }
+        job.cancel()
+        advanceUntilIdle()
+        job.join()
 
         coVerify { daemonManager.stop(fakeDaemon) }
         coVerify { configManager.persistAndCleanup() }
@@ -234,6 +317,40 @@ class RcloneEngineImplTest {
         coVerify { configManager.cleanup() }
     }
 
+    @Test fun `createRemote sets opt obscure when sensitiveKeys present`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.persistAndCleanup() } returns Unit
+
+        val capturedParams = mutableListOf<kotlinx.serialization.json.JsonObject>()
+        coEvery { apiClient.call(any(), any(), any(), "config/create", capture(capturedParams)) } returns buildJsonObject {}
+
+        engine.createRemote("box", "box", mapOf("token" to "t", "pass" to "secret"), sensitiveKeys = setOf("pass"))
+
+        val opt = capturedParams.first()["opt"]?.jsonObject
+        assertThat(opt?.get("obscure")?.jsonPrimitive?.booleanOrNull).isTrue()
+        assertThat(opt?.get("nonInteractive")?.jsonPrimitive?.booleanOrNull).isTrue()
+    }
+
+    @Test fun `createRemote omits opt obscure for token-only OAuth create`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.persistAndCleanup() } returns Unit
+
+        val capturedParams = mutableListOf<kotlinx.serialization.json.JsonObject>()
+        coEvery { apiClient.call(any(), any(), any(), "config/create", capture(capturedParams)) } returns buildJsonObject {}
+
+        engine.createRemote("gdrive", "drive", mapOf("token" to "{\"access_token\":\"x\"}"))
+
+        val opt = capturedParams.first()["opt"]?.jsonObject
+        assertThat(opt?.containsKey("obscure")).isFalse()
+        assertThat(opt?.get("nonInteractive")?.jsonPrimitive?.booleanOrNull).isTrue()
+    }
+
     // --- listDir ---
 
     @Test fun `listDir maps operations_list response to FileItem list`() = runTest(testDispatcher) {
@@ -366,6 +483,113 @@ class RcloneEngineImplTest {
 
         coVerify { apiClient.call(any(), any(), any(), "sync/copy", any()) }
         coVerify { apiClient.call(any(), any(), any(), "sync/sync", any()) }
+    }
+
+    // --- job control: collector cancellation aborts the async job (rclone-M4) ---
+
+    @Test fun `cancelling the sync collector mid-poll issues job_stop`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "sync/copy", any()) } returns
+            buildJsonObject { put("jobid", 99) }
+        // Job never finishes: every poll reports running, so the collector keeps looping
+        // until we cancel it. Stats advance each tick so the stall guard never fires.
+        coEvery { apiClient.call(any(), any(), any(), "job/status", any()) } returns
+            buildJsonObject { put("finished", false) }
+        var bytes = 0L
+        coEvery { apiClient.call(any(), any(), any(), "core/stats", any()) } answers {
+            bytes += 100L
+            buildJsonObject { put("bytes", bytes) }
+        }
+        coEvery { apiClient.call(any(), any(), any(), "job/stop", any()) } returns buildJsonObject {}
+
+        engine.startDaemon()
+
+        // Collect in a child job, let it poll a couple of ticks, then cancel it. The flow's
+        // finally must abort the still-running async job via job/stop (NonCancellable).
+        val collector = launch {
+            engine.sync("local:/x", "gdrive:x", SyncOptions(SyncDirection.UPLOAD)).collect { }
+        }
+        advanceTimeBy(1_600) // > 2 * POLL_INTERVAL_MS (750ms): let the loop poll a couple of ticks
+        collector.cancel()
+        advanceUntilIdle()
+
+        coVerify { apiClient.call(any(), any(), any(), "job/stop", any()) }
+    }
+
+    // --- one-shot lease lifecycle (rclone-M2/M3) ---
+
+    @Test fun `isolated one-shot op starts then stops the daemon`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "operations/list", any()) } returns buildJsonObject {}
+
+        // No prior startDaemon(): the op itself must start the daemon, then release the lease
+        // (leases 1->0) tears it down + re-encrypts the config.
+        engine.listDir("gdrive:", "photos")
+
+        coVerify(exactly = 1) { daemonManager.start(any()) }
+        coVerify(exactly = 1) { daemonManager.stop(fakeDaemon) }
+        coVerify(exactly = 1) { configManager.persistAndCleanup() }
+    }
+
+    @Test fun `one-shot op made while a lease is held does not stop the daemon`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "operations/about", any()) } returns buildJsonObject {}
+
+        engine.acquireDaemon() // an outer consumer (e.g. a SyncWorker) holds a lease
+
+        // The op's lease just nests (leases 2->1 on release): the daemon must survive.
+        engine.about("gdrive")
+        coVerify(exactly = 0) { daemonManager.stop(fakeDaemon) }
+
+        // Only the outer consumer's final release tears it down.
+        engine.releaseDaemon()
+        coVerify(exactly = 1) { daemonManager.stop(fakeDaemon) }
+    }
+
+    // --- stall guard (rclone-M4) ---
+    //
+    // The stall guard at runJobWithProgress compares against System.currentTimeMillis()
+    // (wall clock), NOT the test scheduler's virtual time, so advanceTimeBy() cannot
+    // deterministically drive it past STALL_TIMEOUT_MS without a real 120s sleep. We
+    // therefore assert the guard's KEY invariant that IS unit-testable on virtual time:
+    // a long check-only phase (no bytes/transfers/deletes, only `checks` rising) must NOT
+    // be mistaken for a stall — the job runs to completion. Tracking `checks` in the
+    // progress sentinel is exactly what prevents rclone's listing/compare phases (which
+    // move zero bytes) from tripping the abort.
+    @Test fun `a check-only phase does not trip the stall guard`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "sync/copy", any()) } returns
+            buildJsonObject { put("jobid", 5) }
+
+        // First three polls: running, zero bytes but `checks` climbing (compare phase).
+        // Fourth poll: finished+success. The climbing `checks` keeps lastProgressAtMs fresh,
+        // so the guard never fires and the job completes normally.
+        var poll = 0
+        coEvery { apiClient.call(any(), any(), any(), "job/status", any()) } answers {
+            poll++
+            buildJsonObject { put("finished", poll >= 4); if (poll >= 4) put("success", true) }
+        }
+        var checks = 0
+        coEvery { apiClient.call(any(), any(), any(), "core/stats", any()) } answers {
+            checks += 10
+            buildJsonObject { put("bytes", 0L); put("checks", checks) }
+        }
+
+        engine.startDaemon()
+
+        engine.sync("local:/x", "gdrive:x", SyncOptions(SyncDirection.UPLOAD)).test {
+            // Three running emissions (check-only) then the terminal one, no stall error.
+            awaitItem(); awaitItem(); awaitItem(); awaitItem()
+            awaitComplete()
+        }
     }
 
     // --- providers ---
@@ -615,6 +839,64 @@ class RcloneEngineImplTest {
 
     // --- config mutations are refused while a sync holds a lease ---
 
+    @Test fun `testConnectivity succeeds when about succeeds`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "operations/about", any()) } returns buildJsonObject {}
+
+        engine.startDaemon()
+        val result = engine.testConnectivity("gdrive")
+
+        assertThat(result.isSuccess).isTrue()
+    }
+
+    @Test fun `testConnectivity falls back to listDir when about fails`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "operations/about", any()) } throws
+            VirgaError.Rclone(message = "not supported")
+        coEvery { apiClient.call(any(), any(), any(), "operations/list", any()) } returns buildJsonObject {}
+
+        engine.startDaemon()
+        val result = engine.testConnectivity("local")
+
+        assertThat(result.isSuccess).isTrue()
+    }
+
+    @Test fun `testConnectivity returns failure when both about and listDir fail`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "operations/about", any()) } throws
+            VirgaError.Rclone(message = "not supported")
+        coEvery { apiClient.call(any(), any(), any(), "operations/list", any()) } throws
+            VirgaError.Network("unreachable")
+
+        engine.startDaemon()
+        val result = engine.testConnectivity("broken")
+
+        assertThat(result.isFailure).isTrue()
+        assertThat(result.exceptionOrNull()).isInstanceOf(VirgaError.Network::class.java)
+    }
+
+    @Test fun `testConnectivity rethrows cancellation without falling back to listDir`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "operations/about", any()) } throws
+            CancellationException("caller cancelled")
+
+        engine.startDaemon()
+        assertThrows<CancellationException> { engine.testConnectivity("gdrive") }
+
+        // Cancellation must propagate; the fallback RC call must never fire.
+        coVerify(exactly = 0) { apiClient.call(any(), any(), any(), "operations/list", any()) }
+    }
+
+    // --- config mutations are refused while a sync holds a lease ---
+
     @Test fun `createRemote is refused while a sync holds a lease`() = runTest(testDispatcher) {
         coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
         coEvery { daemonManager.start(any()) } returns fakeDaemon
@@ -636,5 +918,53 @@ class RcloneEngineImplTest {
         // The refused import must not snapshot, overwrite, or roll back the store.
         coVerify(exactly = 0) { configManager.snapshotCiphertext() }
         coVerify(exactly = 0) { configManager.import(any()) }
+    }
+
+    // --- withDaemonForOAuth ---
+
+    @Test fun `withDaemonForOAuth provides daemon and persists config on success`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.persistAndCleanup() } returns Unit
+
+        var receivedDaemon: RcloneDaemon? = null
+        engine.withDaemonForOAuth { d -> receivedDaemon = d }
+
+        assertThat(receivedDaemon).isSameInstanceAs(fakeDaemon)
+        coVerify { daemonManager.stop(fakeDaemon) }
+        coVerify { configManager.persistAndCleanup() }
+    }
+
+    @Test fun `withDaemonForOAuth cleans up without persisting on failure`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.cleanup() } returns Unit
+
+        assertThrows<VirgaError.Rclone> {
+            engine.withDaemonForOAuth<Unit> { throw VirgaError.Rclone(message = "oauth failed") }
+        }
+
+        coVerify(exactly = 0) { configManager.persistAndCleanup() }
+        coVerify { configManager.cleanup() }
+    }
+
+    @Test fun `withDaemonForOAuth is refused while a sync holds a lease`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.persistAndCleanup() } returns Unit
+        engine.acquireDaemon() // leases = 1
+
+        val error = assertThrows<VirgaError.Rclone> {
+            engine.withDaemonForOAuth<Unit> { }
+        }
+        assertThat(error.message).contains("Stop running syncs")
+
+        engine.releaseDaemon()
     }
 }

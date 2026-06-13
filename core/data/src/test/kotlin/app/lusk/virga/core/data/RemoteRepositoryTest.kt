@@ -1,7 +1,9 @@
 package app.lusk.virga.core.data
 
+import androidx.room.withTransaction
 import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.common.model.Remote
+import app.lusk.virga.core.database.VirgaDatabase
 import app.lusk.virga.core.database.dao.RemoteDao
 import app.lusk.virga.core.database.dao.SyncTaskDao
 import app.lusk.virga.core.database.entity.RemoteEntity
@@ -11,12 +13,15 @@ import com.google.common.truth.Truth.assertThat
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.slot
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
 class RemoteRepositoryTest {
 
+    private val db = mockk<VirgaDatabase>()
     private val remoteDao = mockk<RemoteDao>(relaxed = true)
     private val syncTaskDao = mockk<SyncTaskDao>(relaxed = true)
     private val engine = mockk<RcloneEngine>()
@@ -25,7 +30,12 @@ class RemoteRepositoryTest {
     private lateinit var repo: RemoteRepository
 
     @BeforeEach fun setUp() {
-        repo = RemoteRepository(remoteDao, syncTaskDao, engine, configManager)
+        // `withTransaction` is a top-level extension on RoomDatabase; stub it to simply
+        // run its block so the two DAO deletes are genuinely exercised and verifiable.
+        mockkStatic("androidx.room.RoomDatabaseKt")
+        val block = slot<suspend () -> Any?>()
+        coEvery { db.withTransaction(capture(block)) } coAnswers { block.captured.invoke() }
+        repo = RemoteRepository(db, remoteDao, syncTaskDao, engine, configManager)
     }
 
     // --- refresh ---
@@ -65,24 +75,34 @@ class RemoteRepositoryTest {
     // --- addRemote ---
 
     @Test fun `addRemote calls engine_createRemote and then refresh on success`() = runTest {
-        coEvery { engine.createRemote("new", "drive", any()) } returns Unit
+        coEvery { engine.createRemote("new", "drive", any(), any()) } returns Unit
         coEvery { engine.listRemotes() } returns listOf(Remote("new", "drive"))
 
         val result = repo.addRemote("new", "drive", mapOf("client_id" to "abc"))
 
         assertThat(result.isSuccess).isTrue()
-        coVerify { engine.createRemote("new", "drive", mapOf("client_id" to "abc")) }
+        coVerify { engine.createRemote("new", "drive", mapOf("client_id" to "abc"), emptySet()) }
         coVerify { remoteDao.replaceAll(match { it.size == 1 && it[0].name == "new" }) }
     }
 
     @Test fun `addRemote returns failure and skips refresh when engine fails`() = runTest {
-        coEvery { engine.createRemote(any(), any(), any()) } throws
+        coEvery { engine.createRemote(any(), any(), any(), any()) } throws
             VirgaError.Rclone(message = "duplicate")
 
         val result = repo.addRemote("dup", "drive", emptyMap())
 
         assertThat(result.isFailure).isTrue()
         coVerify(exactly = 0) { remoteDao.replaceAll(any()) }
+    }
+
+    @Test fun `addRemote forwards sensitiveKeys to the engine`() = runTest {
+        coEvery { engine.createRemote(any(), any(), any(), any()) } returns Unit
+        coEvery { engine.listRemotes() } returns listOf(Remote("sftp1", "sftp"))
+
+        val result = repo.addRemote("sftp1", "sftp", mapOf("pass" to "p"), sensitiveKeys = setOf("pass"))
+
+        assertThat(result.isSuccess).isTrue()
+        coVerify { engine.createRemote("sftp1", "sftp", mapOf("pass" to "p"), setOf("pass")) }
     }
 
     // --- deleteRemote ---
@@ -160,6 +180,26 @@ class RemoteRepositoryTest {
 
         assertThat(result.isSuccess).isTrue()
         coVerify { engine.createCryptRemote("enc", "s3:bucket", "pass", "mysalt") }
+    }
+
+    // --- exportConfig ---
+
+    @Test fun `testConnectivity delegates to engine`() = runTest {
+        coEvery { engine.testConnectivity("gdrive") } returns Result.success(Unit)
+
+        val result = repo.testConnectivity("gdrive")
+
+        assertThat(result.isSuccess).isTrue()
+        coVerify { engine.testConnectivity("gdrive") }
+    }
+
+    @Test fun `testConnectivity propagates engine failure`() = runTest {
+        coEvery { engine.testConnectivity("broken") } returns Result.failure(VirgaError.Network("timeout"))
+
+        val result = repo.testConnectivity("broken")
+
+        assertThat(result.isFailure).isTrue()
+        assertThat(result.exceptionOrNull()).isInstanceOf(VirgaError.Network::class.java)
     }
 
     // --- exportConfig ---

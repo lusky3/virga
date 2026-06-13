@@ -9,7 +9,6 @@ import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -20,8 +19,6 @@ import kotlinx.coroutines.launch
  */
 class SyncTileService : TileService() {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
     override fun onStartListening() {
         super.onStartListening()
         updateTileState()
@@ -29,19 +26,24 @@ class SyncTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
-        scope.launch {
-            val entryPoint = entryPoint()
+        // L7: read enabled tasks and enqueue their syncs on a process-lifetime scope,
+        // NOT a service-local one. A QS tile's service is torn down the moment the
+        // shade collapses; a service-scoped coroutine would be cancelled before the
+        // suspending tasks.first() read completes, dropping the work. WorkManager
+        // (via SyncScheduler.syncNow) owns the durable sync once enqueued — this
+        // detached scope only needs to live long enough to read + enqueue.
+        val appContext = applicationContext
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            val entryPoint = EntryPointAccessors.fromApplication(
+                appContext,
+                VirgaWidgetEntryPoint::class.java,
+            )
             val repo = entryPoint.syncTaskRepository()
             val scheduler = entryPoint.syncScheduler()
             val enabled = runCatching { repo.tasks.first().filter { it.enabled } }
                 .getOrDefault(emptyList())
             enabled.forEach { scheduler.syncNow(it.id) }
         }
-    }
-
-    override fun onDestroy() {
-        scope.cancel()
-        super.onDestroy()
     }
 
     private fun updateTileState() {
@@ -54,10 +56,4 @@ class SyncTileService : TileService() {
         tile.icon = Icon.createWithResource(this, R.drawable.ic_tile_sync)
         tile.updateTile()
     }
-
-    private fun entryPoint(): VirgaWidgetEntryPoint =
-        EntryPointAccessors.fromApplication(
-            applicationContext,
-            VirgaWidgetEntryPoint::class.java,
-        )
 }

@@ -56,28 +56,37 @@ class OAuthRedirectActivity : ComponentActivity() {
      * authorization) by sending this exported activity a bogus intent.
      */
     private fun handle(intent: Intent?): Boolean {
-        val uri = intent?.data
-        if (uri == null || !isExpectedRedirect(uri)) return false
-        val state = uri.getQueryParameter("state")
-        val code = uri.getQueryParameter("code")
-        val error = uri.getQueryParameter("error")
-        when {
-            error != null -> store.emit(OAuthResult.Error(state, message = error))
-            code != null && state != null -> store.emit(OAuthResult.Success(state = state, code = code))
-            else -> store.emit(OAuthResult.Error(state, message = "Malformed OAuth redirect"))
-        }
+        val result = classifyOAuthRedirect(intent?.data) ?: return false
+        store.emit(result)
         return true
     }
+}
 
-    /**
-     * True only for Virga's real OAuth redirect origins — scheme, host AND path must
-     * match the manifest filters. The path check matters because this activity is
-     * exported: another app can send an explicit intent (bypassing the filters), and
-     * without it a crafted `https://lusk.app/anything` would be accepted.
-     */
-    private fun isExpectedRedirect(uri: Uri): Boolean {
-        val scheme = uri.scheme?.lowercase()
-        return (scheme == "https" && uri.host == "lusk.app" && uri.path == "/virga/oauth/callback") ||
-            (scheme?.startsWith("com.googleusercontent.apps.") == true && uri.path == "/oauth2redirect")
+/**
+ * Maps a redirect [uri] to the [OAuthResult] it should emit, or null when the URI
+ * is not one of Virga's real OAuth redirect origins (so the caller emits nothing
+ * and does NOT foreground the app). Scheme, host AND path must all match the
+ * manifest filters — the path check matters because the activity is exported and
+ * another app can send an explicit intent that bypasses the intent-filters; without
+ * it a crafted `https://lusk.app/anything` would be accepted.
+ *
+ * Pulled out as a pure top-level function so the exported-activity security gate is
+ * unit-testable without driving the Activity lifecycle.
+ */
+internal fun classifyOAuthRedirect(uri: Uri?): OAuthResult? {
+    if (uri == null || !isExpectedRedirect(uri)) return null
+    val state = uri.getQueryParameter("state")
+    val code = uri.getQueryParameter("code")
+    val error = uri.getQueryParameter("error")
+    return when {
+        error != null -> OAuthResult.Error(state, message = error)
+        code != null && state != null -> OAuthResult.Success(state = state, code = code)
+        else -> OAuthResult.Error(state, message = "Malformed OAuth redirect")
     }
+}
+
+private fun isExpectedRedirect(uri: Uri): Boolean {
+    val scheme = uri.scheme?.lowercase()
+    return (scheme == "https" && uri.host == "lusk.app" && uri.path == "/virga/oauth/callback") ||
+        (scheme?.startsWith("com.googleusercontent.apps.") == true && uri.path == "/oauth2redirect")
 }

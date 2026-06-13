@@ -16,9 +16,9 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  RCLONE_VERSION: v1.74.2
-  NDK_VERSION: 27.2.12479018
+# RCLONE_VERSION / NDK_VERSION are NOT hardcoded here — they're loaded from
+# scripts/rclone-versions.env (single source of truth) into $GITHUB_ENV by the
+# "Load rclone versions" step below, so later steps and the cache key resolve them.
 
 jobs:
   build:
@@ -33,6 +33,18 @@ jobs:
         with:
           # SonarCloud needs full history for accurate blame/new-code detection.
           fetch-depth: 0
+
+      # Single source of truth: export RCLONE_VERSION / NDK_VERSION so later steps
+      # AND the cache key (env.RCLONE_VERSION, env.NDK_VERSION) resolve them.
+      - name: Load rclone versions
+        # Emit only KEY=VALUE lines — the env file's leading comments have no '='
+        # and $GITHUB_ENV rejects any line without one ("Invalid format").
+        run: grep -E '^[A-Za-z_][A-Za-z0-9_]*=' scripts/rclone-versions.env >> "$GITHUB_ENV"
+
+      # Verify the Gradle wrapper jar matches a known-good Gradle release before
+      # the first ./gradlew runs (defends against a tampered wrapper in the repo).
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
 
       - name: Set up JDK 21
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
@@ -56,10 +68,13 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           # Cache the compiled binaries too, not just the clone: with jniLibs
-          # present the Gradle onlyIf skips the ~5-min cross-compile on a hit.
+          # present the build script's version-stamp gate skips the ~5-min
+          # cross-compile on a hit. Go module + build caches speed the miss path.
           path: |
             .rclone-build
             core/rclone/src/main/jniLibs
+            ~/go/pkg/mod
+            ~/.cache/go-build
           key: rclone-${{ env.RCLONE_VERSION }}-ndk${{ env.NDK_VERSION }}
 
       - name: Build rclone binaries
@@ -135,7 +150,10 @@ jobs:
           HAS_SNYK: ${{ secrets.SNYK_TOKEN != '' }}
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
-          npm install -g snyk
+          # Pin the exact CLI version: a floating `snyk` runs latest with the
+          # SNYK_TOKEN in env, so a compromised release could exfiltrate it. Bump
+          # deliberately. Resolve newer versions with `npm view snyk version`.
+          npm install -g snyk@1.1305.1
           snyk test --all-sub-projects --severity-threshold=high || true
           snyk monitor --all-sub-projects || true
 

@@ -15,7 +15,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 
 /**
- * Re-registers periodic sync schedules after the device reboots.
+ * Re-registers periodic sync schedules after the device reboots, and also after
+ * a timezone/clock change (so calendar schedules — baked into a fixed delay at
+ * enqueue time — don't drift relative to the new wall-clock time).
  *
  * Dependencies are resolved through [EntryPointAccessors] rather than
  * `@AndroidEntryPoint` because the OS may deliver `LOCKED_BOOT_COMPLETED`
@@ -35,8 +37,15 @@ class BootReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        // BOOT/LOCKED_BOOT re-arm schedules after a reboot. TIMEZONE_CHANGED and
+        // TIME_SET (ACTION_TIME_CHANGED) re-arm them after a clock/zone change:
+        // calendar schedules are baked into a fixed ms delay at enqueue time, so
+        // without this they drift (up to a week for a weekly schedule) when the
+        // wall-clock time shifts. rescheduleAll() recomputes the next occurrence.
         if (intent.action != Intent.ACTION_BOOT_COMPLETED &&
-            intent.action != Intent.ACTION_LOCKED_BOOT_COMPLETED
+            intent.action != Intent.ACTION_LOCKED_BOOT_COMPLETED &&
+            intent.action != Intent.ACTION_TIMEZONE_CHANGED &&
+            intent.action != Intent.ACTION_TIME_CHANGED
         ) {
             return
         }

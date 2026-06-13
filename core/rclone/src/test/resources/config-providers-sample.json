@@ -1,0 +1,35 @@
+{
+  "providers": [
+    { "Name": "drive", "Description": "Google Drive",
+      "Options": [
+        { "Name": "client_id", "Help": "", "Type": "string", "Advanced": false },
+        { "Name": "token", "Help": "", "Type": "string", "Advanced": true } ] },
+    { "Name": "box", "Description": "Box",
+      "Options": [
+        { "Name": "client_id", "Help": "", "Type": "string", "Advanced": false },
+        { "Name": "client_secret", "Help": "", "Type": "string", "Advanced": false },
+        { "Name": "token", "Help": "", "Type": "string", "Advanced": true } ] },
+    { "Name": "pcloud", "Description": "pCloud",
+      "Options": [
+        { "Name": "client_id", "Help": "", "Type": "string", "Advanced": false },
+        { "Name": "token", "Help": "", "Type": "string", "Advanced": true } ] },
+    { "Name": "s3", "Description": "Amazon S3 and compatibles",
+      "Options": [
+        { "Name": "access_key_id", "Help": "", "Type": "string", "Advanced": false },
+        { "Name": "secret_access_key", "Help": "", "IsPassword": true, "Type": "string", "Advanced": false } ] },
+    { "Name": "sftp", "Description": "SSH/SFTP",
+      "Options": [
+        { "Name": "host", "Help": "", "Type": "string", "Required": true, "Advanced": false },
+        { "Name": "pass", "Help": "", "IsPassword": true, "Type": "string", "Advanced": false } ] },
+    { "Name": "crypt", "Description": "Encrypt/Decrypt a remote",
+      "Options": [
+        { "Name": "remote", "Help": "", "Type": "string", "Required": true, "Advanced": false },
+        { "Name": "password", "Help": "", "IsPassword": true, "Type": "string", "Advanced": false } ] },
+    { "Name": "union", "Description": "Union merges several remotes",
+      "Options": [
+        { "Name": "upstreams", "Help": "", "Type": "string", "Required": true, "Advanced": false } ] },
+    { "Name": "local", "Description": "Local Disk",
+      "Options": [
+        { "Name": "nounc", "Help": "", "Type": "bool", "Advanced": true } ] }
+  ]
+}

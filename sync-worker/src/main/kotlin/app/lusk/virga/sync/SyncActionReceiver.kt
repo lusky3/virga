@@ -29,8 +29,9 @@ class SyncActionReceiver : BroadcastReceiver() {
             else          -> return
         }
 
-        // Dismiss the result (error) notification after acting on it.
-        NotificationManagerCompat.from(context).cancel(SyncNotifications.RESULT_NOTIFICATION_ID)
+        // Dismiss this task's result (error) notification after acting on it.
+        // Result ids are now per-task (sync-M4), so target this task's id.
+        NotificationManagerCompat.from(context).cancel(SyncNotifications.resultId(taskId))
     }
 
     companion object {

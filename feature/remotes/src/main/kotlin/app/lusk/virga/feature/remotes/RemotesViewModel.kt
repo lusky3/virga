@@ -13,13 +13,16 @@ import app.lusk.virga.core.common.model.RemoteQuota
 import app.lusk.virga.core.data.PendingRemoteResult
 import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.datastore.OAuthKeyStore
+import app.lusk.virga.core.rclone.PickerEntry
+import app.lusk.virga.core.rclone.ProviderCatalog
+import app.lusk.virga.core.rclone.SetupKind
+import app.lusk.virga.core.rclone.api.RcApiClient
+import app.lusk.virga.core.rclone.oauth.DaemonOAuthOrchestrator
 import app.lusk.virga.core.rclone.oauth.OAuthConfig
 import app.lusk.virga.core.rclone.oauth.OAuthProvider
 import app.lusk.virga.core.rclone.oauth.OAuthProviders
-import app.lusk.virga.core.rclone.oauth.OAuthResult
 import app.lusk.virga.core.rclone.oauth.OAuthStore
 import app.lusk.virga.core.rclone.oauth.OAuthTokenExchanger
-import app.lusk.virga.core.rclone.oauth.Pkce
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -30,9 +33,19 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.util.UUID
 import javax.inject.Inject
+
+/**
+ * Returns the set of option names where [RemoteOption.isPassword] is true AND the
+ * option is present with a non-blank value in [values].
+ */
+internal fun sensitiveKeysFrom(
+    options: List<RemoteOption>,
+    values: Map<String, String>,
+): Set<String> = options
+    .filter { it.isPassword && values[it.name]?.isNotBlank() == true }
+    .map { it.name }
+    .toSet()
 
 data class RemotesUiState(
     val remotes: List<Remote> = emptyList(),
@@ -48,6 +61,23 @@ data class RemotesUiState(
     /** Bumped by [RemotesViewModel.refresh]; cards key their quota fetch on it so
      *  a pull-to-refresh re-fires the lazy fetch even though the card stays composed. */
     val quotaEpoch: Int = 0,
+    /** rclone's instructions for the daemon-OAuth paste-token prompt (run
+     *  `rclone authorize` on another machine, paste the result back); null
+     *  when no token is being awaited. */
+    val daemonOAuthTokenPrompt: String? = null,
+)
+
+/**
+ * The VM-owned transient slice of [RemotesUiState]. Top-level (not nested in the
+ * VM) because the OAuth flow collaborators ([DaemonOAuthFlow], [SystemOAuthFlow])
+ * share the same `MutableStateFlow` instance and apply their updates to it.
+ */
+internal data class RemotesTransientState(
+    val refreshing: Boolean = false,
+    val oauthInProgress: Boolean = false,
+    val message: String? = null,
+    /** Paste-token instructions from the daemon OAuth flow; null = no prompt. */
+    val daemonOAuthTokenPrompt: String? = null,
 )
 
 @HiltViewModel
@@ -58,6 +88,7 @@ class RemotesViewModel @Inject constructor(
     private val oauthStore: OAuthStore,
     private val tokenExchanger: OAuthTokenExchanger,
     private val oauthKeyStore: OAuthKeyStore,
+    private val apiClient: RcApiClient,
     private val dispatchers: DispatcherProvider,
     private val pendingRemoteResult: PendingRemoteResult,
 ) : ViewModel() {
@@ -94,7 +125,9 @@ class RemotesViewModel @Inject constructor(
         providersLoading = true
         viewModelScope.launch {
             try {
-                _providers.value = repository.providers()
+                val loaded = repository.providers()
+                _providers.value = loaded
+                _catalog = if (loaded.isNullOrEmpty()) null else ProviderCatalog(loaded)
             } finally {
                 providersLoading = false
             }
@@ -114,19 +147,29 @@ class RemotesViewModel @Inject constructor(
             ?.filter { !it.advanced }
     }
 
-    init {
-        // Observe the redirect activity's results for the lifetime of the VM.
-        viewModelScope.launch {
-            oauthStore.results.collect { result ->
-                if (result != null) {
-                    onOAuthResult(result)
-                    oauthStore.clearResult()
-                }
-            }
-        }
+    /**
+     * Returns the FULL [RemoteOption] list (basic + advanced) for [backendType], or
+     * null when the schema is not loaded or the type is unknown. Use this for the
+     * credential form — [TypedOptionFields] partitions basic/advanced itself and
+     * needs the advanced options to render the "Show advanced options" expander.
+     */
+    fun allOptionsForBackend(backendType: String): List<RemoteOption>? {
+        val loaded = _providers.value ?: return null
+        if (loaded.isEmpty()) return null
+        return loaded.firstOrNull { it.name.equals(backendType, ignoreCase = true) }?.options
     }
 
-    private val transient = MutableStateFlow(TransientState())
+    /** The [ProviderCatalog] built from the loaded schema, or null before load. */
+    private var _catalog: ProviderCatalog? = null
+    private val catalog: ProviderCatalog? get() = _catalog
+
+    /** Picker entries for the Add-remote picker, or null when schema is not loaded. */
+    fun pickerEntries(): List<PickerEntry>? = catalog?.pickerEntries()
+
+    /** Classification of a backend type for routing the Add-remote flow. */
+    fun setupKindFor(type: String): SetupKind = catalog?.setupKind(type) ?: SetupKind.Credential
+
+    private val transient = MutableStateFlow(RemotesTransientState())
 
     /** Quota fetch results, in-flight set, and the refresh epoch, kept in one flow
      *  so [combineState] stays within the 5-argument [combine] overload. */
@@ -197,50 +240,42 @@ class RemotesViewModel @Inject constructor(
             // Lowercase here so a remote still creates even if the keyboard
             // auto-capitalized the first letter (KeyboardCapitalization.None is
             // only a hint and some IMEs ignore it).
-            val result = repository.addRemote(name.trim(), type.trim().lowercase(), params)
-            if (result.isSuccess) pendingRemoteResult.created(name.trim())
+            val trimmedType = type.trim().lowercase()
+            val options = allOptionsForBackend(trimmedType)
+            val sensitiveKeys = options?.let { sensitiveKeysFrom(it, params) } ?: emptySet()
+            val result = repository.addRemote(name.trim(), trimmedType, params, sensitiveKeys)
+            if (result.isSuccess) {
+                pendingRemoteResult.created(name.trim())
+                val connResult = repository.testConnectivity(name.trim())
+                val warning = when {
+                    connResult.isFailure ->
+                        context.getString(R.string.remotes_msg_connectivity_warning, name.trim())
+                    // Schema unavailable → sensitive keys couldn't be derived, so
+                    // any password values went to disk un-obscured. Warn, don't block.
+                    options == null ->
+                        context.getString(R.string.remotes_msg_freeform_no_obscure)
+                    else -> null
+                }
+                if (warning != null) transient.update { it.copy(message = warning) }
+            }
             onResult(result.isSuccess, result.exceptionOrNull()?.toUserMessage())
         }
     }
 
-    private sealed interface ImportRead {
-        data object CannotOpen : ImportRead
-        data object TooLarge : ImportRead
-        data class Ok(val text: String) : ImportRead
-    }
+    /** Moves rclone.conf in/out via the storage picker — see [ConfigTransferFlow]. */
+    private val configTransfer = ConfigTransferFlow(
+        scope = viewModelScope,
+        context = context,
+        repository = repository,
+        dispatchers = dispatchers,
+        transient = transient,
+    )
 
     /** Imports an existing rclone.conf selected via the storage picker. */
-    fun importConfigFromUri(uri: Uri) {
-        viewModelScope.launch {
-            val read = withContext(dispatchers.io) {
-                val stream = context.contentResolver.openInputStream(uri)
-                    ?: return@withContext ImportRead.CannotOpen
-                stream.use {
-                    val bytes = it.readBytes()
-                    if (bytes.size > MAX_IMPORT_BYTES) ImportRead.TooLarge
-                    else ImportRead.Ok(bytes.toString(Charsets.UTF_8))
-                }
-            }
-            when (read) {
-                ImportRead.CannotOpen -> transient.value = transient.value.copy(
-                    message = context.getString(R.string.remotes_msg_import_failed),
-                )
-                ImportRead.TooLarge -> transient.value = transient.value.copy(
-                    message = context.getString(R.string.remotes_msg_import_too_large),
-                )
-                is ImportRead.Ok -> {
-                    val result = repository.importConfig(read.text)
-                    transient.value = transient.value.copy(
-                        message = if (result.isSuccess) {
-                            context.getString(R.string.remotes_msg_config_imported)
-                        } else {
-                            result.exceptionOrNull()?.toUserMessage()
-                        },
-                    )
-                }
-            }
-        }
-    }
+    fun importConfigFromUri(uri: Uri) = configTransfer.importFromUri(uri)
+
+    /** Exports the decrypted rclone.conf to a document created via the storage picker. */
+    fun exportConfigToUri(uri: Uri) = configTransfer.exportToUri(uri)
 
     /**
      * Creates a `crypt:` remote.
@@ -283,7 +318,6 @@ class RemotesViewModel @Inject constructor(
     }
 
     companion object {
-        private const val MAX_IMPORT_BYTES = 256 * 1024
         /** Cap on a single quota (`operations/about`) fetch. Backends that don't
          *  support `about` usually error fast, but a slow/unreachable remote (or a
          *  starting daemon) could otherwise leave the "checking…" bar spinning
@@ -318,12 +352,6 @@ class RemotesViewModel @Inject constructor(
         }
     }
 
-    private data class TransientState(
-        val refreshing: Boolean = false,
-        val oauthInProgress: Boolean = false,
-        val message: String? = null,
-    )
-
     private fun combineState(): StateFlow<RemotesUiState> =
         combine(repository.remotes, transient, oauthKeyStore.clientIds, _quotaState) { remotes, t, customIds, quota ->
             RemotesUiState(
@@ -335,6 +363,7 @@ class RemotesViewModel @Inject constructor(
                 quotas = quota.quotas,
                 quotaLoading = quota.loading,
                 quotaEpoch = quota.epoch,
+                daemonOAuthTokenPrompt = t.daemonOAuthTokenPrompt,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RemotesUiState())
 
@@ -351,37 +380,67 @@ class RemotesViewModel @Inject constructor(
 
     // --- OAuth ----------------------------------------------------------
 
+    /** Daemon-mediated OAuth flow for non-bundled providers — see [DaemonOAuthFlow]. */
+    private val daemonOAuth = DaemonOAuthFlow(
+        scope = viewModelScope,
+        repository = repository,
+        apiClient = apiClient,
+        dispatchers = dispatchers,
+        pendingRemoteResult = pendingRemoteResult,
+        transient = transient,
+        strings = object : DaemonOAuthFlow.Strings {
+            override fun connectivityWarning(remoteName: String): String =
+                context.getString(R.string.remotes_msg_connectivity_warning, remoteName)
+            override fun oauthTimedOut(): String =
+                context.getString(R.string.remotes_msg_oauth_timed_out)
+            override fun addedRemote(remoteName: String): String =
+                context.getString(R.string.remotes_msg_added_remote_named, remoteName)
+            override fun enterNameFirst(): String =
+                context.getString(R.string.remotes_msg_enter_name_first)
+        },
+        onLaunchUrl = { _launchUrl.value = it },
+    )
+
+    /** Bundled (Custom Tabs + PKCE) OAuth flow — see [SystemOAuthFlow]. */
+    private val systemOAuth = SystemOAuthFlow(
+        context = context,
+        repository = repository,
+        oauthConfig = oauthConfig,
+        oauthStore = oauthStore,
+        tokenExchanger = tokenExchanger,
+        oauthKeyStore = oauthKeyStore,
+        pendingRemoteResult = pendingRemoteResult,
+        transient = transient,
+        onLaunchUrl = { _launchUrl.value = it },
+    )
+
+    /** Test seam — see [DaemonOAuthFlow.orchestratorFactory]. */
+    internal var daemonOAuthOrchestratorFactory: () -> DaemonOAuthOrchestrator
+        get() = daemonOAuth.orchestratorFactory
+        set(value) {
+            daemonOAuth.orchestratorFactory = value
+        }
+
+    /** Starts daemon-mediated OAuth for a non-bundled provider. Observe [launchUrl] for the auth URL. */
+    fun startDaemonOAuth(
+        type: String,
+        name: String,
+        clientId: String? = null,
+        clientSecret: String? = null,
+    ) = daemonOAuth.start(type, name, clientId, clientSecret)
+
+    /**
+     * Forwards the token the user pasted (output of `rclone authorize` run on
+     * another machine) to the in-flight daemon OAuth flow and dismisses the
+     * prompt. No-op when no flow is awaiting a token.
+     */
+    fun submitDaemonOAuthToken(token: String) = daemonOAuth.submitToken(token)
+
+    fun cancelDaemonOAuth() = daemonOAuth.cancel()
+
     /** Starts the OAuth flow for [provider]; observe [launchUrl] to launch Custom Tabs. */
     fun startOAuth(provider: OAuthProvider, remoteName: String) {
-        viewModelScope.launch {
-            // Prefer the user's own client ID over the shared built-in one.
-            val override = oauthKeyStore.clientId(provider.id)
-            val clientId = override ?: oauthConfig.clientId(provider.id)
-            if (clientId.isBlank()) {
-                transient.value = transient.value.copy(
-                    message = context.getString(R.string.remotes_msg_oauth_not_configured, provider.displayName),
-                )
-                return@launch
-            }
-            // Google derives its redirect from the client ID, so a BYO Google client
-            // needs its redirect recomputed from the user's ID (not the built-in).
-            val redirectUri = if (provider.id == OAuthProviders.GoogleDrive.id && override != null) {
-                OAuthConfig.googleAndroidRedirect(clientId, oauthConfig.redirectUri(provider.id))
-            } else {
-                oauthConfig.redirectUri(provider.id)
-            }
-            val pending = OAuthTokenExchanger.PendingAuth(
-                provider = provider,
-                state = UUID.randomUUID().toString(),
-                verifier = Pkce.newVerifier(),
-                clientId = clientId,
-                redirectUri = redirectUri,
-                remoteName = remoteName,
-            )
-            oauthStore.startPending(pending)
-            transient.value = transient.value.copy(oauthInProgress = true, message = null)
-            _launchUrl.value = tokenExchanger.authorizeUrl(pending)
-        }
+        viewModelScope.launch { systemOAuth.start(provider, remoteName) }
     }
 
     /** Called by the screen once it has handed [launchUrl] to Custom Tabs. */
@@ -389,94 +448,20 @@ class RemotesViewModel @Inject constructor(
         _launchUrl.value = null
     }
 
-    /**
-     * Maps a provider-supplied OAuth2 `error` code (RFC 6749 §4.1.2.1) to a friendly,
-     * localized message. Unknown values are surfaced whitespace-collapsed and length-
-     * capped rather than echoing arbitrary provider text verbatim into the UI.
-     */
-    private fun friendlyOAuthError(raw: String): String = when (raw.trim().lowercase()) {
-        "access_denied" -> context.getString(R.string.remotes_oauth_err_access_denied)
-        "invalid_scope" -> context.getString(R.string.remotes_oauth_err_invalid_scope)
-        "server_error" -> context.getString(R.string.remotes_oauth_err_server_error)
-        "temporarily_unavailable" -> context.getString(R.string.remotes_oauth_err_temporarily_unavailable)
-        else -> raw.replace(Regex("\\s+"), " ").trim().take(120)
-    }
-
-    private suspend fun onOAuthResult(result: OAuthResult) {
-        when (result) {
-            is OAuthResult.Error -> {
-                // Only tear down the in-flight auth for an error whose state matches
-                // the pending one. consume() validates + clears atomically, so an
-                // error redirect injected by another app (missing or non-matching
-                // state) is a no-op against an unrelated pending flow.
-                val state = result.state
-                if (state != null && oauthStore.consume(state) != null) {
-                    transient.update {
-                        it.copy(
-                            oauthInProgress = false,
-                            message = context.getString(
-                                R.string.remotes_msg_sign_in_failed,
-                                friendlyOAuthError(result.message),
-                            ),
-                        )
-                    }
-                } else {
-                    // Unmatched / state-less error (e.g. a fabricated redirect injected
-                    // by another app). Don't disturb the pending auth — the genuine
-                    // redirect still completes via the Success path — but clear the
-                    // spinner so a stuck oauthInProgress can't trap the UI forever.
-                    transient.update { it.copy(oauthInProgress = false) }
+    // Declared LAST so the collector runs only after systemOAuth (and transient)
+    // are initialized. viewModelScope uses Dispatchers.Main.immediate and the VM
+    // is built on the main thread, so the launch body executes synchronously inside
+    // the constructor, and OAuthStore retains a result across VM teardown — a
+    // collector placed earlier would touch the not-yet-initialized systemOAuth and
+    // NPE when the user returns from a backgrounded OAuth redirect.
+    init {
+        // Observe the redirect activity's results for the lifetime of the VM.
+        viewModelScope.launch {
+            oauthStore.results.collect { result ->
+                if (result != null) {
+                    systemOAuth.onResult(result)
+                    oauthStore.clearResult()
                 }
-            }
-            is OAuthResult.Success -> {
-                val pending = oauthStore.consume(result.state)
-                if (pending == null || pending.remoteName.isBlank()) {
-                    transient.value = transient.value.copy(
-                        oauthInProgress = false,
-                        message = context.getString(R.string.remotes_msg_state_mismatch),
-                    )
-                    return
-                }
-                val remoteName = pending.remoteName
-                val tokenResult = tokenExchanger.exchange(pending, result.code)
-                val tokenJson = tokenResult.getOrElse { error ->
-                    transient.value = transient.value.copy(
-                        oauthInProgress = false,
-                        message = error.toUserMessage(),
-                    )
-                    return
-                }
-                // Some backends (OneDrive) need extra config derived from the
-                // token (drive_id/drive_type) before the remote can list.
-                val extras = tokenExchanger.providerConfigExtras(pending.provider, tokenJson).getOrElse { error ->
-                    transient.value = transient.value.copy(
-                        oauthInProgress = false,
-                        message = error.toUserMessage(),
-                    )
-                    return
-                }
-                val createResult = repository.addRemote(
-                    name = remoteName,
-                    type = pending.provider.type,
-                    params = mapOf(
-                        "token" to tokenJson,
-                        "client_id" to pending.clientId,
-                    ) + extras,
-                )
-                if (createResult.isSuccess) pendingRemoteResult.created(remoteName)
-                transient.value = transient.value.copy(
-                    oauthInProgress = false,
-                    message = if (createResult.isSuccess) {
-                        context.getString(
-                            R.string.remotes_msg_added_remote,
-                            pending.provider.displayName,
-                            remoteName,
-                        )
-                    } else {
-                        createResult.exceptionOrNull()?.toUserMessage()
-                            ?: context.getString(R.string.remotes_msg_could_not_save)
-                    },
-                )
             }
         }
     }

@@ -305,19 +305,23 @@ class SyncTasksViewModelTest {
     }
 
     @Test
-    fun filterScheduled_showsOnlyTasksWithIntervalSet() = runTest(mainDispatcher.dispatcher) {
+    fun filterScheduled_showsTasksWithIntervalOrCalendarSchedule() = runTest(mainDispatcher.dispatcher) {
         val vm = viewModel()
         val job = backgroundScope.launch { vm.uiState.collect {} }
         tasksFlow.value = listOf(
-            task(id = 1, intervalMinutes = 60),
-            task(id = 2, intervalMinutes = null),
+            // interval-scheduled
+            task(id = 1, intervalMinutes = 60, scheduleDaysMask = 0),
+            // not scheduled at all
+            task(id = 2, intervalMinutes = null, scheduleDaysMask = 0),
+            // calendar-scheduled: intervalMinutes is null but a day-of-week mask is set (L1)
+            task(id = 3, intervalMinutes = null, scheduleDaysMask = 0b0000010),
         )
         advanceUntilIdle()
 
         vm.setFilter(TaskFilter.SCHEDULED)
         advanceUntilIdle()
 
-        assertThat(vm.uiState.value.tasks.map { it.id }).containsExactly(1L)
+        assertThat(vm.uiState.value.tasks.map { it.id }).containsExactly(1L, 3L)
         job.cancel()
     }
 
@@ -687,6 +691,7 @@ class SyncTasksViewModelTest {
         remoteName: String = "gdrive",
         sourcePath: String = "/src",
         intervalMinutes: Int? = 60,
+        scheduleDaysMask: Int = 0,
     ) = SyncTask(
         id = id,
         name = name,
@@ -695,6 +700,7 @@ class SyncTasksViewModelTest {
         remotePath = "/dst",
         direction = SyncDirection.UPLOAD,
         intervalMinutes = intervalMinutes,
+        scheduleDaysMask = scheduleDaysMask,
         enabled = enabled,
     )
 

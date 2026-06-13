@@ -12,11 +12,11 @@ on:
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
-# deploy-pages needs pages:write + id-token:write; everything else read-only.
+# Workflow default is read-only; the deploy job alone elevates to
+# pages:write + id-token:write so the lint job (which runs npm-fetched
+# prettier) never holds Pages-deploy or OIDC rights.
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 # One in-flight Pages deploy at a time; don't cancel a running deploy.
 concurrency:
@@ -37,7 +37,8 @@ jobs:
           node-version: '20'
 
       - name: Prettier format check (HTML/CSS/JS)
-        run: npx --yes prettier@3 --check "gh-pages/**/*.{html,css,js}"
+        # Exact pin — `prettier@3` floats to whatever npm serves at run time.
+        run: npx --yes prettier@3.8.4 --check "gh-pages/**/*.{html,css,js}"
 
       - name: JS syntax check
         run: node --check gh-pages/main.js
@@ -46,6 +47,11 @@ jobs:
     name: Deploy to Pages
     needs: lint
     runs-on: ubuntu-latest
+    # deploy-pages needs pages:write + id-token:write — scoped to this job only.
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

@@ -4,8 +4,9 @@ package app.lusk.virga.core.rclone.oauth
  * Configuration for an OAuth provider Virga supports out of the box. [type] is
  * the corresponding rclone backend name used when calling `config/create`.
  *
- * All three providers below support PKCE for public clients, which means no
- * client secret has to ship in the APK.
+ * Most providers support PKCE for public clients, which means no client secret
+ * has to ship in the APK. Box is an exception — it requires a client secret for
+ * the token exchange, indicated by [requiresClientSecret].
  */
 data class OAuthProvider(
     val id: String,
@@ -15,6 +16,7 @@ data class OAuthProvider(
     val authEndpoint: String,
     val tokenEndpoint: String,
     val scopes: List<String>,
+    val requiresClientSecret: Boolean = false,
 )
 
 object OAuthProviders {
@@ -47,7 +49,17 @@ object OAuthProviders {
         scopes = listOf("files.content.write", "files.content.read", "files.metadata.read"),
     )
 
-    val All = listOf(GoogleDrive, OneDrive, Dropbox)
+    val Box = OAuthProvider(
+        id = "box",
+        displayName = "Box",
+        type = "box",
+        authEndpoint = "https://account.box.com/api/oauth2/authorize",
+        tokenEndpoint = "https://api.box.com/oauth2/token",
+        scopes = emptyList(),
+        requiresClientSecret = true,
+    )
+
+    val All = listOf(GoogleDrive, OneDrive, Dropbox, Box)
 
     fun byId(id: String): OAuthProvider? = All.firstOrNull { it.id == id }
 }

@@ -9,6 +9,10 @@ on:
     workflows: ['Build', 'Release']
     types: [completed]
 
+# Least privilege: the check-secrets job only echoes a boolean. The notify job
+# grants itself the one scope it needs (actions: read) at the job level.
+permissions: {}
+
 jobs:
   check-secrets:
     name: Check Secrets

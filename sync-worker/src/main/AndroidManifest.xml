@@ -9,6 +9,14 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <!--
+                    Calendar schedules are converted to a fixed ms delay at enqueue
+                    time, so a TZ/DST change would drift them (up to a week for a
+                    weekly schedule). Re-run rescheduleAll() on clock/zone changes so
+                    the next occurrence is recomputed against the new wall-clock time.
+                -->
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
             </intent-filter>
         </receiver>
 

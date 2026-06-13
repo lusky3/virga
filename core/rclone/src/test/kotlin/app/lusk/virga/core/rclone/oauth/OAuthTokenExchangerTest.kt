@@ -175,6 +175,34 @@ class OAuthTokenExchangerTest {
         assertThat(error).isInstanceOf(VirgaError.Network::class.java)
     }
 
+    @Test
+    fun exchange_includesClientSecretWhenPresent() = runTest {
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """{"access_token":"a","refresh_token":"r","expires_in":3600}""",
+            ),
+        )
+
+        exchanger.exchange(pending().copy(clientSecret = "shh-secret"), code = "auth-code").getOrThrow()
+
+        val body = server.takeRequest().body.readUtf8()
+        assertThat(body).contains("client_secret=shh-secret")
+    }
+
+    @Test
+    fun exchange_omitsClientSecretWhenAbsent() = runTest {
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """{"access_token":"a","expires_in":3600}""",
+            ),
+        )
+
+        exchanger.exchange(pending(), code = "auth-code").getOrThrow()
+
+        val body = server.takeRequest().body.readUtf8()
+        assertThat(body).doesNotContain("client_secret")
+    }
+
     private object TestDispatchers : DispatcherProvider {
         @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
         private val dispatcher: CoroutineDispatcher = UnconfinedTestDispatcher()

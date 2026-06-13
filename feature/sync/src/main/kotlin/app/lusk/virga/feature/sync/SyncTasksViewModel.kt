@@ -144,7 +144,10 @@ class SyncTasksViewModel @Inject constructor(
         TaskFilter.ALL -> true
         TaskFilter.ENABLED -> task.enabled
         TaskFilter.FAILING -> latestRuns[task.id]?.status == SyncStatus.FAILED
-        TaskFilter.SCHEDULED -> task.intervalMinutes != null
+        // A task is "scheduled" if it repeats on an interval OR on a calendar
+        // (day-of-week) schedule. Calendar tasks persist intervalMinutes=null, so
+        // the days-mask check is needed or they'd be missed here.
+        TaskFilter.SCHEDULED -> task.intervalMinutes != null || task.scheduleDaysMask != 0
     }
 
     private fun matchesQuery(task: SyncTask, query: String): Boolean {

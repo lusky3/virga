@@ -12,6 +12,7 @@ import app.lusk.virga.core.common.model.SyncProgress
 import app.lusk.virga.core.rclone.api.RcApiClient
 import app.lusk.virga.core.rclone.config.RcloneConfigManager
 import app.lusk.virga.core.rclone.daemon.RcloneDaemonManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -64,21 +65,32 @@ class RcloneEngineImpl @Inject constructor(
         d
     }
 
-    override suspend fun releaseDaemon() = lock.withLock {
-        if (leases > 0) leases--
-        if (leases == 0) {
-            daemon?.let { daemonManager.stop(it) }
-            daemon = null
-            configManager.persistAndCleanup()
+    override suspend fun releaseDaemon() = withContext(NonCancellable) {
+        // NonCancellable around the WHOLE critical section (lock acquisition included):
+        // a cancelled caller (VM scope dies, WorkManager stop) must still decrement the
+        // lease, tear the daemon down, and re-encrypt the plaintext config — or it leaks
+        // the rclone process, leaves OAuth tokens in plaintext on disk, and (if lock()
+        // were cancelled mid-decrement) leaks the lease, wedging all future mutations.
+        lock.withLock {
+            if (leases > 0) leases--
+            if (leases == 0) {
+                daemon?.let { daemonManager.stop(it) }
+                daemon = null
+                configManager.persistAndCleanup()
+            }
         }
     }
 
-    override suspend fun stopDaemonIfIdle() = lock.withLock {
-        // Don't disturb a daemon a leased consumer (an active sync) is using.
-        if (leases == 0) {
-            daemon?.let { daemonManager.stop(it) }
-            daemon = null
-            configManager.persistAndCleanup()
+    override suspend fun stopDaemonIfIdle() = withContext(NonCancellable) {
+        // NonCancellable: teardown must complete even if the caller's job is cancelled
+        // (otherwise the rclone process + plaintext config survive).
+        lock.withLock {
+            // Don't disturb a daemon a leased consumer (an active sync) is using.
+            if (leases == 0) {
+                daemon?.let { daemonManager.stop(it) }
+                daemon = null
+                configManager.persistAndCleanup()
+            }
         }
     }
 
@@ -106,16 +118,29 @@ class RcloneEngineImpl @Inject constructor(
         }
     }
 
-    override suspend fun stopDaemon() = lock.withLock {
-        daemon?.let { daemonManager.stop(it) }
-        daemon = null
-        configManager.persistAndCleanup()
+    override suspend fun stopDaemon() = withContext(NonCancellable) {
+        // NonCancellable: teardown must complete even if the caller's job is cancelled
+        // (otherwise the rclone process + plaintext config survive).
+        lock.withLock {
+            daemon?.let { daemonManager.stop(it) }
+            daemon = null
+            configManager.persistAndCleanup()
+        }
     }
 
     override suspend fun isDaemonHealthy(): Boolean {
         val d = daemon ?: return false
         if (!daemonManager.isAlive(d)) return false
-        return runCatching { rc(d, "rc/noop") }.isSuccess
+        return try {
+            rc(d, "rc/noop")
+            true
+        } catch (e: CancellationException) {
+            // runCatching would have swallowed cancellation and reported "unhealthy";
+            // a cancelled caller must propagate, not be told the daemon is dead.
+            throw e
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     /**
@@ -123,9 +148,11 @@ class RcloneEngineImpl @Inject constructor(
      * list on any failure — the UI falls back to the freeform textarea.
      */
     override suspend fun providers(): List<RemoteProvider> = runCatching {
-        parseProviders(rc(ensureDaemon(), "config/providers"))
+        withLease { d -> parseProviders(rc(d, "config/providers")) }
     }.getOrElse {
         // Degrade to the freeform textarea (documented UX); log so a persistently failing daemon isn't invisible.
+        // The runCatching wraps withLease so a failed RC call still releases the lease (tearing the daemon
+        // down when idle) before we fall back.
         Log.w(TAG, "config/providers failed; falling back to freeform remote entry", it)
         emptyList()
     }
@@ -135,30 +162,29 @@ class RcloneEngineImpl @Inject constructor(
         return config.remotes.map { (name, type) -> Remote(name, type) }
     }
 
-    override suspend fun getConfig(): RcloneConfig {
-        val d = ensureDaemon()
+    override suspend fun getConfig(): RcloneConfig = withLease { d ->
         val dump = rc(d, "config/dump")
         val remotes = dump.entries.associate { (name, value) ->
             name to (value.jsonObject["type"]?.jsonPrimitive?.contentOrNull ?: "unknown")
         }
-        return RcloneConfig(remotes)
+        RcloneConfig(remotes)
     }
 
     override suspend fun createRemote(
         name: String,
         type: String,
         params: Map<String, String>,
+        sensitiveKeys: Set<String>,
     ) {
         mutatingConfig { d ->
             rc(d, "config/create", buildJsonObject {
                 put("name", name)
                 put("type", type)
                 putJsonObject("parameters") { params.forEach { (k, v) -> put(k, v) } }
-                // Create the remote non-interactively using the OAuth token already
-                // supplied in [parameters]. Without nonInteractive, rclone's backend
-                // config runs its own browser OAuth ("Waiting for code...") and the
-                // config/create RC call blocks forever.
-                putJsonObject("opt") { put("nonInteractive", true) }
+                putJsonObject("opt") {
+                    put("nonInteractive", true)
+                    if (sensitiveKeys.isNotEmpty()) put("obscure", true)
+                }
             })
         }
     }
@@ -260,16 +286,15 @@ class RcloneEngineImpl @Inject constructor(
         path: String,
         recurse: Boolean,
         filters: List<String>,
-    ): List<FileItem> {
-        val d = ensureDaemon()
+    ): List<FileItem> = withLease { d ->
         val result = rc(d, "operations/list", buildJsonObject {
             put("fs", remote)
             put("remote", path)
             if (recurse) putJsonObject("opt") { put("recurse", true) }
             putFilters(filters)
         })
-        val list = result["list"]?.jsonArray ?: return emptyList()
-        return list.map { it.jsonObject }.map { obj ->
+        val list = result["list"]?.jsonArray ?: return@withLease emptyList()
+        list.map { it.jsonObject }.map { obj ->
             val modTimeMs = obj["ModTime"]?.jsonPrimitive?.contentOrNull?.let { raw ->
                 runCatching { Instant.parse(raw).toEpochMilli() }.getOrNull()
             }
@@ -346,16 +371,14 @@ class RcloneEngineImpl @Inject constructor(
             })
         }
 
-    override suspend fun deleteFile(remote: String, path: String) {
-        val d = ensureDaemon()
+    override suspend fun deleteFile(remote: String, path: String): Unit = withLease { d ->
         rc(d, "operations/deletefile", buildJsonObject {
             put("fs", remote)
             put("remote", path)
         })
     }
 
-    override suspend fun moveFile(source: String, dest: String) {
-        val d = ensureDaemon()
+    override suspend fun moveFile(source: String, dest: String): Unit = withLease { d ->
         val (srcFs, srcRemote) = splitFs(source)
         val (dstFs, dstRemote) = splitFs(dest)
         rc(d, "operations/movefile", buildJsonObject {
@@ -364,12 +387,31 @@ class RcloneEngineImpl @Inject constructor(
         })
     }
 
-    override suspend fun about(remoteName: String): RemoteQuota {
-        val d = ensureDaemon()
+    override suspend fun testConnectivity(remoteName: String): Result<Unit> = withLease { d ->
+        val fs = "$remoteName:"
+        try {
+            rc(d, "operations/about", buildJsonObject { put("fs", fs) })
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            // Caller cancellation must propagate, not be reported as a connectivity failure.
+            throw e
+        } catch (_: Throwable) {
+            try {
+                rc(d, "operations/list", buildJsonObject { put("fs", fs); put("remote", "") })
+                Result.success(Unit)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    override suspend fun about(remoteName: String): RemoteQuota = withLease { d ->
         val result = rc(d, "operations/about", buildJsonObject {
             put("fs", "$remoteName:")
         })
-        return RemoteQuota(
+        RemoteQuota(
             total = result["total"]?.jsonPrimitive?.longOrNull,
             used = result["used"]?.jsonPrimitive?.longOrNull,
             free = result["free"]?.jsonPrimitive?.longOrNull,
@@ -460,31 +502,60 @@ class RcloneEngineImpl @Inject constructor(
     private suspend fun ensureDaemon(): RcloneDaemon = lock.withLock { ensureDaemonLocked() }
 
     /**
-     * Runs a config-mutating RC call ([block]) then atomically tears down the daemon
-     * and either re-encrypts the daemon-written plaintext on success or discards it
-     * on failure (finally), so a failed config/create can never leave decrypted OAuth
-     * tokens on disk. Holds [lock] for the whole mutation so no concurrent
-     * [ensureDaemon] interleaves; [block] receives the daemon directly and must NOT
-     * re-acquire [lock] (the Mutex is non-reentrant).
+     * Runs a one-shot RC op under a refcount lease (rclone-M2/M3): [acquireDaemon] starts-or-reuses
+     * the daemon and takes a lease, [block] issues the RC call OUTSIDE the lock (acquire/release take
+     * the [lock] themselves; the Mutex is non-reentrant so [block] must NOT re-acquire it), and the
+     * finally [releaseDaemon] drops the lease — tearing the daemon down + re-encrypting the plaintext
+     * config when this was the only consumer (so an isolated op starts→uses→stops the daemon instead
+     * of leaking the rclone process + decrypted OAuth tokens), while a concurrent sync's teardown can't
+     * stop the daemon mid-call. If a leased consumer (a SyncWorker doing conflict-detection listDir) is
+     * already holding a lease, the refcount just goes 2→1 here and the daemon survives.
      */
-    private suspend fun mutatingConfig(block: suspend (RcloneDaemon) -> Unit) {
-        lock.withLock {
-            // Refuse while a sync holds a lease — the end-of-mutation teardown would kill it.
+    private suspend fun <T> withLease(block: suspend (RcloneDaemon) -> T): T {
+        val d = acquireDaemon()
+        try {
+            return block(d)
+        } finally {
+            releaseDaemon()
+        }
+    }
+
+    /**
+     * Runs [block] holding [lock] with an exclusively-owned daemon, then atomically tears
+     * the daemon down and either re-encrypts the daemon-written plaintext on success or
+     * discards it on failure (finally), so a failed mutation can never leave decrypted
+     * OAuth tokens on disk. Refuses while a sync holds a lease — the end-of-mutation
+     * teardown would kill it. [block] receives the daemon directly and must NOT re-acquire
+     * [lock] (the Mutex is non-reentrant).
+     *
+     * The finally teardown runs inside [NonCancellable]: a cancelled caller (user backs
+     * out mid-createRemote, VM scope dies mid-daemon-OAuth) must still stop the rclone
+     * process and persist-or-discard the plaintext config rather than leak both.
+     */
+    private suspend fun <T> withExclusiveDaemon(block: suspend (RcloneDaemon) -> T): T {
+        return lock.withLock {
             if (leases > 0) {
                 throw VirgaError.Rclone(message = "Stop running syncs before modifying remotes.")
             }
             val d = ensureDaemonLocked()
             var ok = false
             try {
-                block(d)
+                val result = block(d)
                 ok = true
+                result
             } finally {
-                daemonManager.stop(d)
-                daemon = null
-                if (ok) configManager.persistAndCleanup() else runCatching { configManager.cleanup() }
+                withContext(NonCancellable) {
+                    daemonManager.stop(d)
+                    daemon = null
+                    if (ok) configManager.persistAndCleanup() else runCatching { configManager.cleanup() }
+                }
             }
         }
     }
+
+    private suspend fun mutatingConfig(block: suspend (RcloneDaemon) -> Unit) = withExclusiveDaemon(block)
+
+    override suspend fun <T> withDaemonForOAuth(block: suspend (RcloneDaemon) -> T): T = withExclusiveDaemon(block)
 
     private suspend fun rc(d: RcloneDaemon, command: String, params: JsonObject = JsonObject(emptyMap())): JsonObject =
         apiClient.call(d.baseUrl, d.user, d.pass, command, params)

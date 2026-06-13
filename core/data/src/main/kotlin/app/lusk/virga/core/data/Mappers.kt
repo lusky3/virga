@@ -97,16 +97,3 @@ internal fun ConflictEntity.toDomain() = Conflict(
     detectedAtEpochMs = detectedAtEpochMs,
     resolved = resolved,
 )
-
-internal fun Conflict.toEntity() = ConflictEntity(
-    id = id,
-    taskId = taskId,
-    remoteName = remoteName,
-    basePath = basePath,
-    variant1Path = variant1Path,
-    variant2Path = variant2Path,
-    variant1Size = variant1Size,
-    variant2Size = variant2Size,
-    detectedAtEpochMs = detectedAtEpochMs,
-    resolved = resolved,
-)

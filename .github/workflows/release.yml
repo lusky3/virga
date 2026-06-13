@@ -10,9 +10,9 @@ on:
         description: 'Version tag to publish (e.g. v0.2.0)'
         required: true
 
-env:
-  RCLONE_VERSION: v1.74.2
-  NDK_VERSION: 27.2.12479018
+# RCLONE_VERSION / NDK_VERSION are NOT hardcoded here — they're loaded from
+# scripts/rclone-versions.env (single source of truth) into $GITHUB_ENV by the
+# "Load rclone versions" step below, so later steps and the cache key resolve them.
 
 permissions:
   contents: write  # required for creating GitHub Releases
@@ -30,6 +30,18 @@ jobs:
           # The tag commit is what `actions/checkout` lands on for tag pushes.
           # For workflow_dispatch we resolve the tag manually below.
           ref: ${{ inputs.tag || github.ref }}
+
+      # Single source of truth: export RCLONE_VERSION / NDK_VERSION so later steps
+      # AND the cache key (env.RCLONE_VERSION, env.NDK_VERSION) resolve them.
+      - name: Load rclone versions
+        # Emit only KEY=VALUE lines — the env file's leading comments have no '='
+        # and $GITHUB_ENV rejects any line without one ("Invalid format").
+        run: grep -E '^[A-Za-z_][A-Za-z0-9_]*=' scripts/rclone-versions.env >> "$GITHUB_ENV"
+
+      # Verify the Gradle wrapper jar matches a known-good Gradle release before
+      # the first ./gradlew runs (defends against a tampered wrapper in the repo).
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
 
       # Resolve and *validate* the tag before letting it touch any shell or
       # filesystem path. Without the regex check, a maliciously-crafted tag
@@ -69,9 +81,8 @@ jobs:
         uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
 
       - name: Install NDK
-        env:
-          NDK_VERSION: ${{ env.NDK_VERSION }}
-        run: sdkmanager "ndk;$NDK_VERSION"
+        # NDK_VERSION is in $GITHUB_ENV from the "Load rclone versions" step.
+        run: sdkmanager "ndk;${NDK_VERSION}"
 
       # rclone is expensive to cross-compile (~5 min); cache by version + NDK
       # so repeated runs on the same versions are a no-op.
@@ -81,6 +92,8 @@ jobs:
           path: |
             .rclone-build
             core/rclone/src/main/jniLibs
+            ~/go/pkg/mod
+            ~/.cache/go-build
           key: rclone-${{ env.RCLONE_VERSION }}-ndk${{ env.NDK_VERSION }}
 
       - name: Build rclone binaries
@@ -118,6 +131,14 @@ jobs:
           # the single signing path shared with local release builds.
           echo "VIRGA_KEYSTORE_FILE=$RUNNER_TEMP/keystore/release.jks" >> "$GITHUB_ENV"
 
+      - name: Verify signing secrets available
+        if: env.HAS_KEYSTORE != 'true'
+        env:
+          HAS_KEYSTORE: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' }}
+        run: |
+          echo "::error::Release signing keystore not configured. Aborting."
+          exit 1
+
       - name: Build FOSS release APKs
         # When the keystore env vars are present, the Gradle signingConfig signs
         # the APKs in-build (no separate apksigner step). Without them (forks /
@@ -126,6 +147,8 @@ jobs:
           VIRGA_OAUTH_CLIENT_ID_GDRIVE: ${{ secrets.OAUTH_CLIENT_ID_GDRIVE }}
           VIRGA_OAUTH_CLIENT_ID_ONEDRIVE: ${{ secrets.OAUTH_CLIENT_ID_ONEDRIVE }}
           VIRGA_OAUTH_CLIENT_ID_DROPBOX: ${{ secrets.OAUTH_CLIENT_ID_DROPBOX }}
+          VIRGA_OAUTH_CLIENT_ID_BOX: ${{ secrets.OAUTH_CLIENT_ID_BOX }}
+          VIRGA_OAUTH_CLIENT_SECRET_BOX: ${{ secrets.OAUTH_CLIENT_SECRET_BOX }}
           VIRGA_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           # Key alias is non-sensitive and stored as an Actions *variable*.
           VIRGA_KEY_ALIAS: ${{ vars.RELEASE_KEY_ALIAS }}

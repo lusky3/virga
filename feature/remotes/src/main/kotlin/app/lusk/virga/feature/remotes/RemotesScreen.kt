@@ -71,6 +71,7 @@ fun RemotesScreen(
     var showAdd by remember { mutableStateOf(false) }
     var remoteToDelete by remember { mutableStateOf<Remote?>(null) }
     var manualError by remember { mutableStateOf<String?>(null) }
+    var showExportConfirm by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
     val fabExpanded by remember { derivedStateOf { !listState.canScrollBackward } }
@@ -89,10 +90,20 @@ fun RemotesScreen(
         if (uri != null) viewModel.importConfigFromUri(uri)
     }
 
+    // Export writes the decrypted rclone.conf to a user-chosen document. A null uri
+    // means the user cancelled the system create-document picker — no-op.
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream"),
+    ) { uri ->
+        if (uri != null) viewModel.exportConfigToUri(uri)
+    }
+
     LaunchedEffect(state.message) {
-        state.message?.let {
-            snackbar.showSnackbar(it)
+        state.message?.let { msg ->
+            // L5: clear BEFORE showing so a nav-away (which cancels showSnackbar)
+            // can't leave the message set and replay it on return.
             viewModel.clearMessage()
+            snackbar.showSnackbar(msg)
         }
     }
 
@@ -106,6 +117,9 @@ fun RemotesScreen(
                     }
                     TextButton(onClick = { importLauncher.launch("*/*") }) {
                         Text(stringResource(R.string.remotes_action_import))
+                    }
+                    TextButton(onClick = { showExportConfirm = true }) {
+                        Text(stringResource(R.string.remotes_action_export))
                     }
                 },
             )
@@ -226,15 +240,40 @@ fun RemotesScreen(
         )
     }
 
+    if (showExportConfirm) {
+        AlertDialog(
+            onDismissRequest = { showExportConfirm = false },
+            title = { Text(stringResource(R.string.remotes_export_dialog_title)) },
+            text = { Text(stringResource(R.string.remotes_export_dialog_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showExportConfirm = false
+                        exportLauncher.launch("rclone.conf")
+                    },
+                ) { Text(stringResource(R.string.remotes_export_dialog_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExportConfirm = false }) {
+                    Text(stringResource(R.string.remotes_delete_cancel))
+                }
+            },
+        )
+    }
+
     if (showAdd) {
         AddRemoteDialog(
             oauthProviders = viewModel.oauthProviders,
             error = manualError,
             customClientIds = state.customClientIds,
             onEnsureProviders = viewModel::ensureProvidersLoaded,
-            optionsForBackend = viewModel::optionsForBackend,
+            allOptionsForBackend = viewModel::allOptionsForBackend,
             providersLoaded = providersLoaded,
+            pickerEntries = viewModel.pickerEntries(),
+            setupKindFor = viewModel::setupKindFor,
             existingRemotes = state.remotes,
+            oauthInProgress = state.oauthInProgress,
+            daemonOAuthTokenPrompt = state.daemonOAuthTokenPrompt,
             onDismiss = { showAdd = false; manualError = null },
             onManualConfirm = { name, type, params ->
                 manualError = null
@@ -248,7 +287,18 @@ fun RemotesScreen(
                     if (success) showAdd = false else manualError = error
                 }
             },
+            onWrapperConfirm = { name, type, params ->
+                manualError = null
+                viewModel.addRemote(name, type, params) { success, error ->
+                    if (success) showAdd = false else manualError = error
+                }
+            },
             onOAuth = { provider, name -> viewModel.startOAuth(provider, name) },
+            onDaemonOAuth = { type, name, clientId, clientSecret ->
+                viewModel.startDaemonOAuth(type, name, clientId, clientSecret)
+            },
+            onSubmitDaemonOAuthToken = viewModel::submitDaemonOAuthToken,
+            onCancelDaemonOAuth = viewModel::cancelDaemonOAuth,
             onSaveClientId = viewModel::saveClientId,
             onClearClientId = viewModel::clearClientId,
         )

@@ -42,13 +42,14 @@ class SyncExecutorTest {
         override suspend fun cleanupStaleConfigIfIdle() = Unit
         override suspend fun isDaemonHealthy() = true
         override suspend fun listRemotes(): List<Remote> = emptyList()
-        override suspend fun createRemote(name: String, type: String, params: Map<String, String>) = Unit
+        override suspend fun createRemote(name: String, type: String, params: Map<String, String>, sensitiveKeys: Set<String>) = Unit
         override suspend fun deleteRemote(name: String) = Unit
         override suspend fun getConfig() = RcloneConfig(emptyMap())
         override suspend fun importConfig(confContent: String) = Unit
         override suspend fun listDir(remote: String, path: String, recurse: Boolean, filters: List<String>): List<FileItem> = emptyList()
         override suspend fun deleteFile(remote: String, path: String) = Unit
         override suspend fun moveFile(source: String, dest: String) = Unit
+        override suspend fun testConnectivity(remoteName: String) = Result.success(Unit)
         override suspend fun about(remoteName: String) =
             app.lusk.virga.core.common.model.RemoteQuota(null, null, null)
         override suspend fun providers() =
@@ -59,6 +60,8 @@ class SyncExecutorTest {
             password: String,
             salt: String?,
         ) = Unit
+        override suspend fun <T> withDaemonForOAuth(block: suspend (app.lusk.virga.core.rclone.RcloneDaemon) -> T): T =
+            error("unused")
     }
 
     private fun task(
