@@ -216,7 +216,7 @@ class RcloneEngineImpl @Inject constructor(
                 put("name", name)
                 put("type", "crypt")
                 putJsonObject("parameters") {
-                    put("remote", baseRemoteSpec)
+                    put(KEY_REMOTE, baseRemoteSpec)
                     put("password", password)
                     if (!salt.isNullOrBlank()) put("password2", salt)
                 }
@@ -289,7 +289,7 @@ class RcloneEngineImpl @Inject constructor(
     ): List<FileItem> = withLease { d ->
         val result = rc(d, "operations/list", buildJsonObject {
             put("fs", remote)
-            put("remote", path)
+            put(KEY_REMOTE, path)
             if (recurse) putJsonObject("opt") { put("recurse", true) }
             putFilters(filters)
         })
@@ -347,7 +347,7 @@ class RcloneEngineImpl @Inject constructor(
                 if (remote.isNotEmpty()) {
                     rc(d, "operations/mkdir", buildJsonObject {
                         put("fs", fs)
-                        put("remote", remote)
+                        put(KEY_REMOTE, remote)
                     })
                 }
             }
@@ -374,7 +374,7 @@ class RcloneEngineImpl @Inject constructor(
     override suspend fun deleteFile(remote: String, path: String): Unit = withLease { d ->
         rc(d, "operations/deletefile", buildJsonObject {
             put("fs", remote)
-            put("remote", path)
+            put(KEY_REMOTE, path)
         })
     }
 
@@ -397,7 +397,7 @@ class RcloneEngineImpl @Inject constructor(
             throw e
         } catch (_: Throwable) {
             try {
-                rc(d, "operations/list", buildJsonObject { put("fs", fs); put("remote", "") })
+                rc(d, "operations/list", buildJsonObject { put("fs", fs); put(KEY_REMOTE, "") })
                 Result.success(Unit)
             } catch (e: CancellationException) {
                 throw e
@@ -562,6 +562,8 @@ class RcloneEngineImpl @Inject constructor(
 
     private companion object {
         const val TAG = "RcloneEngine"
+        // rclone RC parameter key naming the (sub)path within a remote's filesystem.
+        const val KEY_REMOTE = "remote"
         const val POLL_INTERVAL_MS = 750L
         // Max time an in-flight job may make zero progress before we abort it.
         const val STALL_TIMEOUT_MS = 120_000L
