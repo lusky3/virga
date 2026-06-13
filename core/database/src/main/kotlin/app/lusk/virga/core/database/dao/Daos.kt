@@ -149,7 +149,16 @@ interface ConflictDao {
         UPDATE conflicts SET
             variant1Path = :v1Path, variant2Path = :v2Path,
             variant1Size = :v1Size, variant2Size = :v2Size,
-            detectedAtEpochMs = :detectedAt, resolved = 0
+            detectedAtEpochMs = :detectedAt,
+            -- Keep the user's resolution (e.g. KEEP_BOTH leaves both .conflictN files on
+            -- the remote, so the same conflict is re-detected every bisync). Only the same
+            -- files+sizes count as "already resolved"; any changed evidence is a genuinely
+            -- new conflict and must reset to unresolved.
+            resolved = CASE
+                WHEN variant1Path = :v1Path AND variant2Path = :v2Path
+                    AND variant1Size = :v1Size AND variant2Size = :v2Size THEN resolved
+                ELSE 0
+            END
         WHERE taskId = :taskId AND remoteName = :remoteName AND basePath = :basePath
         """,
     )
@@ -196,11 +205,26 @@ interface ConflictDao {
      * Atomically replace a task's unresolved-conflict set: drop the resolved rows
      * and upsert the freshly-detected ones in one transaction, so a crash between
      * the two can't leave the task showing zero conflicts when some were just found.
+     *
+     * Only resolved rows whose basePath is absent from the freshly-detected set are
+     * pruned. A KEEP_BOTH resolution leaves both .conflictN files on the remote, so it
+     * is re-detected every run; pruning it here (then re-inserting unresolved) would
+     * resurrect the conflict forever. Keeping re-detected resolved rows lets the
+     * subsequent upsert preserve their resolution via updateByNaturalKey's CASE.
+     * KEEP_VARIANT_1/2 remove a file, so those conflicts stop being detected and their
+     * resolved rows fall outside the kept set and are correctly pruned.
      */
     @Transaction
     suspend fun pruneResolvedAndUpsert(taskId: Long, conflicts: List<ConflictEntity>) {
-        pruneResolved(taskId)
-        if (conflicts.isNotEmpty()) upsertAllByNaturalKey(conflicts)
+        if (conflicts.isEmpty()) {
+            // Nothing detected: every resolved row is now stale (its files are gone).
+            pruneResolved(taskId)
+        } else {
+            // SQLite rejects `NOT IN ()`, so the empty case is handled above. Conflict
+            // lists are tiny, so the 999-variable bind limit is not a concern.
+            pruneResolvedNotIn(taskId, conflicts.map { it.basePath })
+            upsertAllByNaturalKey(conflicts)
+        }
     }
 
     @Query("UPDATE conflicts SET resolved = 1 WHERE id = :id")
@@ -208,4 +232,8 @@ interface ConflictDao {
 
     @Query("DELETE FROM conflicts WHERE taskId = :taskId AND resolved = 1")
     suspend fun pruneResolved(taskId: Long)
+
+    /** Prune resolved rows whose basePath is no longer detected (their files were removed). */
+    @Query("DELETE FROM conflicts WHERE taskId = :taskId AND resolved = 1 AND basePath NOT IN (:keptBasePaths)")
+    suspend fun pruneResolvedNotIn(taskId: Long, keptBasePaths: List<String>)
 }

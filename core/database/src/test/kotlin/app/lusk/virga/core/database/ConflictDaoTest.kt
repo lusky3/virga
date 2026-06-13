@@ -90,4 +90,77 @@ class ConflictDaoTest {
         dao.pruneResolved(taskId)
         assertThat(dao.getById(id)).isNull()
     }
+
+    /**
+     * KEEP_BOTH leaves both .conflictN files on the remote, so the same conflict is
+     * re-detected with identical evidence each bisync. The resolved row must survive
+     * re-detection — neither pruned nor reset to unresolved — or the conflict resurrects.
+     */
+    @Test
+    fun reDetect_resolvedKeepBoth_withSameEvidence_staysResolved() = runTest {
+        val dao = db.conflictDao()
+        val taskId = seedTask()
+        val detected = listOf(conflict(taskId, v1Size = 10, v2Size = 20))
+        dao.pruneResolvedAndUpsert(taskId, detected)
+        val id = dao.observeUnresolved().first().single().id
+        dao.markResolved(id) // user chose KEEP_BOTH
+
+        // Next bisync re-detects the same files+sizes.
+        dao.pruneResolvedAndUpsert(taskId, detected)
+
+        assertThat(dao.getById(id)).isNotNull()
+        assertThat(dao.getById(id)!!.resolved).isTrue() // still resolved
+        assertThat(dao.observeUnresolved().first()).isEmpty() // not resurrected
+    }
+
+    /** Re-detection with changed evidence (size/path) is a genuinely new conflict. */
+    @Test
+    fun reDetect_resolved_withChangedEvidence_flipsToUnresolved() = runTest {
+        val dao = db.conflictDao()
+        val taskId = seedTask()
+        dao.pruneResolvedAndUpsert(taskId, listOf(conflict(taskId, v1Size = 10, v2Size = 20)))
+        val id = dao.observeUnresolved().first().single().id
+        dao.markResolved(id)
+
+        // Same basePath, but the variant sizes changed -> new conflict.
+        dao.pruneResolvedAndUpsert(taskId, listOf(conflict(taskId, v1Size = 99, v2Size = 20)))
+
+        assertThat(dao.getById(id)!!.resolved).isFalse()
+        assertThat(dao.observeUnresolved().first()).hasSize(1)
+    }
+
+    /** KEEP_VARIANT_1/2 removes a file, so the conflict stops being detected and the
+     *  now-stale resolved row must be pruned (its basePath is absent from the new set). */
+    @Test
+    fun reDetect_resolvedAbsentFromDetection_isPruned() = runTest {
+        val dao = db.conflictDao()
+        val taskId = seedTask()
+        dao.pruneResolvedAndUpsert(taskId, listOf(conflict(taskId, v1Size = 10, v2Size = 20)))
+        val id = dao.observeUnresolved().first().single().id
+        dao.markResolved(id)
+
+        // A different conflict is detected; the resolved basePath is gone.
+        val other = conflict(taskId, v1Size = 1, v2Size = 2).copy(
+            basePath = "Docs/other.txt",
+            variant1Path = "Docs/other.txt.conflict1",
+            variant2Path = "Docs/other.txt.conflict2",
+        )
+        dao.pruneResolvedAndUpsert(taskId, listOf(other))
+
+        assertThat(dao.getById(id)).isNull() // stale resolved row pruned
+        assertThat(dao.observeUnresolved().first()).hasSize(1) // only the new one
+    }
+
+    /** A brand-new detected conflict is inserted unresolved. */
+    @Test
+    fun reDetect_brandNewConflict_isInsertedUnresolved() = runTest {
+        val dao = db.conflictDao()
+        val taskId = seedTask()
+
+        dao.pruneResolvedAndUpsert(taskId, listOf(conflict(taskId, v1Size = 5, v2Size = 6)))
+
+        val rows = dao.observeUnresolved().first()
+        assertThat(rows).hasSize(1)
+        assertThat(rows.single().resolved).isFalse()
+    }
 }
