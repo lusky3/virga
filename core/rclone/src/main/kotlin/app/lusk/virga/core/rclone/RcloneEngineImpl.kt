@@ -310,7 +310,11 @@ class RcloneEngineImpl @Inject constructor(
     }
 
     override fun sync(source: String, dest: String, options: SyncOptions): Flow<SyncProgress> =
-        runJobWithProgress { d ->
+        // A one-way COPY/backup tolerates file-level errors (one unreadable source file
+        // mustn't fail the whole run — rclone copies the rest and continues). A delete
+        // MIRROR must NOT: a mirror that proceeded despite unreadable source files could
+        // delete their cloud counterparts, so it keeps failing hard on any error.
+        runJobWithProgress(tolerateFileErrors = !options.deleteExtraneous) { d ->
             val (srcFs, dstFs) = when (options.direction) {
                 SyncDirection.DOWNLOAD -> dest to source
                 else -> source to dest
@@ -424,7 +428,10 @@ class RcloneEngineImpl @Inject constructor(
      * completion stats are extracted from the job/status response to avoid a
      * redundant extra core/stats round-trip.
      */
-    private fun runJobWithProgress(start: suspend (RcloneDaemon) -> JsonObject): Flow<SyncProgress> = flow {
+    private fun runJobWithProgress(
+        tolerateFileErrors: Boolean = false,
+        start: suspend (RcloneDaemon) -> JsonObject,
+    ): Flow<SyncProgress> = flow {
         val d = ensureDaemon()
         val startResult = start(d)
         val jobId = startResult["jobid"]?.jsonPrimitive?.intOrNull
@@ -459,6 +466,21 @@ class RcloneEngineImpl @Inject constructor(
                     jobFinished = true
                     val success = status["success"]?.jsonPrimitive?.booleanOrNull ?: false
                     if (!success) {
+                        // rclone reports success:false whenever ANY file errored, even
+                        // though it copied every other file and continued. Distinguish a
+                        // fatal abort (auth/connection — nothing transferred reliably) from
+                        // mere file-level errors via core/stats.fatalError, fetched once
+                        // here (reused as the terminal emit below, so no double round-trip).
+                        val finalStats = rc(d, "core/stats", buildJsonObject { put("group", group) })
+                        val fatalError = finalStats["fatalError"]?.jsonPrimitive?.booleanOrNull ?: false
+                        if (tolerateFileErrors && !fatalError) {
+                            // Partial success: the good files transferred and rclone
+                            // continued past the unreadable ones. Emit the terminal stats
+                            // (carrying errors = N) and finish — the worker surfaces the
+                            // error count as a summary rather than failing the whole run.
+                            emit(finalStats.toSyncProgress())
+                            break
+                        }
                         val err = status["error"]?.jsonPrimitive?.contentOrNull ?: "sync failed"
                         throw classifyJobError(err)
                     }
