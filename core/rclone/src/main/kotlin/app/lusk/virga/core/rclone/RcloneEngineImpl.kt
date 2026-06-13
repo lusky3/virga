@@ -65,21 +65,32 @@ class RcloneEngineImpl @Inject constructor(
         d
     }
 
-    override suspend fun releaseDaemon() = lock.withLock {
-        if (leases > 0) leases--
-        if (leases == 0) {
-            daemon?.let { daemonManager.stop(it) }
-            daemon = null
-            configManager.persistAndCleanup()
+    override suspend fun releaseDaemon() = withContext(NonCancellable) {
+        // NonCancellable around the WHOLE critical section (lock acquisition included):
+        // a cancelled caller (VM scope dies, WorkManager stop) must still decrement the
+        // lease, tear the daemon down, and re-encrypt the plaintext config — or it leaks
+        // the rclone process, leaves OAuth tokens in plaintext on disk, and (if lock()
+        // were cancelled mid-decrement) leaks the lease, wedging all future mutations.
+        lock.withLock {
+            if (leases > 0) leases--
+            if (leases == 0) {
+                daemon?.let { daemonManager.stop(it) }
+                daemon = null
+                configManager.persistAndCleanup()
+            }
         }
     }
 
-    override suspend fun stopDaemonIfIdle() = lock.withLock {
-        // Don't disturb a daemon a leased consumer (an active sync) is using.
-        if (leases == 0) {
-            daemon?.let { daemonManager.stop(it) }
-            daemon = null
-            configManager.persistAndCleanup()
+    override suspend fun stopDaemonIfIdle() = withContext(NonCancellable) {
+        // NonCancellable: teardown must complete even if the caller's job is cancelled
+        // (otherwise the rclone process + plaintext config survive).
+        lock.withLock {
+            // Don't disturb a daemon a leased consumer (an active sync) is using.
+            if (leases == 0) {
+                daemon?.let { daemonManager.stop(it) }
+                daemon = null
+                configManager.persistAndCleanup()
+            }
         }
     }
 
@@ -107,10 +118,14 @@ class RcloneEngineImpl @Inject constructor(
         }
     }
 
-    override suspend fun stopDaemon() = lock.withLock {
-        daemon?.let { daemonManager.stop(it) }
-        daemon = null
-        configManager.persistAndCleanup()
+    override suspend fun stopDaemon() = withContext(NonCancellable) {
+        // NonCancellable: teardown must complete even if the caller's job is cancelled
+        // (otherwise the rclone process + plaintext config survive).
+        lock.withLock {
+            daemon?.let { daemonManager.stop(it) }
+            daemon = null
+            configManager.persistAndCleanup()
+        }
     }
 
     override suspend fun isDaemonHealthy(): Boolean {
@@ -482,33 +497,18 @@ class RcloneEngineImpl @Inject constructor(
     private suspend fun ensureDaemon(): RcloneDaemon = lock.withLock { ensureDaemonLocked() }
 
     /**
-     * Runs a config-mutating RC call ([block]) then atomically tears down the daemon
-     * and either re-encrypts the daemon-written plaintext on success or discards it
-     * on failure (finally), so a failed config/create can never leave decrypted OAuth
-     * tokens on disk. Holds [lock] for the whole mutation so no concurrent
-     * [ensureDaemon] interleaves; [block] receives the daemon directly and must NOT
-     * re-acquire [lock] (the Mutex is non-reentrant).
+     * Runs [block] holding [lock] with an exclusively-owned daemon, then atomically tears
+     * the daemon down and either re-encrypts the daemon-written plaintext on success or
+     * discards it on failure (finally), so a failed mutation can never leave decrypted
+     * OAuth tokens on disk. Refuses while a sync holds a lease — the end-of-mutation
+     * teardown would kill it. [block] receives the daemon directly and must NOT re-acquire
+     * [lock] (the Mutex is non-reentrant).
+     *
+     * The finally teardown runs inside [NonCancellable]: a cancelled caller (user backs
+     * out mid-createRemote, VM scope dies mid-daemon-OAuth) must still stop the rclone
+     * process and persist-or-discard the plaintext config rather than leak both.
      */
-    private suspend fun mutatingConfig(block: suspend (RcloneDaemon) -> Unit) {
-        lock.withLock {
-            // Refuse while a sync holds a lease — the end-of-mutation teardown would kill it.
-            if (leases > 0) {
-                throw VirgaError.Rclone(message = "Stop running syncs before modifying remotes.")
-            }
-            val d = ensureDaemonLocked()
-            var ok = false
-            try {
-                block(d)
-                ok = true
-            } finally {
-                daemonManager.stop(d)
-                daemon = null
-                if (ok) configManager.persistAndCleanup() else runCatching { configManager.cleanup() }
-            }
-        }
-    }
-
-    override suspend fun <T> withDaemonForOAuth(block: suspend (RcloneDaemon) -> T): T {
+    private suspend fun <T> withExclusiveDaemon(block: suspend (RcloneDaemon) -> T): T {
         return lock.withLock {
             if (leases > 0) {
                 throw VirgaError.Rclone(message = "Stop running syncs before modifying remotes.")
@@ -520,12 +520,18 @@ class RcloneEngineImpl @Inject constructor(
                 ok = true
                 result
             } finally {
-                daemonManager.stop(d)
-                daemon = null
-                if (ok) configManager.persistAndCleanup() else runCatching { configManager.cleanup() }
+                withContext(NonCancellable) {
+                    daemonManager.stop(d)
+                    daemon = null
+                    if (ok) configManager.persistAndCleanup() else runCatching { configManager.cleanup() }
+                }
             }
         }
     }
+
+    private suspend fun mutatingConfig(block: suspend (RcloneDaemon) -> Unit) = withExclusiveDaemon(block)
+
+    override suspend fun <T> withDaemonForOAuth(block: suspend (RcloneDaemon) -> T): T = withExclusiveDaemon(block)
 
     private suspend fun rc(d: RcloneDaemon, command: String, params: JsonObject = JsonObject(emptyMap())): JsonObject =
         apiClient.call(d.baseUrl, d.user, d.pass, command, params)

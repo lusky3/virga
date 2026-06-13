@@ -15,7 +15,12 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -36,6 +41,7 @@ import java.io.File
  * Note: add `testImplementation("io.mockk:mockk:<version>")` to the rclone
  * module's build.gradle.kts if not already present.
  */
+@OptIn(ExperimentalCoroutinesApi::class) // advanceUntilIdle (cancellation-safe teardown tests)
 class RcloneEngineImplTest {
 
     private val daemonManager = mockk<RcloneDaemonManager>()
@@ -99,6 +105,74 @@ class RcloneEngineImplTest {
 
         engine.startDaemon()
         engine.stopDaemon()
+
+        coVerify { daemonManager.stop(fakeDaemon) }
+        coVerify { configManager.persistAndCleanup() }
+    }
+
+    // --- cancellation-safe teardown (NonCancellable) ---
+    //
+    // These prove rclone-H1: a teardown whose calling job is cancelled MID-FLIGHT must
+    // still stop the rclone process and persist/discard the plaintext config. Each stubs
+    // daemonManager.stop with a virtual `delay`, launches the teardown UNDISPATCHED so it
+    // reaches that suspension, then cancels the job before advancing the clock. Under the
+    // old `withContext(dispatchers.io)` the post-stop work (persist/cleanup) would be
+    // skipped once the job was cancelled; under `withContext(NonCancellable)` it runs.
+
+    @Test fun `stopDaemon teardown completes after the calling scope is cancelled`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } coAnswers { delay(1_000) }
+        coEvery { configManager.persistAndCleanup() } returns Unit
+
+        engine.startDaemon()
+
+        val job = launch(start = CoroutineStart.UNDISPATCHED) { engine.stopDaemon() }
+        job.cancel()                 // cancelled while parked inside stop()'s delay
+        advanceUntilIdle()           // NonCancellable lets the delay + persist finish
+        job.join()
+
+        coVerify { daemonManager.stop(fakeDaemon) }
+        coVerify { configManager.persistAndCleanup() } // post-stop work survived cancellation
+    }
+
+    @Test fun `releaseDaemon teardown completes after the calling scope is cancelled`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } coAnswers { delay(1_000) }
+        coEvery { configManager.persistAndCleanup() } returns Unit
+
+        engine.acquireDaemon() // leases = 1; last release must tear down
+
+        val job = launch(start = CoroutineStart.UNDISPATCHED) { engine.releaseDaemon() }
+        job.cancel()
+        advanceUntilIdle()
+        job.join()
+
+        // Daemon torn down + plaintext re-encrypted despite cancellation: no surviving
+        // process, no lease leak.
+        coVerify { daemonManager.stop(fakeDaemon) }
+        coVerify { configManager.persistAndCleanup() }
+    }
+
+    @Test fun `mutatingConfig teardown completes after the calling scope is cancelled`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } coAnswers { delay(1_000) }
+        coEvery { configManager.persistAndCleanup() } returns Unit
+        coEvery { apiClient.call(any(), any(), any(), "config/create", any()) } returns buildJsonObject {}
+
+        // User backs out mid-createRemote: the calling scope is cancelled, but the finally
+        // teardown (NonCancellable) must still stop the daemon + persist the config.
+        val job = launch(start = CoroutineStart.UNDISPATCHED) {
+            engine.createRemote("newdrive", "drive", mapOf("client_id" to "abc"))
+        }
+        job.cancel()
+        advanceUntilIdle()
+        job.join()
 
         coVerify { daemonManager.stop(fakeDaemon) }
         coVerify { configManager.persistAndCleanup() }
