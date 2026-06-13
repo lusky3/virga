@@ -10,6 +10,16 @@
 # animation with no security surface. The application's real security scanners
 # (CodeQL, Semgrep, Socket, GitGuardian) cover the actual app code.
 #
+# Test sources are excluded from quality analysis: Codacy's only findings there
+# are intentional test structure — inline string fixtures (StringLiteralDuplication)
+# and one @Test per scenario (TooManyFunctions) — which are features of thorough
+# tests, not debt. Security coverage on tests is retained by GitGuardian, the CI
+# secret-scan job, CodeQL, and Semgrep, which scan the whole repo. Quality analysis
+# stays on main source, where it matters.
+#
 # Patterns use Java glob syntax (Codacy configuration-file spec).
 exclude_paths:
   - "gh-pages/**"
+  - "**/src/test/**"
+  - "**/src/testFoss/**"
+  - "**/src/androidTest/**"
