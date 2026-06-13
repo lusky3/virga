@@ -190,5 +190,5 @@ jobs:
     steps:
       - name: Latest rclone release
         run: |
-          latest=$(curl -fsSL https://api.github.com/repos/rclone/rclone/releases/latest | jq -r .tag_name)
+          latest=$(curl --proto "=https" --tlsv1.2 -fsSL https://api.github.com/repos/rclone/rclone/releases/latest | jq -r .tag_name)
           echo "Latest rclone: $latest (pinned: ${RCLONE_VERSION})" >> "$GITHUB_STEP_SUMMARY"
