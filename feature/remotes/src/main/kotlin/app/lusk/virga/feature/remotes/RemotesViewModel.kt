@@ -33,7 +33,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
@@ -275,44 +274,20 @@ class RemotesViewModel @Inject constructor(
         }
     }
 
-    private sealed interface ImportRead {
-        data object CannotOpen : ImportRead
-        data object TooLarge : ImportRead
-        data class Ok(val text: String) : ImportRead
-    }
+    /** Moves rclone.conf in/out via the storage picker — see [ConfigTransferFlow]. */
+    private val configTransfer = ConfigTransferFlow(
+        scope = viewModelScope,
+        context = context,
+        repository = repository,
+        dispatchers = dispatchers,
+        transient = transient,
+    )
 
     /** Imports an existing rclone.conf selected via the storage picker. */
-    fun importConfigFromUri(uri: Uri) {
-        viewModelScope.launch {
-            val read = withContext(dispatchers.io) {
-                val stream = context.contentResolver.openInputStream(uri)
-                    ?: return@withContext ImportRead.CannotOpen
-                stream.use {
-                    val bytes = it.readBytes()
-                    if (bytes.size > MAX_IMPORT_BYTES) ImportRead.TooLarge
-                    else ImportRead.Ok(bytes.toString(Charsets.UTF_8))
-                }
-            }
-            when (read) {
-                ImportRead.CannotOpen -> transient.value = transient.value.copy(
-                    message = context.getString(R.string.remotes_msg_import_failed),
-                )
-                ImportRead.TooLarge -> transient.value = transient.value.copy(
-                    message = context.getString(R.string.remotes_msg_import_too_large),
-                )
-                is ImportRead.Ok -> {
-                    val result = repository.importConfig(read.text)
-                    transient.value = transient.value.copy(
-                        message = if (result.isSuccess) {
-                            context.getString(R.string.remotes_msg_config_imported)
-                        } else {
-                            result.exceptionOrNull()?.toUserMessage()
-                        },
-                    )
-                }
-            }
-        }
-    }
+    fun importConfigFromUri(uri: Uri) = configTransfer.importFromUri(uri)
+
+    /** Exports the decrypted rclone.conf to a document created via the storage picker. */
+    fun exportConfigToUri(uri: Uri) = configTransfer.exportToUri(uri)
 
     /**
      * Creates a `crypt:` remote.
@@ -355,7 +330,6 @@ class RemotesViewModel @Inject constructor(
     }
 
     companion object {
-        private const val MAX_IMPORT_BYTES = 256 * 1024
         /** Cap on a single quota (`operations/about`) fetch. Backends that don't
          *  support `about` usually error fast, but a slow/unreachable remote (or a
          *  starting daemon) could otherwise leave the "checking…" bar spinning

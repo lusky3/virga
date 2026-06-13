@@ -106,6 +106,9 @@
     <string name="remotes_msg_config_imported">Config imported.</string>
     <string name="remotes_msg_import_too_large">Config file is too large to import (max 256 KB).</string>
     <string name="remotes_msg_import_failed">Could not open the selected file.</string>
+    <string name="remotes_msg_export_nothing">No remotes configured yet, so there\'s nothing to export.</string>
+    <string name="remotes_msg_config_exported">Config exported.</string>
+    <string name="remotes_msg_export_failed">Could not write the config file.</string>
     <string name="remotes_msg_connectivity_warning">Remote \"%1$s\" was saved, but could not verify connectivity. Check your credentials.</string>
     <string name="remotes_msg_freeform_no_obscure">Heads up: the provider schema wasn\'t available, so any password values were stored without obscuring. Re-create this remote once the schema loads if it contains secrets.</string>
     <string name="remotes_msg_oauth_timed_out">Authorization timed out. Please try again.</string>
