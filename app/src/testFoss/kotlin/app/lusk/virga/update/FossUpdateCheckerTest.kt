@@ -40,4 +40,27 @@ class FossUpdateCheckerTest {
         // A higher numeric major still wins despite a suffix.
         assertThat(isNewerVersion("2.0.0-beta", "1.0.0")).isTrue()
     }
+
+    @Test fun `fully non-numeric or empty strings coerce to zero and compare equal`() {
+        // Every segment fails toIntOrNull → all zeros → not newer either direction.
+        assertThat(isNewerVersion("", "")).isFalse()
+        assertThat(isNewerVersion("abc", "xyz")).isFalse()
+        assertThat(isNewerVersion("", "1.0.0")).isFalse()   // [0] vs [1,0,0]
+        assertThat(isNewerVersion("1.0.0", "")).isTrue()    // [1,0,0] vs [0]
+    }
+
+    @Test fun `multi-digit and many-segment versions compare numerically not lexically`() {
+        // Lexical compare would call "9" > "10"; numeric compare must not.
+        assertThat(isNewerVersion("1.10.0", "1.9.0")).isTrue()
+        assertThat(isNewerVersion("1.9.0", "1.10.0")).isFalse()
+        // Differences past the third segment are still respected.
+        assertThat(isNewerVersion("1.2.3.4", "1.2.3.3")).isTrue()
+        assertThat(isNewerVersion("1.2.3.0", "1.2.3")).isFalse()
+    }
+
+    @Test fun `leading zeros are parsed as their integer value`() {
+        // "01" → 1, so 1.02 == 1.2 and neither is newer.
+        assertThat(isNewerVersion("1.02", "1.2")).isFalse()
+        assertThat(isNewerVersion("1.2", "1.02")).isFalse()
+    }
 }
