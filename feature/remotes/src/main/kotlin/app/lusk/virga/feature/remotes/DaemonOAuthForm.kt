@@ -16,6 +16,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -40,6 +41,8 @@ import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 @Composable
 internal fun DaemonOAuthForm(
     providerName: String,
+    /** UI-M2: gates the Connect button — a blank remote name would dead-end the flow. */
+    nameUsable: Boolean,
     oauthInProgress: Boolean,
     tokenPrompt: String?,
     onConnect: (clientId: String, clientSecret: String) -> Unit,
@@ -47,9 +50,12 @@ internal fun DaemonOAuthForm(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // L1: clientId is benign, but the client SECRET and the pasted token are
+    // sensitive — keep them in plain `remember` so they never land in the
+    // saved-state Bundle (accept loss on process death). clientId stays saveable.
     var clientId by rememberSaveable { mutableStateOf("") }
-    var clientSecret by rememberSaveable { mutableStateOf("") }
-    var token by rememberSaveable { mutableStateOf("") }
+    var clientSecret by remember { mutableStateOf("") }
+    var token by remember { mutableStateOf("") }
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
         Text(
@@ -108,7 +114,11 @@ internal fun DaemonOAuthForm(
                         Text(stringResource(R.string.remotes_daemon_oauth_cancel))
                     }
                     Button(
-                        onClick = { onSubmitToken(token.trim()) },
+                        onClick = {
+                            onSubmitToken(token.trim())
+                            // L1: clear the pasted token from memory once submitted.
+                            token = ""
+                        },
                         enabled = token.isNotBlank(),
                     ) {
                         Text(stringResource(R.string.remotes_daemon_oauth_paste_submit))
@@ -129,6 +139,7 @@ internal fun DaemonOAuthForm(
             else -> {
                 Button(
                     onClick = { onConnect(clientId, clientSecret) },
+                    enabled = nameUsable,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(stringResource(R.string.remotes_daemon_oauth_connect))

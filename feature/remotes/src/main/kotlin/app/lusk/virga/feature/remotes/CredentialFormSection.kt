@@ -113,7 +113,7 @@ internal fun CredentialFormSection(
                     val custom = provider.id in customClientIds
                     AssistChip(
                         onClick = { onOAuth(provider, name) },
-                        enabled = name.isNotBlank(),
+                        enabled = nameUsable,
                         label = {
                             Text(
                                 if (custom) stringResource(R.string.remotes_byo_chip_custom, provider.displayName)
@@ -194,6 +194,7 @@ internal fun CredentialFormSection(
         if (isOAuthByok) {
             DaemonOAuthForm(
                 providerName = type.trim(),
+                nameUsable = nameUsable,
                 oauthInProgress = oauthInProgress,
                 tokenPrompt = daemonOAuthTokenPrompt,
                 onConnect = { clientId, clientSecret ->

@@ -40,6 +40,13 @@ internal fun ProviderPicker(
     setupKindFor: (String) -> SetupKind,
     onSelect: (PickerEntry) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * UI-M2: when false, bundled-OAuth providers (which launch the browser flow
+     * the instant they're picked) are disabled — they can't be started without a
+     * usable remote name. Credential / wrapper / BYO-OAuth picks stay enabled
+     * because they advance to a form where the name is still editable.
+     */
+    selectionEnabled: Boolean = true,
 ) {
     var query by remember { mutableStateOf("") }
     val filtered = remember(entries, query) {
@@ -70,7 +77,14 @@ internal fun ProviderPicker(
             verticalArrangement = Arrangement.spacedBy(VirgaSpacing.xs),
         ) {
             items(providers, key = { it.type }) { entry ->
-                ProviderRow(entry = entry, onClick = { onSelect(entry) })
+                // A bundled-OAuth pick launches immediately, so disable it until a
+                // usable name is entered; everything else routes to an editable form.
+                val bundledOAuth = (setupKindFor(entry.type) as? SetupKind.OAuth)?.bundled == true
+                ProviderRow(
+                    entry = entry,
+                    enabled = selectionEnabled || !bundledOAuth,
+                    onClick = { onSelect(entry) },
+                )
             }
             if (wrappers.isNotEmpty()) {
                 item(key = "__wrapper_divider") {
@@ -102,23 +116,26 @@ internal fun ProviderPicker(
 }
 
 @Composable
-private fun ProviderRow(entry: PickerEntry, onClick: () -> Unit) {
+private fun ProviderRow(entry: PickerEntry, onClick: () -> Unit, enabled: Boolean = true) {
+    val contentColor =
+        if (enabled) MaterialTheme.colorScheme.onSurface
+        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = VirgaSpacing.sm, horizontal = VirgaSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
     ) {
         RemoteProviderMark(type = entry.type, contentDescription = entry.description)
         Column {
-            Text(entry.description, style = MaterialTheme.typography.bodyMedium)
+            Text(entry.description, style = MaterialTheme.typography.bodyMedium, color = contentColor)
             Text(
                 entry.type,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else contentColor,
             )
         }
     }

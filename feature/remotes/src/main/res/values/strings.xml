@@ -4,6 +4,11 @@
     <string name="remotes_title">Remotes</string>
     <string name="remotes_action_browse">Browse</string>
     <string name="remotes_action_import">Import</string>
+    <string name="remotes_action_export">Export config</string>
+    <!-- Export-config confirmation dialog -->
+    <string name="remotes_export_dialog_title">Export config?</string>
+    <string name="remotes_export_dialog_body">The exported file contains your credentials and tokens in plain text. Anyone with this file can access your remotes — store it somewhere safe.</string>
+    <string name="remotes_export_dialog_confirm">Export</string>
     <string name="remotes_fab_label">Add cloud account</string>
     <string name="remotes_oauth_in_progress">Completing sign-in…</string>
     <string name="remotes_cd_oauth_progress">Signing in</string>
@@ -35,6 +40,8 @@
     <string name="remotes_add_dialog_title">Add cloud account</string>
     <string name="remotes_add_field_name">Name</string>
     <string name="remotes_add_name_invalid">Name can\'t contain \':\' or \'/\'</string>
+    <string name="remotes_add_name_too_long">Name must be 64 characters or fewer</string>
+    <string name="remotes_add_name_control_chars">Name can\'t contain control characters</string>
     <string name="remotes_add_sign_in_with">Sign in with</string>
     <string name="remotes_add_or_manual">Or configure manually</string>
     <!-- Provider picker -->
@@ -54,7 +61,7 @@
     <!-- Bring-your-own OAuth keys -->
     <string name="remotes_byo_chip_custom">%1$s (your key)</string>
     <string name="remotes_byo_toggle">Use your own keys (recommended for regular use)</string>
-    <string name="remotes_byo_explainer">The built-in sign-in keys are shared by all Virga users, so they share one app\'s rate limits (and Google\'s 100-user cap on unverified apps). For regular use, register your own OAuth client and paste its Client ID below. Virga signs in with PKCE, so no client secret is needed — create an \"Android\"/installed-app client.</string>
+    <string name="remotes_byo_explainer">The built-in sign-in keys are shared by all Virga users, so they share one app\'s rate limits (and Google\'s 100-user cap on unverified apps). For regular use, register your own OAuth client and paste its Client ID below. Virga signs in with PKCE, so no client secret is needed — create an \"Android\"/installed-app client. Note: a custom Google client ID can\'t be used in this build (its redirect scheme isn\'t registered) — use the bundled Google sign-in instead.</string>
     <string name="remotes_byo_client_id">Your client ID</string>
     <string name="remotes_byo_save">Save key</string>
     <string name="remotes_byo_clear">Clear</string>
@@ -103,6 +110,9 @@
     <string name="remotes_msg_state_mismatch">Sign-in state mismatch; please try again.</string>
     <string name="remotes_msg_could_not_save">Could not save remote.</string>
     <string name="remotes_msg_added_remote">Added %1$s remote \"%2$s\"</string>
+    <string name="remotes_msg_added_remote_named">Added remote \"%1$s\"</string>
+    <string name="remotes_msg_enter_name_first">Enter a name first.</string>
+    <string name="remotes_msg_byo_google_unsupported">Custom Google client IDs aren\'t supported in this build; use the bundled Google sign-in.</string>
     <string name="remotes_msg_config_imported">Config imported.</string>
     <string name="remotes_msg_import_too_large">Config file is too large to import (max 256 KB).</string>
     <string name="remotes_msg_import_failed">Could not open the selected file.</string>

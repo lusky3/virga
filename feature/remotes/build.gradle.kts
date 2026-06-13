@@ -7,6 +7,20 @@ plugins {
 
 android {
     namespace = "app.lusk.virga.feature.remotes"
+    // The OAuthRedirectActivity intent-filter uses the ${googleOAuthScheme}
+    // placeholder, which is normally injected by the app module. Provide a
+    // library-local default so this module's own manifest merge (e.g. the
+    // Robolectric unit-test manifest) resolves it. The real value is still
+    // supplied by the app at app-merge time.
+    defaultConfig {
+        manifestPlaceholders["googleOAuthScheme"] = "com.googleusercontent.apps.unset"
+    }
+    // The OAuthRedirectActivity / classifyOAuthRedirect tests run under Robolectric
+    // (they need a real android.net.Uri parser + the merged manifest). They are
+    // JUnit 4 and run alongside the module's JUnit 5 tests via the Vintage engine.
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 dependencies {
@@ -24,4 +38,9 @@ dependencies {
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.hilt.navigation.compose)
+
+    testImplementation(libs.junit4)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.junit)
+    testRuntimeOnly(libs.junit5.vintage)
 }

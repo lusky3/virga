@@ -108,9 +108,8 @@ internal fun AddRemoteDialog(
     // "not yet invalid" (no error until typed).
     val nameError = when {
         name.isBlank() -> null
-        name.length > 64 -> "Name must be 64 characters or fewer"
-        name.any { it in '\u0000'..'\u001F' } -> "Name can't contain control characters"
-        name.trim().any { it == ':' || it == '/' } -> null // handled by existing string
+        name.length > 64 -> stringResource(R.string.remotes_add_name_too_long)
+        name.any { it in '\u0000'..'\u001F' } -> stringResource(R.string.remotes_add_name_control_chars)
         else -> null
     }
     val nameValid = name.isBlank() || (name.length <= 64 && name.none { it in '\u0000'..'\u001F' } && name.trim().none { it == ':' || it == '/' })
@@ -220,6 +219,10 @@ internal fun AddRemoteDialog(
                     ProviderPicker(
                         entries = pickerEntries,
                         setupKindFor = setupKindFor,
+                        // UI-M2: gate selection on a usable name so a bundled-OAuth
+                        // pick can't fire onOAuth() with a blank name and dead-end
+                        // at the post-sign-in state-mismatch check.
+                        selectionEnabled = nameUsable,
                         onSelect = { entry ->
                             type = entry.type
                             when (val kind = setupKindFor(entry.type)) {

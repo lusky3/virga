@@ -41,6 +41,15 @@ internal class SystemOAuthFlow(
 
     /** Starts the OAuth flow for [provider]; the authorize URL surfaces via [onLaunchUrl]. */
     suspend fun start(provider: OAuthProvider, remoteName: String) {
+        // UI-M2 belt-and-suspenders: a blank remote name would make this round-trip
+        // dead-end at the post-sign-in `pending.remoteName.isBlank()` check with a
+        // misleading "state mismatch" message. Bail before launching the browser.
+        if (remoteName.isBlank()) {
+            transient.value = transient.value.copy(
+                message = context.getString(R.string.remotes_msg_enter_name_first),
+            )
+            return
+        }
         // Prefer the user's own client ID over the shared built-in one.
         val override = oauthKeyStore.clientId(provider.id)
         val clientId = override ?: oauthConfig.clientId(provider.id)
@@ -56,6 +65,20 @@ internal class SystemOAuthFlow(
             OAuthConfig.googleAndroidRedirect(clientId, oauthConfig.redirectUri(provider.id))
         } else {
             oauthConfig.redirectUri(provider.id)
+        }
+        // UI-M1: a BYO Google client derives a reverse-domain redirect scheme from
+        // the user's client ID, but the manifest intent-filter only advertises the
+        // scheme baked from the BUILT-IN client ID — so the OS routes the redirect
+        // to no activity and the flow dead-ends after sign-in. The manifest scheme
+        // cannot be registered at runtime, so refuse to launch when the BYO Google
+        // redirect differs from the built-in one.
+        if (provider.id == OAuthProviders.GoogleDrive.id && override != null &&
+            redirectUri != oauthConfig.redirectUri(provider.id)
+        ) {
+            transient.value = transient.value.copy(
+                message = context.getString(R.string.remotes_msg_byo_google_unsupported),
+            )
+            return
         }
         val clientSecret = oauthConfig.clientSecret(provider.id)
         val pending = OAuthTokenExchanger.PendingAuth(

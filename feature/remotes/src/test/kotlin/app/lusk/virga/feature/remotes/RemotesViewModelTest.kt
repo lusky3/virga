@@ -163,6 +163,46 @@ class RemotesViewModelTest {
     }
 
     @Test
+    fun `startOAuth with blank remote name does not launch`() = runTest(mainDispatcher.dispatcher) {
+        // UI-M2: a blank name would dead-end after sign-in at the state-mismatch
+        // check. Bail before launching.
+        every { tokenExchanger.authorizeUrl(any()) } returns "https://x"
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.startOAuth(OAuthProviders.GoogleDrive, "   ")
+        advanceUntilIdle()
+
+        assertThat(vm.launchUrl.value).isNull()
+        assertThat(vm.uiState.value.oauthInProgress).isFalse()
+        assertThat(vm.uiState.value.message).isNotNull()
+        verify(exactly = 0) { tokenExchanger.authorizeUrl(any()) }
+        collector.cancel()
+    }
+
+    @Test
+    fun `startOAuth with BYO Google client id refuses to launch`() = runTest(mainDispatcher.dispatcher) {
+        // UI-M1: a BYO Google client derives a redirect scheme the manifest doesn't
+        // advertise, so the redirect would route nowhere. Refuse rather than dead-end.
+        coEvery { keyStore.clientId(OAuthProviders.GoogleDrive.id) } returns
+            "999-custom.apps.googleusercontent.com"
+        every { tokenExchanger.authorizeUrl(any()) } returns "https://x"
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.startOAuth(OAuthProviders.GoogleDrive, "my-google")
+        advanceUntilIdle()
+
+        assertThat(vm.launchUrl.value).isNull()
+        assertThat(vm.uiState.value.oauthInProgress).isFalse()
+        assertThat(vm.uiState.value.message).isNotNull()
+        verify(exactly = 0) { tokenExchanger.authorizeUrl(any()) }
+        collector.cancel()
+    }
+
+    @Test
     fun onLaunchUrlConsumed_clearsLaunchUrl() = runTest(mainDispatcher.dispatcher) {
         every { tokenExchanger.authorizeUrl(any()) } returns "https://x"
         val vm = viewModel()
@@ -1206,6 +1246,89 @@ class RemotesViewModelTest {
         assertThat(vm.uiState.value.oauthInProgress).isFalse()
         collector.cancel()
     }
+
+    @Test
+    fun `failed daemon oauth deletes the phantom remote`() = runTest(mainDispatcher.dispatcher) {
+        // rclone-M1: rclone persists the remote BEFORE the question machine finishes,
+        // so a Failed terminal leaves a token-less phantom. The flow must remove it
+        // best-effort once the engine lock is released.
+        val states = MutableStateFlow<DaemonOAuthOrchestrator.State>(
+            DaemonOAuthOrchestrator.State.Failed("token exchange failed"),
+        )
+        executeDaemonBlock()
+        coEvery { repository.deleteRemote(any()) } returns Result.success(Unit)
+        val vm = viewModel()
+        vm.daemonOAuthOrchestratorFactory = { scriptedOrchestrator(states) }
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.startDaemonOAuth(type = "pcloud", name = "  mypcloud  ")
+        advanceUntilIdle()
+
+        // Deleted by trimmed name, only after the daemon block returned.
+        coVerify(exactly = 1) { repository.deleteRemote("mypcloud") }
+        coVerifyOrder {
+            repository.withDaemonForOAuth<Any?>(any())
+            repository.deleteRemote("mypcloud")
+        }
+        assertThat(vm.uiState.value.oauthInProgress).isFalse()
+        collector.cancel()
+    }
+
+    @Test
+    fun `cancelled daemon oauth deletes the phantom remote`() = runTest(mainDispatcher.dispatcher) {
+        val states = MutableStateFlow<DaemonOAuthOrchestrator.State>(
+            DaemonOAuthOrchestrator.State.Cancelled,
+        )
+        executeDaemonBlock()
+        coEvery { repository.deleteRemote(any()) } returns Result.success(Unit)
+        val vm = viewModel()
+        vm.daemonOAuthOrchestratorFactory = { scriptedOrchestrator(states) }
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.startDaemonOAuth(type = "pcloud", name = "mypcloud")
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { repository.deleteRemote("mypcloud") }
+        collector.cancel()
+    }
+
+    @Test
+    fun `completed daemon oauth does NOT delete the remote`() = runTest(mainDispatcher.dispatcher) {
+        val states = MutableStateFlow<DaemonOAuthOrchestrator.State>(
+            DaemonOAuthOrchestrator.State.Complete("mypcloud"),
+        )
+        executeDaemonBlock()
+        coEvery { repository.testConnectivity(any()) } returns Result.success(Unit)
+        coEvery { repository.refresh() } returns Result.success(Unit)
+        val vm = viewModel()
+        vm.daemonOAuthOrchestratorFactory = { scriptedOrchestrator(states) }
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.startDaemonOAuth(type = "pcloud", name = "mypcloud")
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { repository.deleteRemote(any()) }
+        collector.cancel()
+    }
+
+    @Test
+    fun `startDaemonOAuth with blank name early-returns without entering the daemon block`() =
+        runTest(mainDispatcher.dispatcher) {
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            vm.startDaemonOAuth(type = "pcloud", name = "   ")
+            advanceUntilIdle()
+
+            coVerify(exactly = 0) { repository.withDaemonForOAuth<Any?>(any()) }
+            assertThat(vm.uiState.value.oauthInProgress).isFalse()
+            assertThat(vm.uiState.value.message).isNotNull()
+            collector.cancel()
+        }
 
     @Test
     fun `cancelDaemonOAuth when no orchestrator is a no-op`() = runTest(mainDispatcher.dispatcher) {

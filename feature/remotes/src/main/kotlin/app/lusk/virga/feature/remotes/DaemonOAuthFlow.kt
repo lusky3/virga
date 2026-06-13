@@ -37,6 +37,8 @@ internal class DaemonOAuthFlow(
     interface Strings {
         fun connectivityWarning(remoteName: String): String
         fun oauthTimedOut(): String
+        fun addedRemote(remoteName: String): String
+        fun enterNameFirst(): String
     }
 
     private var orchestrator: DaemonOAuthOrchestrator? = null
@@ -61,6 +63,13 @@ internal class DaemonOAuthFlow(
         clientId: String? = null,
         clientSecret: String? = null,
     ) {
+        // UI-M2 belt-and-suspenders: a blank name would have the daemon write a
+        // nameless remote and the flow dead-end. Bail with a clear message before
+        // launching rather than after the user has signed in.
+        if (name.isBlank()) {
+            transient.update { it.copy(message = strings.enterNameFirst()) }
+            return
+        }
         // Double-start guard: a second tap while a flow is live must not build a
         // second orchestrator or re-enter withDaemonForOAuth. The flag is flipped
         // synchronously (before the launch) so back-to-back taps can't race it.
@@ -115,26 +124,40 @@ internal class DaemonOAuthFlow(
                                 daemonOAuthTokenPrompt = null,
                                 message = if (connResult.isFailure) {
                                     strings.connectivityWarning(terminal.remoteName)
-                                } else null,
+                                } else {
+                                    strings.addedRemote(terminal.remoteName)
+                                },
                             )
                         }
                     }
-                    is DaemonOAuthOrchestrator.State.Failed -> transient.update {
-                        it.copy(oauthInProgress = false, daemonOAuthTokenPrompt = null, message = terminal.message)
+                    is DaemonOAuthOrchestrator.State.Failed -> {
+                        deletePhantomRemote(name)
+                        transient.update {
+                            it.copy(oauthInProgress = false, daemonOAuthTokenPrompt = null, message = terminal.message)
+                        }
                     }
-                    DaemonOAuthOrchestrator.State.TimedOut -> transient.update {
-                        it.copy(
-                            oauthInProgress = false,
-                            daemonOAuthTokenPrompt = null,
-                            message = strings.oauthTimedOut(),
-                        )
+                    DaemonOAuthOrchestrator.State.TimedOut -> {
+                        deletePhantomRemote(name)
+                        transient.update {
+                            it.copy(
+                                oauthInProgress = false,
+                                daemonOAuthTokenPrompt = null,
+                                message = strings.oauthTimedOut(),
+                            )
+                        }
                     }
-                    DaemonOAuthOrchestrator.State.Cancelled -> transient.update {
-                        it.copy(oauthInProgress = false, daemonOAuthTokenPrompt = null)
+                    DaemonOAuthOrchestrator.State.Cancelled -> {
+                        deletePhantomRemote(name)
+                        transient.update {
+                            it.copy(oauthInProgress = false, daemonOAuthTokenPrompt = null)
+                        }
                     }
                     else -> Unit // unreachable: first{} only returns terminal states
                 }
             } catch (e: Throwable) {
+                // Cancellation is normal flow control (e.g. VM scope tear-down), not an
+                // error to surface — rethrow so the coroutine machinery unwinds cleanly.
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 transient.update { it.copy(oauthInProgress = false, message = e.toUserMessage()) }
             } finally {
                 transient.update { it.copy(oauthInProgress = false, daemonOAuthTokenPrompt = null) }
@@ -155,6 +178,18 @@ internal class DaemonOAuthFlow(
 
     fun cancel() {
         orchestrator?.cancel()
+    }
+
+    /**
+     * rclone-M1: the daemon persists the remote to config BEFORE the OAuth question
+     * machine finishes, so a non-Complete terminal (Failed / TimedOut / Cancelled)
+     * leaves a token-less phantom that shows in the list and fails syncs. Remove it
+     * best-effort once the engine lock is released (this MUST run after
+     * withDaemonForOAuth returns — calling deleteRemote inside the block re-acquires
+     * the non-reentrant Mutex and deadlocks).
+     */
+    private suspend fun deletePhantomRemote(name: String) {
+        runCatching { repository.deleteRemote(name.trim()) }
     }
 
     private companion object {

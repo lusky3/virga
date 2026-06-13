@@ -393,6 +393,10 @@ class RemotesViewModel @Inject constructor(
                 context.getString(R.string.remotes_msg_connectivity_warning, remoteName)
             override fun oauthTimedOut(): String =
                 context.getString(R.string.remotes_msg_oauth_timed_out)
+            override fun addedRemote(remoteName: String): String =
+                context.getString(R.string.remotes_msg_added_remote_named, remoteName)
+            override fun enterNameFirst(): String =
+                context.getString(R.string.remotes_msg_enter_name_first)
         },
         onLaunchUrl = { _launchUrl.value = it },
     )

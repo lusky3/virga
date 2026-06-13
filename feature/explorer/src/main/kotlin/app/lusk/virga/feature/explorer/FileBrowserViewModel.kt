@@ -156,8 +156,13 @@ class FileBrowserViewModel @Inject constructor(
         _state.update { it.copy(selectionMode = false, selectedPaths = emptySet()) }
     }
 
+    /** L3: the in-flight load, cancelled before each relaunch so a slow list(A)
+     *  finishing after list(parent) can't overwrite the parent's entries. */
+    private var loadJob: kotlinx.coroutines.Job? = null
+
     private fun load(remote: String, path: String) {
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             _state.update { it.copy(remoteName = remote, path = path, loading = true, error = null) }
             try {
                 val raw = fileBrowser.list(remote, path)
