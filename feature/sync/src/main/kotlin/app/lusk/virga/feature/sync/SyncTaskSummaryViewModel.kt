@@ -64,8 +64,11 @@ class SyncTaskSummaryViewModel @Inject constructor(
     fun previewChanges() {
         val task = uiState.value.task ?: return
         if (!dryRunUseCase.isAvailableFor(task)) return
-        _dryRun.value = DryRunUiState(running = true)
+        // Set running=true INSIDE the launch: if the scope is already cancelled
+        // (VM cleared mid-tap), nothing is published, so dryRun can't get stuck
+        // at running=true with no coroutine left to clear it.
         viewModelScope.launch {
+            _dryRun.value = DryRunUiState(running = true)
             _dryRun.value = DryRunUiState(running = false, result = dryRunUseCase.preview(task))
         }
     }

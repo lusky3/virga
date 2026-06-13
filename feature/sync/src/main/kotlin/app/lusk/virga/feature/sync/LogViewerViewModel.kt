@@ -2,8 +2,8 @@ package app.lusk.virga.feature.sync
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -30,7 +30,9 @@ data class LogViewerUiState(
  * search [query]. The full text is available via [rawText] for the Share action.
  */
 @HiltViewModel
-class LogViewerViewModel @Inject constructor() : ViewModel() {
+class LogViewerViewModel @Inject constructor(
+    private val dispatchers: DispatcherProvider,
+) : ViewModel() {
 
     private val allLines = MutableStateFlow<List<String>>(emptyList())
     private val query = MutableStateFlow("")
@@ -43,7 +45,7 @@ class LogViewerViewModel @Inject constructor() : ViewModel() {
         if (initialized) return
         initialized = true
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) {
+            val result = withContext(dispatchers.io) {
                 runCatching { File(path).readText() }
             }
             result.onSuccess { text ->
