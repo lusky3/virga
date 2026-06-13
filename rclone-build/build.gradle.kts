@@ -7,8 +7,19 @@ plugins {
     base
 }
 
-val rcloneVersion = "v1.74.2"
-val ndkVersion = "27.2.12479018"
+// Single source of truth: parse the same shell-sourceable env file the build
+// script and CI workflows read, so versions never drift across the four places.
+val rcloneVersionsFile = rootProject.file("scripts/rclone-versions.env")
+val rcloneVersionsEnv: Map<String, String> = rcloneVersionsFile.readLines()
+    .map { it.trim() }
+    .filter { it.isNotEmpty() && !it.startsWith("#") && it.contains('=') }
+    .associate { line ->
+        val (k, v) = line.split('=', limit = 2)
+        k.trim() to v.trim()
+    }
+
+val rcloneVersion = rcloneVersionsEnv.getValue("RCLONE_VERSION")
+val ndkVersion = rcloneVersionsEnv.getValue("NDK_VERSION")
 val minSdk = 26
 val abis = listOf("arm64-v8a", "armeabi-v7a", "x86_64")
 
@@ -31,6 +42,7 @@ val buildRcloneBinaries by tasks.registering(Exec::class) {
 
     val script = rootProject.layout.projectDirectory.file("scripts/build-rclone.sh")
     inputs.file(script)
+    inputs.file(rcloneVersionsFile)
     inputs.property("rcloneVersion", rcloneVersion)
     inputs.property("ndkVersion", ndkVersion)
     inputs.property("minSdk", minSdk)
@@ -39,15 +51,20 @@ val buildRcloneBinaries by tasks.registering(Exec::class) {
         outputs.file(jniLibsDir.file("$abi/librclone.so"))
     }
 
-    // Skip entirely when prebuilt binaries are already on disk. The binaries
-    // are gitignored (too large for the repo), so the first build on a fresh
-    // checkout produces them and subsequent `./gradlew assemble*` runs are a
-    // no-op for this task. Force a rebuild by deleting the jniLibs/ binaries or
-    // bumping `rcloneVersion` (e.g. after changing the build script's flags).
+    // Skip entirely when prebuilt binaries are already on disk AND the version
+    // stamp matches the requested rcloneVersion. The binaries are gitignored
+    // (too large for the repo), so the first build on a fresh checkout produces
+    // them and subsequent `./gradlew assemble*` runs are a no-op. Mirrors the
+    // build script's own skip gate (scripts/build-rclone.sh writes .rclone-version
+    // after a successful build), so the two agree on when a rebuild is needed.
+    // Force a rebuild by deleting the jniLibs/ binaries or bumping rcloneVersion.
+    val stampFile = jniLibsDir.file(".rclone-version").asFile
     onlyIf {
-        abis.any { abi ->
+        val missingAbi = abis.any { abi ->
             !jniLibsDir.file("$abi/librclone.so").asFile.exists()
         }
+        val staleStamp = !stampFile.exists() || stampFile.readText().trim() != rcloneVersion
+        missingAbi || staleStamp
     }
 
     commandLine("bash", script.asFile.absolutePath)

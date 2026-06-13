@@ -41,3 +41,4 @@ agentdb.rvf*
 
 # Play Store listing assets (screenshots/graphics) — kept out of the public repo
 docs/play-store/
+**/src/main/jniLibs/.rclone-version

@@ -83,5 +83,6 @@ dependencies {
         ":feature:remotes",
         ":feature:settings",
         ":feature:explorer",
+        ":feature:stats",
     ).forEach { kover(project(it)) }
 }
