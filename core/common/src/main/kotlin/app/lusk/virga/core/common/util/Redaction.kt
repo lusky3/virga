@@ -12,8 +12,11 @@ package app.lusk.virga.core.common.util
  *    `<path>`. Used by the crash reporter.
  */
 object Redaction {
+    // Optional surrounding quotes catch the JSON form `"access_token":"ya29..."` —
+    // rclone stores tokens as JSON and error strings embed it, so the closing quote
+    // sits between the keyword and the `:` and would otherwise defeat a bare `key:`.
     private val SECRET = Regex(
-        "(?i)(token|access_token|refresh_token|client_secret|password)\\s*[=:]\\s*\\S+",
+        "(?i)[\"']?(token|access_token|refresh_token|client_secret|password)[\"']?\\s*[=:]\\s*\\S+",
     )
     private val PATH = Regex("""(content://|/storage/|/data/|/sdcard/)\S*""")
 

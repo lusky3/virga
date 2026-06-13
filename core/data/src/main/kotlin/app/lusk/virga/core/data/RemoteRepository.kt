@@ -4,6 +4,8 @@ import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.common.model.RemoteProvider
 import app.lusk.virga.core.common.model.RemoteQuota
+import androidx.room.withTransaction
+import app.lusk.virga.core.database.VirgaDatabase
 import app.lusk.virga.core.database.dao.RemoteDao
 import app.lusk.virga.core.database.dao.SyncTaskDao
 import app.lusk.virga.core.database.entity.RemoteEntity
@@ -20,6 +22,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class RemoteRepository @Inject constructor(
+    private val db: VirgaDatabase,
     private val remoteDao: RemoteDao,
     private val syncTaskDao: SyncTaskDao,
     private val engine: RcloneEngine,
@@ -45,7 +48,7 @@ class RemoteRepository @Inject constructor(
         val live = engine.listRemotes()
         if (live.isEmpty()) return@runCatching
         remoteDao.replaceAll(
-            live.map { RemoteEntity(name = it.name, type = it.type, displayName = it.name) },
+            live.map { RemoteEntity(name = it.name, type = it.type) },
         )
     }
 
@@ -74,12 +77,18 @@ class RemoteRepository @Inject constructor(
 
     suspend fun deleteRemote(name: String): Result<Unit> =
         runCatching {
+            // Network I/O stays OUTSIDE the transaction. The two cache deletes go in one
+            // transaction so process death can't land between them: deleting the remote
+            // row but leaving its task rows would orphan them, and they'd keep firing
+            // failing syncs forever.
             engine.deleteRemote(name)
-            remoteDao.deleteByName(name)
-            // Tasks pointing at the removed remote can no longer function — drop them
-            // so they don't linger as broken rows. Their scheduled WorkManager jobs
-            // self-cancel on the next run (SyncWorker cancels work for a missing task).
-            syncTaskDao.deleteByRemoteName(name)
+            db.withTransaction {
+                remoteDao.deleteByName(name)
+                // Tasks pointing at the removed remote can no longer function — drop them
+                // so they don't linger as broken rows. Their scheduled WorkManager jobs
+                // self-cancel on the next run (SyncWorker cancels work for a missing task).
+                syncTaskDao.deleteByRemoteName(name)
+            }
         }
 
     suspend fun importConfig(confContent: String): Result<Unit> {

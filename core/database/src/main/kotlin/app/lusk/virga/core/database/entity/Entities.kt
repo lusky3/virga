@@ -16,7 +16,6 @@ import app.lusk.virga.core.common.model.SyncStatus
 data class RemoteEntity(
     @PrimaryKey val name: String,
     val type: String,
-    val displayName: String,
 )
 
 /** A user-defined sync job. rclone owns per-file state; this owns the config. */
@@ -130,7 +129,10 @@ data class ConflictEntity(
             onDelete = ForeignKey.CASCADE,
         ),
     ],
-    indices = [Index("taskId")],
+    // startedAtEpochMs drives observeRecent/observeForTask (ORDER BY + LIMIT),
+    // pruneOlderThan, and failInterruptedRuns; index it both standalone and as the
+    // trailing column of the taskId composite so per-task ordered queries stay covered.
+    indices = [Index("taskId", "startedAtEpochMs"), Index("startedAtEpochMs")],
 )
 data class SyncRunEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

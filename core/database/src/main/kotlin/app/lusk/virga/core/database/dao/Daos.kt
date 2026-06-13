@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface RemoteDao {
-    @Query("SELECT * FROM remotes ORDER BY displayName")
+    @Query("SELECT * FROM remotes ORDER BY name")
     fun observeAll(): Flow<List<RemoteEntity>>
 
     @Upsert
@@ -84,13 +84,10 @@ interface SyncRunDao {
     @Insert
     suspend fun insert(run: SyncRunEntity): Long
 
-    @Update
-    suspend fun update(run: SyncRunEntity)
-
     /**
-     * Finalizes a run in place. A targeted UPDATE (vs. a full-entity [update]) so the
-     * caller needn't re-supply `startedAtEpochMs` — the value stored by `startRun` is
-     * preserved instead of being overwritten with a second, later clock reading.
+     * Finalizes a run in place. A targeted UPDATE so the caller needn't re-supply
+     * `startedAtEpochMs` — the value stored by `startRun` is preserved instead of being
+     * overwritten with a second, later clock reading.
      */
     @Query(
         "UPDATE sync_runs SET endedAtEpochMs = :endedAtEpochMs, status = :status, " +

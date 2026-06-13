@@ -100,10 +100,34 @@ class ConflictRepository @Inject constructor(
     }
 
     private suspend fun promote(remoteFs: String, winnerPath: String, basePath: String, loserPath: String) {
-        // engine.moveFile / deleteFile throw VirgaError on failure; the enclosing
+        // Idempotent across a partial-failure retry: if a prior attempt already moved the
+        // winner onto basePath but died before deleting the loser, the winner variant is
+        // gone and the base exists. Re-running moveFile would then fail forever (source
+        // missing). Detect that case with one cheap listing of the parent dir and skip the
+        // move. engine.moveFile / deleteFile throw VirgaError on failure; the enclosing
         // runCatching in resolve() turns that into a Result.failure for the UI.
-        engine.moveFile("$remoteFs$winnerPath", "$remoteFs$basePath")
-        engine.deleteFile(remoteFs, loserPath)
+        if (!moveAlreadyDone(remoteFs, winnerPath, basePath)) {
+            engine.moveFile("$remoteFs$winnerPath", "$remoteFs$basePath")
+        }
+        // Best-effort: a failed loser deletion still marks the conflict resolved. The lone
+        // leftover .conflictN sits below the >=2-variant detection threshold, so it can't
+        // re-trigger this conflict; swallowing the failure avoids a permanently stuck row.
+        runCatching { engine.deleteFile(remoteFs, loserPath) }
+    }
+
+    /** True when the winner variant is absent and the base already exists — i.e. a prior
+     *  attempt's move completed. Uses one listing of the parent dir to stay cheap.
+     *  Paths here are remote-root-relative (matching resolve()'s "$remoteFs$path" usage);
+     *  operations/list returns names relative to the listed dir, so compare on leaf names. */
+    private suspend fun moveAlreadyDone(remoteFs: String, winnerPath: String, basePath: String): Boolean {
+        val parent = basePath.substringBeforeLast('/', missingDelimiterValue = "")
+        val leaves = engine.listDir(remote = remoteFs, path = parent, recurse = false)
+            .filter { !it.isDir }
+            .map { it.name }
+            .toSet()
+        val winnerLeaf = winnerPath.substringAfterLast('/')
+        val baseLeaf = basePath.substringAfterLast('/')
+        return winnerLeaf !in leaves && baseLeaf in leaves
     }
 
     private companion object {

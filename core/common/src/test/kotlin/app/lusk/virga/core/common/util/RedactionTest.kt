@@ -14,6 +14,13 @@ class RedactionTest {
         assertThat(Redaction.secrets("password = FAKE-PW")).isEqualTo("password=<redacted>")
     }
 
+    @Test fun `secrets collapses JSON-quoted secret keys`() {
+        // rclone stores tokens as JSON; the closing quote sits between keyword and `:`.
+        val out = Redaction.secrets("""{"access_token":"FAKE-JSON-TOKEN","expiry":"x"}""")
+        assertThat(out).doesNotContain("FAKE-JSON-TOKEN")
+        assertThat(out).contains("access_token=<redacted>")
+    }
+
     @Test fun `secrets is case-insensitive and does not leak the value`() {
         val out = Redaction.secrets("Refresh_Token=FAKE-PLACEHOLDER-XYZ")
         assertThat(out).doesNotContain("FAKE-PLACEHOLDER-XYZ")

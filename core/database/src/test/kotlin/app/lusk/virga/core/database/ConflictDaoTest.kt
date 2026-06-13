@@ -39,7 +39,7 @@ class ConflictDaoTest {
 
     /** A task row is required because conflicts FK->sync_tasks with CASCADE. */
     private suspend fun seedTask(): Long {
-        db.remoteDao().upsert(RemoteEntity(name = "gd", type = "drive", displayName = "GD"))
+        db.remoteDao().upsert(RemoteEntity(name = "gd", type = "drive"))
         return db.syncTaskDao().insert(
             SyncTaskEntity(
                 name = "t",
