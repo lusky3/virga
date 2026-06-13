@@ -20,6 +20,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonPrimitive
@@ -62,6 +63,13 @@ class RcloneEngineImplTest {
         // overloads the engine uses (providers()/importConfig() log on failure).
         mockkStatic(Log::class)
         every { Log.w(any<String>(), any<String>(), any<Throwable>()) } returns 0
+        // One-shot ops now run under a refcount lease (rclone-M2/M3): an isolated call
+        // acquires the daemon then releases it, and the last release tears the daemon down
+        // (daemonManager.stop) + re-encrypts the config (persistAndCleanup). Default-stub
+        // both so single-call ops don't trip the strict mock; tests that assert specific
+        // teardown behavior override these.
+        coEvery { daemonManager.stop(any()) } returns Unit
+        coEvery { configManager.persistAndCleanup() } returns Unit
         engine = RcloneEngineImpl(daemonManager, configManager, apiClient, dispatchers)
         fakeDaemon = RcloneDaemon(
             process = mockk { every { isAlive } returns true },
@@ -475,6 +483,113 @@ class RcloneEngineImplTest {
 
         coVerify { apiClient.call(any(), any(), any(), "sync/copy", any()) }
         coVerify { apiClient.call(any(), any(), any(), "sync/sync", any()) }
+    }
+
+    // --- job control: collector cancellation aborts the async job (rclone-M4) ---
+
+    @Test fun `cancelling the sync collector mid-poll issues job_stop`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "sync/copy", any()) } returns
+            buildJsonObject { put("jobid", 99) }
+        // Job never finishes: every poll reports running, so the collector keeps looping
+        // until we cancel it. Stats advance each tick so the stall guard never fires.
+        coEvery { apiClient.call(any(), any(), any(), "job/status", any()) } returns
+            buildJsonObject { put("finished", false) }
+        var bytes = 0L
+        coEvery { apiClient.call(any(), any(), any(), "core/stats", any()) } answers {
+            bytes += 100L
+            buildJsonObject { put("bytes", bytes) }
+        }
+        coEvery { apiClient.call(any(), any(), any(), "job/stop", any()) } returns buildJsonObject {}
+
+        engine.startDaemon()
+
+        // Collect in a child job, let it poll a couple of ticks, then cancel it. The flow's
+        // finally must abort the still-running async job via job/stop (NonCancellable).
+        val collector = launch {
+            engine.sync("local:/x", "gdrive:x", SyncOptions(SyncDirection.UPLOAD)).collect { }
+        }
+        advanceTimeBy(1_600) // > 2 * POLL_INTERVAL_MS (750ms): let the loop poll a couple of ticks
+        collector.cancel()
+        advanceUntilIdle()
+
+        coVerify { apiClient.call(any(), any(), any(), "job/stop", any()) }
+    }
+
+    // --- one-shot lease lifecycle (rclone-M2/M3) ---
+
+    @Test fun `isolated one-shot op starts then stops the daemon`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "operations/list", any()) } returns buildJsonObject {}
+
+        // No prior startDaemon(): the op itself must start the daemon, then release the lease
+        // (leases 1->0) tears it down + re-encrypts the config.
+        engine.listDir("gdrive:", "photos")
+
+        coVerify(exactly = 1) { daemonManager.start(any()) }
+        coVerify(exactly = 1) { daemonManager.stop(fakeDaemon) }
+        coVerify(exactly = 1) { configManager.persistAndCleanup() }
+    }
+
+    @Test fun `one-shot op made while a lease is held does not stop the daemon`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "operations/about", any()) } returns buildJsonObject {}
+
+        engine.acquireDaemon() // an outer consumer (e.g. a SyncWorker) holds a lease
+
+        // The op's lease just nests (leases 2->1 on release): the daemon must survive.
+        engine.about("gdrive")
+        coVerify(exactly = 0) { daemonManager.stop(fakeDaemon) }
+
+        // Only the outer consumer's final release tears it down.
+        engine.releaseDaemon()
+        coVerify(exactly = 1) { daemonManager.stop(fakeDaemon) }
+    }
+
+    // --- stall guard (rclone-M4) ---
+    //
+    // The stall guard at runJobWithProgress compares against System.currentTimeMillis()
+    // (wall clock), NOT the test scheduler's virtual time, so advanceTimeBy() cannot
+    // deterministically drive it past STALL_TIMEOUT_MS without a real 120s sleep. We
+    // therefore assert the guard's KEY invariant that IS unit-testable on virtual time:
+    // a long check-only phase (no bytes/transfers/deletes, only `checks` rising) must NOT
+    // be mistaken for a stall — the job runs to completion. Tracking `checks` in the
+    // progress sentinel is exactly what prevents rclone's listing/compare phases (which
+    // move zero bytes) from tripping the abort.
+    @Test fun `a check-only phase does not trip the stall guard`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "sync/copy", any()) } returns
+            buildJsonObject { put("jobid", 5) }
+
+        // First three polls: running, zero bytes but `checks` climbing (compare phase).
+        // Fourth poll: finished+success. The climbing `checks` keeps lastProgressAtMs fresh,
+        // so the guard never fires and the job completes normally.
+        var poll = 0
+        coEvery { apiClient.call(any(), any(), any(), "job/status", any()) } answers {
+            poll++
+            buildJsonObject { put("finished", poll >= 4); if (poll >= 4) put("success", true) }
+        }
+        var checks = 0
+        coEvery { apiClient.call(any(), any(), any(), "core/stats", any()) } answers {
+            checks += 10
+            buildJsonObject { put("bytes", 0L); put("checks", checks) }
+        }
+
+        engine.startDaemon()
+
+        engine.sync("local:/x", "gdrive:x", SyncOptions(SyncDirection.UPLOAD)).test {
+            // Three running emissions (check-only) then the terminal one, no stall error.
+            awaitItem(); awaitItem(); awaitItem(); awaitItem()
+            awaitComplete()
+        }
     }
 
     // --- providers ---

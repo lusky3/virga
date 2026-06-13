@@ -131,7 +131,16 @@ class RcloneEngineImpl @Inject constructor(
     override suspend fun isDaemonHealthy(): Boolean {
         val d = daemon ?: return false
         if (!daemonManager.isAlive(d)) return false
-        return runCatching { rc(d, "rc/noop") }.isSuccess
+        return try {
+            rc(d, "rc/noop")
+            true
+        } catch (e: CancellationException) {
+            // runCatching would have swallowed cancellation and reported "unhealthy";
+            // a cancelled caller must propagate, not be told the daemon is dead.
+            throw e
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     /**
@@ -139,9 +148,11 @@ class RcloneEngineImpl @Inject constructor(
      * list on any failure — the UI falls back to the freeform textarea.
      */
     override suspend fun providers(): List<RemoteProvider> = runCatching {
-        parseProviders(rc(ensureDaemon(), "config/providers"))
+        withLease { d -> parseProviders(rc(d, "config/providers")) }
     }.getOrElse {
         // Degrade to the freeform textarea (documented UX); log so a persistently failing daemon isn't invisible.
+        // The runCatching wraps withLease so a failed RC call still releases the lease (tearing the daemon
+        // down when idle) before we fall back.
         Log.w(TAG, "config/providers failed; falling back to freeform remote entry", it)
         emptyList()
     }
@@ -151,13 +162,12 @@ class RcloneEngineImpl @Inject constructor(
         return config.remotes.map { (name, type) -> Remote(name, type) }
     }
 
-    override suspend fun getConfig(): RcloneConfig {
-        val d = ensureDaemon()
+    override suspend fun getConfig(): RcloneConfig = withLease { d ->
         val dump = rc(d, "config/dump")
         val remotes = dump.entries.associate { (name, value) ->
             name to (value.jsonObject["type"]?.jsonPrimitive?.contentOrNull ?: "unknown")
         }
-        return RcloneConfig(remotes)
+        RcloneConfig(remotes)
     }
 
     override suspend fun createRemote(
@@ -276,16 +286,15 @@ class RcloneEngineImpl @Inject constructor(
         path: String,
         recurse: Boolean,
         filters: List<String>,
-    ): List<FileItem> {
-        val d = ensureDaemon()
+    ): List<FileItem> = withLease { d ->
         val result = rc(d, "operations/list", buildJsonObject {
             put("fs", remote)
             put("remote", path)
             if (recurse) putJsonObject("opt") { put("recurse", true) }
             putFilters(filters)
         })
-        val list = result["list"]?.jsonArray ?: return emptyList()
-        return list.map { it.jsonObject }.map { obj ->
+        val list = result["list"]?.jsonArray ?: return@withLease emptyList()
+        list.map { it.jsonObject }.map { obj ->
             val modTimeMs = obj["ModTime"]?.jsonPrimitive?.contentOrNull?.let { raw ->
                 runCatching { Instant.parse(raw).toEpochMilli() }.getOrNull()
             }
@@ -362,16 +371,14 @@ class RcloneEngineImpl @Inject constructor(
             })
         }
 
-    override suspend fun deleteFile(remote: String, path: String) {
-        val d = ensureDaemon()
+    override suspend fun deleteFile(remote: String, path: String): Unit = withLease { d ->
         rc(d, "operations/deletefile", buildJsonObject {
             put("fs", remote)
             put("remote", path)
         })
     }
 
-    override suspend fun moveFile(source: String, dest: String) {
-        val d = ensureDaemon()
+    override suspend fun moveFile(source: String, dest: String): Unit = withLease { d ->
         val (srcFs, srcRemote) = splitFs(source)
         val (dstFs, dstRemote) = splitFs(dest)
         rc(d, "operations/movefile", buildJsonObject {
@@ -380,10 +387,9 @@ class RcloneEngineImpl @Inject constructor(
         })
     }
 
-    override suspend fun testConnectivity(remoteName: String): Result<Unit> {
-        val d = ensureDaemon()
+    override suspend fun testConnectivity(remoteName: String): Result<Unit> = withLease { d ->
         val fs = "$remoteName:"
-        return try {
+        try {
             rc(d, "operations/about", buildJsonObject { put("fs", fs) })
             Result.success(Unit)
         } catch (e: CancellationException) {
@@ -401,12 +407,11 @@ class RcloneEngineImpl @Inject constructor(
         }
     }
 
-    override suspend fun about(remoteName: String): RemoteQuota {
-        val d = ensureDaemon()
+    override suspend fun about(remoteName: String): RemoteQuota = withLease { d ->
         val result = rc(d, "operations/about", buildJsonObject {
             put("fs", "$remoteName:")
         })
-        return RemoteQuota(
+        RemoteQuota(
             total = result["total"]?.jsonPrimitive?.longOrNull,
             used = result["used"]?.jsonPrimitive?.longOrNull,
             free = result["free"]?.jsonPrimitive?.longOrNull,
@@ -495,6 +500,25 @@ class RcloneEngineImpl @Inject constructor(
     }.flowOn(dispatchers.io)
 
     private suspend fun ensureDaemon(): RcloneDaemon = lock.withLock { ensureDaemonLocked() }
+
+    /**
+     * Runs a one-shot RC op under a refcount lease (rclone-M2/M3): [acquireDaemon] starts-or-reuses
+     * the daemon and takes a lease, [block] issues the RC call OUTSIDE the lock (acquire/release take
+     * the [lock] themselves; the Mutex is non-reentrant so [block] must NOT re-acquire it), and the
+     * finally [releaseDaemon] drops the lease — tearing the daemon down + re-encrypting the plaintext
+     * config when this was the only consumer (so an isolated op starts→uses→stops the daemon instead
+     * of leaking the rclone process + decrypted OAuth tokens), while a concurrent sync's teardown can't
+     * stop the daemon mid-call. If a leased consumer (a SyncWorker doing conflict-detection listDir) is
+     * already holding a lease, the refcount just goes 2→1 here and the daemon survives.
+     */
+    private suspend fun <T> withLease(block: suspend (RcloneDaemon) -> T): T {
+        val d = acquireDaemon()
+        try {
+            return block(d)
+        } finally {
+            releaseDaemon()
+        }
+    }
 
     /**
      * Runs [block] holding [lock] with an exclusively-owned daemon, then atomically tears

@@ -7,7 +7,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import okhttp3.Credentials
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -89,11 +88,6 @@ class RcApiClient(
         this as? JsonObject ?: JsonObject(emptyMap())
 
     companion object {
-        // rclone's rcserver does a strict `contentType == "application/json"`
-        // comparison (no media-type parser), so we must NOT add `;charset=utf-8`.
-        // With a charset suffix the daemon silently ignores the JSON body and
-        // returns "Didn't find key X in input" for every parameter.
-        private val JSON_MEDIA_TYPE = "application/json".toMediaType()
         val DefaultJson = Json {
             ignoreUnknownKeys = true
             isLenient = true
