@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.baselineprofile)
     alias(libs.plugins.sentry.android)
+    alias(libs.plugins.roborazzi)
 }
 
 // OAuth client IDs are public-by-design for mobile apps but identify the
@@ -111,6 +112,14 @@ android {
 
     buildFeatures {
         buildConfig = true
+    }
+
+    // Compose unit tests (Roborazzi screenshot tests) run under Robolectric and
+    // need the merged AndroidManifest + resources on the unit-test classpath.
+    // They are JUnit 4 (the form `compose-ui-test-junit4` expects) and run via the
+    // Vintage engine alongside the module's JUnit 5 tests.
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
     }
 
     flavorDimensions += "distribution"
@@ -269,6 +278,16 @@ dependencies {
     debugImplementation(libs.compose.ui.test.manifest)
 
     testImplementation(libs.junit4)
+    // Roborazzi screenshot tests (Robolectric + Compose UI test) for app-owned
+    // screens. Mirrors feature:sync; run via the JUnit Vintage engine.
+    testImplementation(libs.robolectric)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.compose.material3)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.junit.rule)
+    testRuntimeOnly(libs.junit5.vintage)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.junit4)
