@@ -423,6 +423,36 @@ class RcloneEngineImpl @Inject constructor(
     }
 
     /**
+     * Resolves a finished rclone job into the terminal [SyncProgress] to emit, or throws.
+     *
+     * rclone reports `success:false` whenever ANY file errored, even though it copied
+     * every other file and continued. For a copy/backup ([tolerateFileErrors] true) a
+     * non-fatal file-level error (`core/stats.fatalError == false`) is a PARTIAL SUCCESS:
+     * return the terminal stats (carrying `errors = N`) so the worker can summarise rather
+     * than fail the whole run. A fatal abort, or a delete-mirror ([tolerateFileErrors]
+     * false), still throws. `core/stats` is fetched only on the success or tolerate paths,
+     * so a mirror failure pays no extra round-trip before throwing.
+     */
+    private suspend fun finishedJobResult(
+        d: RcloneDaemon,
+        status: JsonObject,
+        group: String,
+        tolerateFileErrors: Boolean,
+    ): SyncProgress {
+        val success = status["success"]?.jsonPrimitive?.booleanOrNull ?: false
+        if (!success && tolerateFileErrors) {
+            val finalStats = rc(d, CMD_CORE_STATS, buildJsonObject { put(KEY_GROUP, group) })
+            if (finalStats["fatalError"]?.jsonPrimitive?.booleanOrNull != true) {
+                return finalStats.toSyncProgress()
+            }
+        }
+        if (!success) {
+            throw classifyJobError(status["error"]?.jsonPrimitive?.contentOrNull ?: "sync failed")
+        }
+        return rc(d, CMD_CORE_STATS, buildJsonObject { put(KEY_GROUP, group) }).toSyncProgress()
+    }
+
+    /**
      * Starts an async RC job then polls job/status every tick. core/stats is
      * fetched on the same tick to build the progress snapshot; the final
      * completion stats are extracted from the job/status response to avoid a
@@ -464,32 +494,11 @@ class RcloneEngineImpl @Inject constructor(
                 val finished = status["finished"]?.jsonPrimitive?.booleanOrNull ?: false
                 if (finished) {
                     jobFinished = true
-                    val success = status["success"]?.jsonPrimitive?.booleanOrNull ?: false
-                    if (!success) {
-                        // rclone reports success:false whenever ANY file errored, even
-                        // though it copied every other file and continued. Distinguish a
-                        // fatal abort (auth/connection — nothing transferred reliably) from
-                        // mere file-level errors via core/stats.fatalError, fetched once
-                        // here (reused as the terminal emit below, so no double round-trip).
-                        val finalStats = rc(d, "core/stats", buildJsonObject { put("group", group) })
-                        val fatalError = finalStats["fatalError"]?.jsonPrimitive?.booleanOrNull ?: false
-                        if (tolerateFileErrors && !fatalError) {
-                            // Partial success: the good files transferred and rclone
-                            // continued past the unreadable ones. Emit the terminal stats
-                            // (carrying errors = N) and finish — the worker surfaces the
-                            // error count as a summary rather than failing the whole run.
-                            emit(finalStats.toSyncProgress())
-                            break
-                        }
-                        val err = status["error"]?.jsonPrimitive?.contentOrNull ?: "sync failed"
-                        throw classifyJobError(err)
-                    }
-                    // Fetch final stats once on completion for accurate counters.
-                    emit(rc(d, "core/stats", buildJsonObject { put("group", group) }).toSyncProgress())
+                    emit(finishedJobResult(d, status, group, tolerateFileErrors))
                     break
                 }
                 // Fetch stats only while running (drives the throttled UI update).
-                val stats = rc(d, "core/stats", buildJsonObject { put("group", group) })
+                val stats = rc(d, CMD_CORE_STATS, buildJsonObject { put(KEY_GROUP, group) })
                 val progress = stats.toSyncProgress()
                 val checks = stats["checks"]?.jsonPrimitive?.intOrNull ?: 0
                 if (progress.bytesTransferred != lastBytes ||
@@ -586,6 +595,9 @@ class RcloneEngineImpl @Inject constructor(
         const val TAG = "RcloneEngine"
         // rclone RC parameter key naming the (sub)path within a remote's filesystem.
         const val KEY_REMOTE = "remote"
+        // rclone RC command + param for fetching a job's transfer statistics.
+        const val CMD_CORE_STATS = "core/stats"
+        const val KEY_GROUP = "group"
         const val POLL_INTERVAL_MS = 750L
         // Max time an in-flight job may make zero progress before we abort it.
         const val STALL_TIMEOUT_MS = 120_000L
