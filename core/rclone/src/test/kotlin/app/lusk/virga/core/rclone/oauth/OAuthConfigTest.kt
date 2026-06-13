@@ -4,22 +4,22 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 
 class OAuthConfigTest {
-    @Test fun `clientSecret returns the configured secret or null`() {
+    @Test fun `clientId returns the configured id or empty`() {
         val config = OAuthConfig(
             defaultRedirectUri = "https://x/cb",
-            clientIds = mapOf("box" to "id"),
-            clientSecrets = mapOf("box" to "secret"),
+            clientIds = mapOf("gdrive" to "id"),
         )
-        assertThat(config.clientSecret("box")).isEqualTo("secret")
-        assertThat(config.clientSecret("gdrive")).isNull()
+        assertThat(config.clientId("gdrive")).isEqualTo("id")
+        assertThat(config.clientId("onedrive")).isEmpty()
     }
 
-    @Test fun `clientSecret treats blank as unset`() {
+    @Test fun `redirectUri falls back to the default when no override`() {
         val config = OAuthConfig(
             defaultRedirectUri = "https://x/cb",
-            clientIds = mapOf("box" to "id"),
-            clientSecrets = mapOf("box" to ""),
+            clientIds = mapOf("gdrive" to "id"),
+            redirectUris = mapOf("gdrive" to "https://x/gdrive"),
         )
-        assertThat(config.clientSecret("box")).isNull()
+        assertThat(config.redirectUri("gdrive")).isEqualTo("https://x/gdrive")
+        assertThat(config.redirectUri("onedrive")).isEqualTo("https://x/cb")
     }
 }

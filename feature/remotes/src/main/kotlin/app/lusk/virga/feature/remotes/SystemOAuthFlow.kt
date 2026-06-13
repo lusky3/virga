@@ -80,13 +80,11 @@ internal class SystemOAuthFlow(
             )
             return
         }
-        val clientSecret = oauthConfig.clientSecret(provider.id)
         val pending = OAuthTokenExchanger.PendingAuth(
             provider = provider,
             state = UUID.randomUUID().toString(),
             verifier = Pkce.newVerifier(),
             clientId = clientId,
-            clientSecret = clientSecret,
             redirectUri = redirectUri,
             remoteName = remoteName,
         )
