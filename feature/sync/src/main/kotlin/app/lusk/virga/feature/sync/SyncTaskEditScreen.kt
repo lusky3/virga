@@ -2,6 +2,7 @@ package app.lusk.virga.feature.sync
 
 import android.net.Uri
 import android.os.Environment
+import androidx.annotation.StringRes
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -262,44 +263,18 @@ fun SyncTaskEditScreen(
             }
 
             // Wi-Fi only toggle
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .toggleable(
-                        value = form.wifiOnly,
-                        role = Role.Switch,
-                        onValueChange = { v -> viewModel.update { f -> f.copy(wifiOnly = v) } },
-                    )
-                    .padding(vertical = VirgaSpacing.xs),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    stringResource(R.string.sync_edit_field_wifi_only),
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Switch(checked = form.wifiOnly, onCheckedChange = null)
-            }
+            LabeledSwitchRow(
+                label = R.string.sync_edit_field_wifi_only,
+                checked = form.wifiOnly,
+                onCheckedChange = { v -> viewModel.update { f -> f.copy(wifiOnly = v) } },
+            )
 
             // Require charging toggle
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .toggleable(
-                        value = form.requiresCharging,
-                        role = Role.Switch,
-                        onValueChange = { v -> viewModel.update { f -> f.copy(requiresCharging = v) } },
-                    )
-                    .padding(vertical = VirgaSpacing.xs),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    stringResource(R.string.sync_edit_field_require_charging),
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Switch(checked = form.requiresCharging, onCheckedChange = null)
-            }
+            LabeledSwitchRow(
+                label = R.string.sync_edit_field_require_charging,
+                checked = form.requiresCharging,
+                onCheckedChange = { v -> viewModel.update { f -> f.copy(requiresCharging = v) } },
+            )
 
             // Filters (Tier 1) — include/exclude rule builder.
             FilterEditor(
@@ -462,5 +437,35 @@ private fun directionHintRes(dir: SyncDirection): Int = when (dir) {
     SyncDirection.UPLOAD -> R.string.sync_direction_hint_upload
     SyncDirection.DOWNLOAD -> R.string.sync_direction_hint_download
     SyncDirection.BISYNC -> R.string.sync_direction_hint_bisync
+}
+
+/**
+ * A full-width row that toggles a boolean [Switch] when tapped anywhere. The
+ * Wi-Fi-only and require-charging constraints render identically through this.
+ */
+@Composable
+private fun LabeledSwitchRow(
+    @StringRes label: Int,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = checked,
+                role = Role.Switch,
+                onValueChange = onCheckedChange,
+            )
+            .padding(vertical = VirgaSpacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            stringResource(label),
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        Switch(checked = checked, onCheckedChange = null)
+    }
 }
 
