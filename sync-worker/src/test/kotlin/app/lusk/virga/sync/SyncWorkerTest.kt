@@ -175,6 +175,30 @@ class SyncWorkerTest {
     }
 
     @Test
+    fun copyRunWithFileErrors_recordsSuccessWithErrorCount_notFailed() = runBlocking {
+        // A one-way COPY whose terminal progress carries errors>0 is a PARTIAL SUCCESS:
+        // rclone copied the rest and continued. The worker records SUCCESS with a non-zero
+        // errorCount (the run is NOT FAILED) and writes a count-based summary line.
+        val task = task(direction = SyncDirection.UPLOAD)
+        coEvery { taskRepository.getTask(TASK_ID) } returns task
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = task.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), any(), any()) } returns
+            flow { emit(progress(transferred = 5, errors = 2)) }
+
+        val result = buildWorker().doWork()
+
+        // Recorded SUCCESS (with errorCount=2), not retried, not failed.
+        assertThat(result).isEqualTo(ListenableWorker.Result.success())
+        coVerify {
+            historyRepository.finishRun(RUN_ID, SyncStatus.SUCCESS, 5, any(), 2, any(), any())
+        }
+        coVerify(exactly = 0) {
+            historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any())
+        }
+    }
+
+    @Test
     fun networkFailure_returnsRetry() = runBlocking {
         val task = task(direction = SyncDirection.UPLOAD)
         coEvery { taskRepository.getTask(TASK_ID) } returns task
@@ -226,14 +250,14 @@ class SyncWorkerTest {
         intervalMinutes = null,
     )
 
-    private fun progress(transferred: Int) = SyncProgress(
+    private fun progress(transferred: Int, errors: Int = 0) = SyncProgress(
         bytesTransferred = 100,
         totalBytes = 100,
         speedBytesPerSec = 0.0,
         transferredFiles = transferred,
         totalFiles = transferred,
         etaSeconds = null,
-        errors = 0,
+        errors = errors,
     )
 
     private companion object {

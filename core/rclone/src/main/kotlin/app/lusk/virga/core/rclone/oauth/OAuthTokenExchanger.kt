@@ -124,7 +124,7 @@ class OAuthTokenExchanger @Inject constructor(
     ): Result<Map<String, String>> {
         if (provider.id != OAuthProviders.OneDrive.id) return Result.success(emptyMap())
         val accessToken = runCatching {
-            (json.parseToJsonElement(rcloneTokenJson) as JsonObject)["access_token"]?.jsonPrimitive?.content
+            (json.parseToJsonElement(rcloneTokenJson) as JsonObject)[KEY_ACCESS_TOKEN]?.jsonPrimitive?.content
         }.getOrNull()
         if (accessToken.isNullOrBlank()) {
             return Result.failure(VirgaError.Auth(provider.id, "Could not read OneDrive access token"))
@@ -148,16 +148,16 @@ class OAuthTokenExchanger @Inject constructor(
                     val text = response.body?.string().orEmpty()
                     if (!response.isSuccessful) {
                         return@withContext Result.failure(
-                            VirgaError.Auth("onedrive", "Graph /me/drive failed (${response.code}): ${text.take(50).replace(Regex("[a-zA-Z0-9_-]{20,}"), "[REDACTED]")}"),
+                            VirgaError.Auth(OAuthProviders.OneDrive.id, "Graph /me/drive failed (${response.code}): ${text.take(50).replace(Regex("[a-zA-Z0-9_-]{20,}"), "[REDACTED]")}"),
                         )
                     }
                     val obj = json.parseToJsonElement(text) as? JsonObject
                         ?: return@withContext Result.failure(
-                            VirgaError.Auth("onedrive", "Graph /me/drive returned non-JSON"),
+                            VirgaError.Auth(OAuthProviders.OneDrive.id, "Graph /me/drive returned non-JSON"),
                         )
                     val id = obj["id"]?.jsonPrimitive?.content
                         ?: return@withContext Result.failure(
-                            VirgaError.Auth("onedrive", "Graph /me/drive missing drive id"),
+                            VirgaError.Auth(OAuthProviders.OneDrive.id, "Graph /me/drive missing drive id"),
                         )
                     val driveType = obj["driveType"]?.jsonPrimitive?.content ?: "personal"
                     Result.success(id to driveType)
@@ -165,7 +165,7 @@ class OAuthTokenExchanger @Inject constructor(
             } catch (e: IOException) {
                 Result.failure(VirgaError.Network("Graph /me/drive network failure", e))
             } catch (e: SerializationException) {
-                Result.failure(VirgaError.Auth("onedrive", "Graph /me/drive returned malformed JSON", e))
+                Result.failure(VirgaError.Auth(OAuthProviders.OneDrive.id, "Graph /me/drive returned malformed JSON", e))
             }
         }
 
@@ -179,11 +179,15 @@ class OAuthTokenExchanger @Inject constructor(
             .plusSeconds(expiresIn.toLong())
             .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
         val rclone = buildJsonObject {
-            tokenResponse["access_token"]?.let { put("access_token", it) }
+            tokenResponse[KEY_ACCESS_TOKEN]?.let { put(KEY_ACCESS_TOKEN, it) }
             put("token_type", tokenResponse["token_type"] ?: kotlinx.serialization.json.JsonPrimitive("Bearer"))
             tokenResponse["refresh_token"]?.let { put("refresh_token", it) }
             put("expiry", expiry)
         }
         return json.encodeToString(JsonObject.serializer(), rclone)
+    }
+
+    private companion object {
+        const val KEY_ACCESS_TOKEN = "access_token"
     }
 }

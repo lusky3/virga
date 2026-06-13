@@ -216,7 +216,7 @@ class RcloneEngineImpl @Inject constructor(
                 put("name", name)
                 put("type", "crypt")
                 putJsonObject("parameters") {
-                    put("remote", baseRemoteSpec)
+                    put(KEY_REMOTE, baseRemoteSpec)
                     put("password", password)
                     if (!salt.isNullOrBlank()) put("password2", salt)
                 }
@@ -289,7 +289,7 @@ class RcloneEngineImpl @Inject constructor(
     ): List<FileItem> = withLease { d ->
         val result = rc(d, "operations/list", buildJsonObject {
             put("fs", remote)
-            put("remote", path)
+            put(KEY_REMOTE, path)
             if (recurse) putJsonObject("opt") { put("recurse", true) }
             putFilters(filters)
         })
@@ -310,7 +310,11 @@ class RcloneEngineImpl @Inject constructor(
     }
 
     override fun sync(source: String, dest: String, options: SyncOptions): Flow<SyncProgress> =
-        runJobWithProgress { d ->
+        // A one-way COPY/backup tolerates file-level errors (one unreadable source file
+        // mustn't fail the whole run — rclone copies the rest and continues). A delete
+        // MIRROR must NOT: a mirror that proceeded despite unreadable source files could
+        // delete their cloud counterparts, so it keeps failing hard on any error.
+        runJobWithProgress(tolerateFileErrors = !options.deleteExtraneous) { d ->
             val (srcFs, dstFs) = when (options.direction) {
                 SyncDirection.DOWNLOAD -> dest to source
                 else -> source to dest
@@ -347,7 +351,7 @@ class RcloneEngineImpl @Inject constructor(
                 if (remote.isNotEmpty()) {
                     rc(d, "operations/mkdir", buildJsonObject {
                         put("fs", fs)
-                        put("remote", remote)
+                        put(KEY_REMOTE, remote)
                     })
                 }
             }
@@ -374,7 +378,7 @@ class RcloneEngineImpl @Inject constructor(
     override suspend fun deleteFile(remote: String, path: String): Unit = withLease { d ->
         rc(d, "operations/deletefile", buildJsonObject {
             put("fs", remote)
-            put("remote", path)
+            put(KEY_REMOTE, path)
         })
     }
 
@@ -397,7 +401,7 @@ class RcloneEngineImpl @Inject constructor(
             throw e
         } catch (_: Throwable) {
             try {
-                rc(d, "operations/list", buildJsonObject { put("fs", fs); put("remote", "") })
+                rc(d, "operations/list", buildJsonObject { put("fs", fs); put(KEY_REMOTE, "") })
                 Result.success(Unit)
             } catch (e: CancellationException) {
                 throw e
@@ -419,12 +423,61 @@ class RcloneEngineImpl @Inject constructor(
     }
 
     /**
+     * Resolves a finished rclone job into the terminal [SyncProgress] to emit, or throws.
+     *
+     * rclone reports `success:false` whenever ANY file errored, even though it copied
+     * every other file and continued. For a copy/backup ([tolerateFileErrors] true) a
+     * non-fatal file-level error (`core/stats.fatalError == false`) is a PARTIAL SUCCESS:
+     * return the terminal stats (carrying `errors = N`) so the worker can summarise rather
+     * than fail the whole run. A fatal abort, or a delete-mirror ([tolerateFileErrors]
+     * false), still throws. `core/stats` is fetched only on the success or tolerate paths,
+     * so a mirror failure pays no extra round-trip before throwing.
+     */
+    private suspend fun finishedJobResult(
+        d: RcloneDaemon,
+        status: JsonObject,
+        group: String,
+        tolerateFileErrors: Boolean,
+    ): SyncProgress {
+        val success = status["success"]?.jsonPrimitive?.booleanOrNull ?: false
+        if (success) return statsFor(d, group)
+        // A copy/backup treats a non-fatal file-level failure as partial success.
+        if (tolerateFileErrors) partialSuccessStats(d, group)?.let { return it }
+        throw classifyJobError(status["error"]?.jsonPrimitive?.contentOrNull ?: "sync failed")
+    }
+
+    /** Final transfer stats for a finished job, as [SyncProgress]. */
+    private suspend fun statsFor(d: RcloneDaemon, group: String): SyncProgress =
+        rc(d, CMD_CORE_STATS, buildJsonObject { put(KEY_GROUP, group) }).toSyncProgress()
+
+    /**
+     * For a finished-unsuccessful job: the terminal [SyncProgress] if the failure was only
+     * non-fatal file-level errors (partial success), or null to fall through to the job
+     * error. If the stats probe itself fails we can't confirm non-fatal, so return null
+     * (don't mask the real job error) — and never swallow cancellation.
+     */
+    private suspend fun partialSuccessStats(d: RcloneDaemon, group: String): SyncProgress? {
+        val finalStats = try {
+            rc(d, CMD_CORE_STATS, buildJsonObject { put(KEY_GROUP, group) })
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            return null
+        }
+        val fatal = finalStats["fatalError"]?.jsonPrimitive?.booleanOrNull ?: false
+        return if (fatal) null else finalStats.toSyncProgress()
+    }
+
+    /**
      * Starts an async RC job then polls job/status every tick. core/stats is
      * fetched on the same tick to build the progress snapshot; the final
      * completion stats are extracted from the job/status response to avoid a
      * redundant extra core/stats round-trip.
      */
-    private fun runJobWithProgress(start: suspend (RcloneDaemon) -> JsonObject): Flow<SyncProgress> = flow {
+    private fun runJobWithProgress(
+        tolerateFileErrors: Boolean = false,
+        start: suspend (RcloneDaemon) -> JsonObject,
+    ): Flow<SyncProgress> = flow {
         val d = ensureDaemon()
         val startResult = start(d)
         val jobId = startResult["jobid"]?.jsonPrimitive?.intOrNull
@@ -457,17 +510,11 @@ class RcloneEngineImpl @Inject constructor(
                 val finished = status["finished"]?.jsonPrimitive?.booleanOrNull ?: false
                 if (finished) {
                     jobFinished = true
-                    val success = status["success"]?.jsonPrimitive?.booleanOrNull ?: false
-                    if (!success) {
-                        val err = status["error"]?.jsonPrimitive?.contentOrNull ?: "sync failed"
-                        throw classifyJobError(err)
-                    }
-                    // Fetch final stats once on completion for accurate counters.
-                    emit(rc(d, "core/stats", buildJsonObject { put("group", group) }).toSyncProgress())
+                    emit(finishedJobResult(d, status, group, tolerateFileErrors))
                     break
                 }
                 // Fetch stats only while running (drives the throttled UI update).
-                val stats = rc(d, "core/stats", buildJsonObject { put("group", group) })
+                val stats = rc(d, CMD_CORE_STATS, buildJsonObject { put(KEY_GROUP, group) })
                 val progress = stats.toSyncProgress()
                 val checks = stats["checks"]?.jsonPrimitive?.intOrNull ?: 0
                 if (progress.bytesTransferred != lastBytes ||
@@ -562,6 +609,11 @@ class RcloneEngineImpl @Inject constructor(
 
     private companion object {
         const val TAG = "RcloneEngine"
+        // rclone RC parameter key naming the (sub)path within a remote's filesystem.
+        const val KEY_REMOTE = "remote"
+        // rclone RC command + param for fetching a job's transfer statistics.
+        const val CMD_CORE_STATS = "core/stats"
+        const val KEY_GROUP = "group"
         const val POLL_INTERVAL_MS = 750L
         // Max time an in-flight job may make zero progress before we abort it.
         const val STALL_TIMEOUT_MS = 120_000L

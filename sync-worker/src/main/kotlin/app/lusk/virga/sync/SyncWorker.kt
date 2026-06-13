@@ -223,7 +223,21 @@ class SyncWorker @AssistedInject constructor(
             .onFailure { Log.w(TAG, "Failed to prune old sync runs", it) }
 
         val result = if (failure == null) {
-            log.line("Completed: ${last?.transferredFiles ?: 0} file(s) transferred")
+            // A COPY/backup run that hit file-level errors (a file couldn't be read or
+            // transferred) is a PARTIAL SUCCESS: rclone copied the rest and continued, so
+            // the run is recorded SUCCESS with a non-zero errorCount — not FAILED. rclone's
+            // RC stats give an error COUNT, not a per-file list, so the summary is
+            // count-based; per-file enumeration would require capturing rclone's log stream
+            // (out of scope). The mirror/bisync paths still fail hard (handled upstream).
+            val errorCount = last?.errors ?: 0
+            if (errorCount > 0) {
+                log.line(
+                    "Completed with errors: ${last?.transferredFiles ?: 0} transferred, " +
+                        "$errorCount file(s) could not be read/transferred — see entries above.",
+                )
+            } else {
+                log.line("Completed: ${last?.transferredFiles ?: 0} file(s) transferred")
+            }
             finishSucceeded(runId, last, log.path.takeIf { log.flush() }, task.direction, runStartMs)
             // After a bisync, scan the destination for rclone conflict files
             // and queue them for user resolution. detectFor → engine.listDir needs
@@ -251,14 +265,22 @@ class SyncWorker @AssistedInject constructor(
                     }
                 }
             }
-            // Post a brief, quiet "Sync complete" so the foreground notification
-            // doesn't just silently vanish on success.
+            // Post the result notification. On a clean run, a quiet "Sync complete" so the
+            // foreground notification doesn't silently vanish. On a partial success
+            // (errors>0), the error builder instead — it carries the error count and a Retry
+            // action, so the user isn't told the backup was clean when some files were skipped.
             runCatching {
-                NotificationManagerCompat.from(applicationContext)
-                    .notify(
-                        SyncNotifications.resultId(taskId),
-                        notifications.complete(task.name, last?.transferredFiles ?: 0, taskId),
+                val notification = if (errorCount > 0) {
+                    notifications.error(
+                        task.name,
+                        "Completed with $errorCount error(s) — some files couldn't be read or transferred.",
+                        taskId,
                     )
+                } else {
+                    notifications.complete(task.name, last?.transferredFiles ?: 0, taskId)
+                }
+                NotificationManagerCompat.from(applicationContext)
+                    .notify(SyncNotifications.resultId(taskId), notification)
             }
             Result.success()
         } else {

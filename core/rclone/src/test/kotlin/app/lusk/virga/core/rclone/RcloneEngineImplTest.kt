@@ -438,7 +438,10 @@ class RcloneEngineImplTest {
         every { daemonManager.isAlive(fakeDaemon) } returns true
         coEvery { apiClient.call(any(), any(), any(), "sync/copy", any()) } returns
             buildJsonObject { put("jobid", 7) }
-        coEvery { apiClient.call(any(), any(), any(), "core/stats", any()) } returns buildJsonObject {}
+        // fatalError=true: a genuine abort (not a tolerable file-level error), so even a
+        // COPY must throw rather than treat it as a partial success.
+        coEvery { apiClient.call(any(), any(), any(), "core/stats", any()) } returns
+            buildJsonObject { put("fatalError", true) }
         coEvery { apiClient.call(any(), any(), any(), "job/status", any()) } returns
             buildJsonObject { put("finished", true); put("success", false); put("error", "permission denied") }
 
@@ -483,6 +486,112 @@ class RcloneEngineImplTest {
 
         coVerify { apiClient.call(any(), any(), any(), "sync/copy", any()) }
         coVerify { apiClient.call(any(), any(), any(), "sync/sync", any()) }
+    }
+
+    // --- partial-success tolerance: file-level errors don't fail a COPY/backup ---
+    //
+    // rclone reports success:false whenever ANY file errored, even though it copied the
+    // rest and continued. A one-way COPY (deleteExtraneous=false) must treat a non-fatal
+    // file error as a PARTIAL SUCCESS: emit the terminal stats (errors=N) and complete,
+    // not throw. A fatal abort (fatalError=true) or a delete MIRROR still fails hard.
+
+    @Test fun `sync copy with file-level errors completes as partial success`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "sync/copy", any()) } returns
+            buildJsonObject { put("jobid", 11) }
+        // Finished but not successful: rclone hit file-level errors but no fatal abort.
+        coEvery { apiClient.call(any(), any(), any(), "job/status", any()) } returns
+            buildJsonObject { put("finished", true); put("success", false); put("error", "1 error(s) reading") }
+        // core/stats reports fatalError=false and a non-zero error COUNT.
+        coEvery { apiClient.call(any(), any(), any(), "core/stats", any()) } returns buildJsonObject {
+            put("bytes", 300L)
+            put("transfers", 3)
+            put("errors", 2)
+            put("fatalError", false)
+        }
+
+        engine.startDaemon()
+
+        // deleteExtraneous=false (COPY) tolerates file errors: terminal SyncProgress(errors=2),
+        // then complete — no thrown error.
+        engine.sync("local:/x", "gdrive:x", SyncOptions(SyncDirection.UPLOAD)).test {
+            val final = awaitItem()
+            assertThat(final.errors).isEqualTo(2)
+            assertThat(final.transferredFiles).isEqualTo(3)
+            awaitComplete()
+        }
+    }
+
+    @Test fun `sync copy with a fatal error still throws`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "sync/copy", any()) } returns
+            buildJsonObject { put("jobid", 12) }
+        coEvery { apiClient.call(any(), any(), any(), "job/status", any()) } returns
+            buildJsonObject { put("finished", true); put("success", false); put("error", "couldn't connect: auth failed") }
+        // fatalError=true: an auth/connection abort, not a tolerable file error.
+        coEvery { apiClient.call(any(), any(), any(), "core/stats", any()) } returns buildJsonObject {
+            put("errors", 1)
+            put("fatalError", true)
+        }
+
+        engine.startDaemon()
+
+        engine.sync("local:/x", "gdrive:x", SyncOptions(SyncDirection.UPLOAD)).test {
+            val err = awaitError()
+            assertThat(err).isInstanceOf(VirgaError::class.java)
+            assertThat(err.message).contains("auth failed")
+        }
+    }
+
+    @Test fun `sync mirror with file-level errors still throws even when not fatal`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "sync/sync", any()) } returns
+            buildJsonObject { put("jobid", 13) }
+        coEvery { apiClient.call(any(), any(), any(), "job/status", any()) } returns
+            buildJsonObject { put("finished", true); put("success", false); put("error", "1 error reading source") }
+        // Non-fatal file error, but a delete MIRROR must keep failing hard: proceeding could
+        // delete the cloud counterparts of source files it couldn't read.
+        coEvery { apiClient.call(any(), any(), any(), "core/stats", any()) } returns buildJsonObject {
+            put("errors", 1)
+            put("fatalError", false)
+        }
+
+        engine.startDaemon()
+
+        engine.sync("local:/x", "gdrive:x", SyncOptions(SyncDirection.UPLOAD, deleteExtraneous = true)).test {
+            val err = awaitError()
+            assertThat(err).isInstanceOf(VirgaError::class.java)
+            assertThat(err.message).contains("error reading source")
+        }
+    }
+
+    @Test fun `sync copy throws the job error (not the stats error) when core_stats fails`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "sync/copy", any()) } returns
+            buildJsonObject { put("jobid", 14) }
+        coEvery { apiClient.call(any(), any(), any(), "job/status", any()) } returns
+            buildJsonObject { put("finished", true); put("success", false); put("error", "1 error(s) reading") }
+        // The fatalError probe fails: we can't confirm the failure is non-fatal, so the
+        // run must surface the ORIGINAL job error — not the stats-fetch error, and not a crash.
+        coEvery { apiClient.call(any(), any(), any(), "core/stats", any()) } throws
+            VirgaError.Network("daemon unreachable for stats")
+
+        engine.startDaemon()
+
+        engine.sync("local:/x", "gdrive:x", SyncOptions(SyncDirection.UPLOAD)).test {
+            val err = awaitError()
+            assertThat(err).isInstanceOf(VirgaError::class.java)
+            assertThat(err.message).contains("reading")
+            assertThat(err.message).doesNotContain("stats")
+        }
     }
 
     // --- job control: collector cancellation aborts the async job (rclone-M4) ---
