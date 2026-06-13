@@ -441,8 +441,18 @@ class RcloneEngineImpl @Inject constructor(
     ): SyncProgress {
         val success = status["success"]?.jsonPrimitive?.booleanOrNull ?: false
         if (!success && tolerateFileErrors) {
-            val finalStats = rc(d, CMD_CORE_STATS, buildJsonObject { put(KEY_GROUP, group) })
-            if (finalStats["fatalError"]?.jsonPrimitive?.booleanOrNull != true) {
+            // Confirm the failure is non-fatal before claiming partial success. If the
+            // stats call itself fails we can't confirm that, so fall through to the
+            // original job error rather than masking it with the stats error (and never
+            // swallow cancellation).
+            val finalStats = try {
+                rc(d, CMD_CORE_STATS, buildJsonObject { put(KEY_GROUP, group) })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                null
+            }
+            if (finalStats != null && finalStats["fatalError"]?.jsonPrimitive?.booleanOrNull != true) {
                 return finalStats.toSyncProgress()
             }
         }

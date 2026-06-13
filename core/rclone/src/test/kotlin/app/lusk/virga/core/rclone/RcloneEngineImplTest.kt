@@ -571,6 +571,29 @@ class RcloneEngineImplTest {
         }
     }
 
+    @Test fun `sync copy throws the job error (not the stats error) when core_stats fails`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "sync/copy", any()) } returns
+            buildJsonObject { put("jobid", 14) }
+        coEvery { apiClient.call(any(), any(), any(), "job/status", any()) } returns
+            buildJsonObject { put("finished", true); put("success", false); put("error", "1 error(s) reading") }
+        // The fatalError probe fails: we can't confirm the failure is non-fatal, so the
+        // run must surface the ORIGINAL job error — not the stats-fetch error, and not a crash.
+        coEvery { apiClient.call(any(), any(), any(), "core/stats", any()) } throws
+            VirgaError.Network("daemon unreachable for stats")
+
+        engine.startDaemon()
+
+        engine.sync("local:/x", "gdrive:x", SyncOptions(SyncDirection.UPLOAD)).test {
+            val err = awaitError()
+            assertThat(err).isInstanceOf(VirgaError::class.java)
+            assertThat(err.message).contains("reading")
+            assertThat(err.message).doesNotContain("stats")
+        }
+    }
+
     // --- job control: collector cancellation aborts the async job (rclone-M4) ---
 
     @Test fun `cancelling the sync collector mid-poll issues job_stop`() = runTest(testDispatcher) {
