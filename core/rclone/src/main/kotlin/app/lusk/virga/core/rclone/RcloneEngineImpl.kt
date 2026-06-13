@@ -440,26 +440,32 @@ class RcloneEngineImpl @Inject constructor(
         tolerateFileErrors: Boolean,
     ): SyncProgress {
         val success = status["success"]?.jsonPrimitive?.booleanOrNull ?: false
-        if (!success && tolerateFileErrors) {
-            // Confirm the failure is non-fatal before claiming partial success. If the
-            // stats call itself fails we can't confirm that, so fall through to the
-            // original job error rather than masking it with the stats error (and never
-            // swallow cancellation).
-            val finalStats = try {
-                rc(d, CMD_CORE_STATS, buildJsonObject { put(KEY_GROUP, group) })
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Throwable) {
-                null
-            }
-            if (finalStats != null && finalStats["fatalError"]?.jsonPrimitive?.booleanOrNull != true) {
-                return finalStats.toSyncProgress()
-            }
+        if (success) return statsFor(d, group)
+        // A copy/backup treats a non-fatal file-level failure as partial success.
+        if (tolerateFileErrors) partialSuccessStats(d, group)?.let { return it }
+        throw classifyJobError(status["error"]?.jsonPrimitive?.contentOrNull ?: "sync failed")
+    }
+
+    /** Final transfer stats for a finished job, as [SyncProgress]. */
+    private suspend fun statsFor(d: RcloneDaemon, group: String): SyncProgress =
+        rc(d, CMD_CORE_STATS, buildJsonObject { put(KEY_GROUP, group) }).toSyncProgress()
+
+    /**
+     * For a finished-unsuccessful job: the terminal [SyncProgress] if the failure was only
+     * non-fatal file-level errors (partial success), or null to fall through to the job
+     * error. If the stats probe itself fails we can't confirm non-fatal, so return null
+     * (don't mask the real job error) — and never swallow cancellation.
+     */
+    private suspend fun partialSuccessStats(d: RcloneDaemon, group: String): SyncProgress? {
+        val finalStats = try {
+            rc(d, CMD_CORE_STATS, buildJsonObject { put(KEY_GROUP, group) })
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            return null
         }
-        if (!success) {
-            throw classifyJobError(status["error"]?.jsonPrimitive?.contentOrNull ?: "sync failed")
-        }
-        return rc(d, CMD_CORE_STATS, buildJsonObject { put(KEY_GROUP, group) }).toSyncProgress()
+        val fatal = finalStats["fatalError"]?.jsonPrimitive?.booleanOrNull ?: false
+        return if (fatal) null else finalStats.toSyncProgress()
     }
 
     /**
