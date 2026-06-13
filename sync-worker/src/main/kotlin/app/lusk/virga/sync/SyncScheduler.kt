@@ -98,7 +98,14 @@ class SyncScheduler @Inject constructor(
             .build()
         workManager.enqueueUniqueWork(
             uniqueName(task.id),
-            ExistingWorkPolicy.REPLACE,
+            // APPEND_OR_REPLACE, not REPLACE: a still-running calendar worker
+            // re-enqueues its own next occurrence under THIS same unique name.
+            // REPLACE would cancel the running worker before it can finalize
+            // history / write back staged downloads / post its result, and a
+            // watchdog heartbeat re-running scheduleCalendar would do the same to
+            // any in-flight calendar sync. APPEND queues the next run behind the
+            // current one; if none is running it behaves like a fresh enqueue.
+            ExistingWorkPolicy.APPEND_OR_REPLACE,
             request,
         )
     }
@@ -112,9 +119,29 @@ class SyncScheduler @Inject constructor(
         workManager.cancelUniqueWork(uniqueName(taskId) + "_now")
     }
 
-    /** Re-registers every scheduled task — used after device reboot. */
+    /**
+     * Re-registers every scheduled task — used after device reboot and by the
+     * watchdog heartbeat (every ~15 min). Skips any task whose unique work is
+     * currently RUNNING: re-registering a calendar task mid-run would re-enqueue
+     * it (APPEND_OR_REPLACE) or, for a heartbeat firing repeatedly, churn the
+     * schedule under an in-flight sync. Reboot can't have a RUNNING worker, so
+     * the skip is a no-op there.
+     */
     suspend fun rescheduleAll() {
-        taskRepository.scheduledTasks().forEach(::schedule)
+        taskRepository.scheduledTasks().forEach { task ->
+            if (!isRunning(task.id)) schedule(task)
+        }
+    }
+
+    /** True if either the scheduled or the "_now" unique work for [taskId] is RUNNING. */
+    private fun isRunning(taskId: Long): Boolean {
+        val names = listOf(uniqueName(taskId), uniqueName(taskId) + "_now")
+        return names.any { name ->
+            runCatching {
+                workManager.getWorkInfosForUniqueWork(name).get()
+                    .any { it.state == androidx.work.WorkInfo.State.RUNNING }
+            }.getOrDefault(false)
+        }
     }
 
     private fun SyncTask.toConstraints(): Constraints = Constraints.Builder()

@@ -70,7 +70,21 @@ class SyncWorker @AssistedInject constructor(
             return Result.failure()
         }
 
-        setForeground(foregroundInfo(notifications.progress(task.name, null, taskId)))
+        // Mutual exclusion: if a sibling unique-work name for this task is already
+        // RUNNING (a scheduled run while a manual "_now" run is in flight, or vice
+        // versa), bail out — that run is handling it. Without this, two runs of the
+        // same task share a staging dir and a delete-enabled mirror could see an
+        // emptied source. Exclude this worker's own WorkInfo from the check.
+        if (anotherRunInFlight(taskId)) {
+            Log.w(TAG, "Skipping sync of task $taskId: another run is already in flight")
+            return Result.success()
+        }
+
+        // setForeground promotes this worker to a foreground service. On Android 12+
+        // a backgrounded, non-expedited worker can't legally start one, so this
+        // throws ForegroundServiceStartNotAllowedException — the sync should still
+        // run (just without the progress notification), never silently die.
+        startForegroundQuietly(notifications.progress(task.name, null, taskId))
 
         val runStartMs = System.currentTimeMillis()
         val runId = historyRepository.startRun(taskId)
@@ -84,7 +98,7 @@ class SyncWorker @AssistedInject constructor(
         log.line("Source: ${task.sourcePath}")
         log.line("Destination: ${task.remoteName}:${task.remotePath}")
 
-        val staged = staging.prepare(task.sourcePath, task.direction)
+        val staged = staging.prepare(task.sourcePath, task.direction, runId)
         val effectiveTask = if (staged.isStaged) task.copy(sourcePath = staged.localPath) else task
 
         var last: SyncProgress? = null
@@ -162,48 +176,52 @@ class SyncWorker @AssistedInject constructor(
                                     "${progress.transferredFiles}/${progress.totalFiles} files · " +
                                     "${progress.errors} error(s)",
                             )
-                            setForeground(foregroundInfo(notifications.progress(task.name, progress, taskId)))
+                            startForegroundQuietly(notifications.progress(task.name, progress, taskId))
                         }
                     }
                 }
             }
+            // For staged downloads, copy rclone's output back into the SAF tree
+            // BEFORE the finally runs staging.cleanup() (which recursively deletes
+            // the staged dir). Doing it in the epilogue let cleanup wipe the dir
+            // first, so writeBack copied nothing and the run was still recorded
+            // SUCCESS — silent data loss. A write-back failure becomes the run's
+            // failure so the epilogue records FAILED + notifies + returns failure.
+            if (failure == null && staged.isStaged && task.direction == SyncDirection.DOWNLOAD) {
+                runCatching { staging.writeBack(staged) }.onFailure { e ->
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    failure = VirgaError.Storage(e.message ?: "Failed to write back to folder")
+                }
+            }
+        } catch (t: kotlinx.coroutines.CancellationException) {
+            // The worker was cancelled (user cancel, WorkManager stop, or scheduler
+            // REPLACE). Record the run as CANCELLED before rethrowing — under
+            // NonCancellable so this finalization isn't itself cancelled — otherwise
+            // it stays stuck RUNNING. Cancellation must still propagate so
+            // WorkManager can stop the worker cleanly.
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                runCatching { finishCancelled(runId, last, task.direction, runStartMs) }
+            }
+            throw t
         } catch (t: Throwable) {
             // A direct throw in the orchestration body — e.g. listRemotes() in the
             // local-remote guard — must be recorded as a failure, not escape past
-            // the finally and leave the run stuck in RUNNING forever. Cancellation
-            // must still propagate so WorkManager can stop the worker cleanly.
-            if (t is kotlinx.coroutines.CancellationException) throw t
+            // the finally and leave the run stuck in RUNNING forever.
             failure = t
         } finally {
-            if (leased) runCatching { engine.releaseDaemon() }
-            runCatching { staging.cleanup(staged) }
+            // Cleanup must survive cancellation: releaseDaemon()/cleanup() suspend
+            // (withContext(io)), which would no-op on an already-cancelled job and
+            // leak the daemon + plaintext config lease and the staged cache dir.
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                if (leased) runCatching { engine.releaseDaemon() }
+                runCatching { staging.cleanup(staged) }
+            }
         }
 
         // Bound the unbounded sync_runs table: drop runs older than the retention window.
         runCatching { historyRepository.pruneOlderThan(System.currentTimeMillis() - RUN_RETENTION_MS) }
 
-        // A calendar schedule runs as a one-shot, so queue the NEXT occurrence now
-        // that this run is finished (regardless of outcome). Interval/periodic
-        // tasks repeat on their own, so they don't need re-enqueuing here.
-        if (task.scheduleDaysMask != 0 && task.enabled) {
-            runCatching { scheduler.schedule(task) }
-        }
-
-        return if (failure == null) {
-            // For staged downloads, copy rclone's output back into the SAF tree.
-            if (staged.isStaged && task.direction == SyncDirection.DOWNLOAD) {
-                val writeResult = runCatching { staging.writeBack(staged) }
-                if (writeResult.isFailure) {
-                    val msg = writeResult.exceptionOrNull()?.message ?: "Failed to write back to folder"
-                    log.line("Failed: $msg")
-                    finishFailed(runId, last, msg, log.path.takeIf { log.flush() }, task.direction, runStartMs)
-                    runCatching {
-                        NotificationManagerCompat.from(applicationContext)
-                            .notify(SyncNotifications.RESULT_NOTIFICATION_ID, notifications.error(task.name, msg, taskId))
-                    }
-                    return Result.failure()
-                }
-            }
+        val result = if (failure == null) {
             log.line("Completed: ${last?.transferredFiles ?: 0} file(s) transferred")
             finishSucceeded(runId, last, log.path.takeIf { log.flush() }, task.direction, runStartMs)
             // After a bisync, scan the destination for rclone conflict files
@@ -228,6 +246,17 @@ class SyncWorker @AssistedInject constructor(
             // Transient transport problems are worth retrying; everything else fails.
             if (failure is VirgaError.Network) Result.retry() else Result.failure()
         }
+
+        // LAST statement: a calendar schedule runs as a one-shot, so queue the NEXT
+        // occurrence now that this run is fully finalized (regardless of outcome).
+        // Done after the result is determined and history is written so the
+        // re-enqueue (APPEND_OR_REPLACE) can't race this still-RUNNING worker and
+        // cancel its history/notification. Interval/periodic tasks repeat on their
+        // own and don't need re-enqueuing here.
+        if (task.scheduleDaysMask != 0 && task.enabled) {
+            runCatching { scheduler.schedule(task) }
+        }
+        return result
     }
 
     /** Record a SUCCESS run from the last observed [progress] snapshot. */
@@ -288,6 +317,72 @@ class SyncWorker @AssistedInject constructor(
                 finishedAtEpochMs = finishedAt,
             )
         }.onFailure { Log.w(TAG, "Failed to record lifetime stats for failed run", it) }
+    }
+
+    /** Record a CANCELLED run from the last observed [progress] snapshot. */
+    private suspend fun finishCancelled(
+        runId: Long,
+        progress: SyncProgress?,
+        direction: SyncDirection,
+        runStartMs: Long,
+    ) {
+        historyRepository.finishRun(
+            runId = runId,
+            status = SyncStatus.CANCELLED,
+            filesTransferred = progress?.transferredFiles ?: 0,
+            bytesTransferred = progress?.bytesTransferred ?: 0L,
+            errorCount = progress?.errors ?: 0,
+        )
+        val finishedAt = System.currentTimeMillis()
+        runCatching {
+            statsRepository.recordRun(
+                direction = direction,
+                bytesTransferred = progress?.bytesTransferred ?: 0L,
+                filesTransferred = progress?.transferredFiles ?: 0,
+                success = false,
+                durationMs = maxOf(0L, finishedAt - runStartMs),
+                finishedAtEpochMs = finishedAt,
+            )
+        }.onFailure { Log.w(TAG, "Failed to record lifetime stats for cancelled run", it) }
+    }
+
+    /**
+     * Promote to a foreground service, tolerating the OS refusing it. On Android
+     * 12+ a backgrounded, non-expedited worker can't start an FGS
+     * ([ForegroundServiceStartNotAllowedException]); older guards may also throw
+     * [IllegalStateException]. Either way the sync should continue without the
+     * progress notification rather than failing or aborting a healthy transfer.
+     */
+    private suspend fun startForegroundQuietly(notification: android.app.Notification) {
+        try {
+            setForeground(foregroundInfo(notification))
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // ForegroundServiceStartNotAllowedException is API 31+; catch broadly so
+            // older API levels (where the class isn't loaded) still compile and run.
+            Log.w(TAG, "Could not start foreground service; continuing without it", e)
+        }
+    }
+
+    /**
+     * True if a sibling unique-work name for [taskId] is RUNNING in a worker other
+     * than this one. Guards against the scheduled and manual ("_now") runs of the
+     * same task executing concurrently (shared staging dir, mirror data loss).
+     */
+    private fun anotherRunInFlight(taskId: Long): Boolean {
+        val names = listOf(
+            UNIQUE_PREFIX + taskId,
+            UNIQUE_PREFIX + taskId + "_now",
+        )
+        val workManager = androidx.work.WorkManager.getInstance(applicationContext)
+        return names.any { name ->
+            runCatching {
+                workManager.getWorkInfosForUniqueWork(name).get().any { info ->
+                    info.state == androidx.work.WorkInfo.State.RUNNING && info.id != id
+                }
+            }.getOrDefault(false)
+        }
     }
 
     private fun foregroundInfo(notification: android.app.Notification): ForegroundInfo =
