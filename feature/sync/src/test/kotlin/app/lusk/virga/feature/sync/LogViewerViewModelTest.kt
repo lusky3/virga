@@ -1,5 +1,6 @@
 package app.lusk.virga.feature.sync
 
+import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -20,6 +21,17 @@ class LogViewerViewModelTest {
     @TempDir
     lateinit var tempDir: File
 
+    // The VM's file read runs on dispatchers.io; route it to the test dispatcher so
+    // advanceUntilIdle() deterministically waits for it (a real Dispatchers.IO would
+    // race the assertion — the cause of this suite's intermittent failures).
+    private val dispatchers = object : DispatcherProvider {
+        override val main get() = mainDispatcher.dispatcher
+        override val default get() = mainDispatcher.dispatcher
+        override val io get() = mainDispatcher.dispatcher
+    }
+
+    private fun vm() = LogViewerViewModel(dispatchers)
+
     private fun logFile(name: String, content: String): String {
         val f = File(tempDir, name)
         f.writeText(content)
@@ -30,7 +42,7 @@ class LogViewerViewModelTest {
 
     @Test
     fun uiState_initialValue_isLoadingWithEmptyLines() {
-        val vm = LogViewerViewModel()
+        val vm = vm()
 
         val state = vm.uiState.value
         assertThat(state.loading).isTrue()
@@ -44,7 +56,7 @@ class LogViewerViewModelTest {
 
     @Test
     fun load_readsFileLines_andClearsLoading() = runTest(mainDispatcher.dispatcher) {
-        val vm = LogViewerViewModel()
+        val vm = vm()
         val job = backgroundScope.launch { vm.uiState.collect {} }
         val path = logFile("run.log", "line one\nline two\nline three")
 
@@ -61,7 +73,7 @@ class LogViewerViewModelTest {
 
     @Test
     fun load_trimsTrailingNewline_doesNotProduceEmptyTrailingLine() = runTest(mainDispatcher.dispatcher) {
-        val vm = LogViewerViewModel()
+        val vm = vm()
         val job = backgroundScope.launch { vm.uiState.collect {} }
         val path = logFile("run.log", "alpha\nbeta\n")
 
@@ -78,7 +90,7 @@ class LogViewerViewModelTest {
 
     @Test
     fun load_emptyFile_loadsWithNoLines_andReadFailedFalse() = runTest(mainDispatcher.dispatcher) {
-        val vm = LogViewerViewModel()
+        val vm = vm()
         val job = backgroundScope.launch { vm.uiState.collect {} }
         val path = logFile("empty.log", "")
 
@@ -96,7 +108,7 @@ class LogViewerViewModelTest {
 
     @Test
     fun load_missingFile_setsReadFailed_andClearsLoading() = runTest(mainDispatcher.dispatcher) {
-        val vm = LogViewerViewModel()
+        val vm = vm()
         val job = backgroundScope.launch { vm.uiState.collect {} }
         val path = File(tempDir, "does-not-exist.log").absolutePath
 
@@ -114,7 +126,7 @@ class LogViewerViewModelTest {
 
     @Test
     fun load_calledTwice_ignoresSecondPath() = runTest(mainDispatcher.dispatcher) {
-        val vm = LogViewerViewModel()
+        val vm = vm()
         val job = backgroundScope.launch { vm.uiState.collect {} }
         val first = logFile("first.log", "first content")
         val second = logFile("second.log", "second content\nmore")
@@ -133,7 +145,7 @@ class LogViewerViewModelTest {
 
     @Test
     fun setQuery_filtersLinesCaseInsensitively() = runTest(mainDispatcher.dispatcher) {
-        val vm = LogViewerViewModel()
+        val vm = vm()
         val job = backgroundScope.launch { vm.uiState.collect {} }
         val path = logFile("run.log", "INFO start\nERROR boom\ninfo done\nWARN slow")
 
@@ -152,7 +164,7 @@ class LogViewerViewModelTest {
 
     @Test
     fun setQuery_blank_showsAllLines() = runTest(mainDispatcher.dispatcher) {
-        val vm = LogViewerViewModel()
+        val vm = vm()
         val job = backgroundScope.launch { vm.uiState.collect {} }
         val path = logFile("run.log", "a\nb\nc")
 
@@ -172,7 +184,7 @@ class LogViewerViewModelTest {
 
     @Test
     fun setQuery_noMatch_yieldsEmptyVisibleLines() = runTest(mainDispatcher.dispatcher) {
-        val vm = LogViewerViewModel()
+        val vm = vm()
         val job = backgroundScope.launch { vm.uiState.collect {} }
         val path = logFile("run.log", "alpha\nbeta")
 
@@ -190,7 +202,7 @@ class LogViewerViewModelTest {
 
     @Test
     fun rawText_returnsFullJoinedText_regardlessOfQuery() = runTest(mainDispatcher.dispatcher) {
-        val vm = LogViewerViewModel()
+        val vm = vm()
         val job = backgroundScope.launch { vm.uiState.collect {} }
         val path = logFile("run.log", "one\ntwo\nthree")
 
@@ -205,7 +217,7 @@ class LogViewerViewModelTest {
 
     @Test
     fun rawText_isEmptyBeforeLoad() {
-        val vm = LogViewerViewModel()
+        val vm = vm()
 
         assertThat(vm.rawText()).isEmpty()
     }
