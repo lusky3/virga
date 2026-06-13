@@ -127,8 +127,21 @@ internal class SyncNotifications(private val context: Context) {
 
     companion object {
         const val PROGRESS_MAX = 100
-        const val FOREGROUND_NOTIFICATION_ID = 42
-        const val RESULT_NOTIFICATION_ID = 43
+
+        // Per-task notification IDs: concurrent syncs ("Sync all") must each get
+        // their own progress + result notification, otherwise they clobber each
+        // other (the Cancel action would target only the last-posted one, and N
+        // failures would collapse into a single notification). Bases are far apart
+        // so a foreground id can never alias a result id for plausible task ids
+        // (collision needs taskId difference >= 100000, which Room won't reach).
+        private const val FOREGROUND_BASE = 100_000
+        private const val RESULT_BASE = 200_000
+
+        /** Foreground (progress) notification id for [taskId]. */
+        fun foregroundId(taskId: Long): Int = FOREGROUND_BASE + taskId.toInt()
+
+        /** Result (success/error) notification id for [taskId]. */
+        fun resultId(taskId: Long): Int = RESULT_BASE + taskId.toInt()
 
         // Request-code bases — offset by taskId to avoid per-task collisions.
         private const val RC_LAUNCH = 0

@@ -142,6 +142,39 @@ class SyncWorkerTest {
     }
 
     @Test
+    fun bisyncSuccess_runsConflictDetectionUnderAFreshDaemonLease() = runBlocking {
+        // sync-M1: detectFor() → engine.listDir() needs a daemon, but the worker's
+        // own lease is released (daemon stopped) in the finally before the epilogue.
+        // So the epilogue must acquire a fresh lease around detectFor and release it,
+        // or it leaves an orphan unleased daemon. A non-content:// source avoids the
+        // SAF-bisync early-out so the run reaches the success epilogue.
+        val task = SyncTask(
+            id = TASK_ID,
+            name = "test",
+            sourcePath = "/sdcard/DCIM",
+            remoteName = "gdrive",
+            remotePath = "/Backup",
+            direction = SyncDirection.BISYNC,
+            intervalMinutes = null,
+        )
+        coEvery { taskRepository.getTask(TASK_ID) } returns task
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = task.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), any(), any()) } returns
+            flow { emit(progress(transferred = 1)) }
+
+        val result = buildWorker().doWork()
+
+        assertThat(result).isEqualTo(ListenableWorker.Result.success())
+        // The epilogue's fresh lease wraps detectFor and is released afterwards.
+        coVerifyOrder {
+            conflictRepository.detectFor(task)
+            engine.releaseDaemon()
+        }
+        coVerify(atLeast = 2) { engine.acquireDaemon() }
+    }
+
+    @Test
     fun networkFailure_returnsRetry() = runBlocking {
         val task = task(direction = SyncDirection.UPLOAD)
         coEvery { taskRepository.getTask(TASK_ID) } returns task

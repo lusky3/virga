@@ -65,7 +65,7 @@ class SyncWorker @AssistedInject constructor(
             finishFailed(historyRepository.startRun(taskId), null, msg, direction = task.direction, runStartMs = earlyStartMs)
             runCatching {
                 NotificationManagerCompat.from(applicationContext)
-                    .notify(SyncNotifications.RESULT_NOTIFICATION_ID, notifications.error(task.name, msg, taskId))
+                    .notify(SyncNotifications.resultId(taskId), notifications.error(task.name, msg, taskId))
             }
             return Result.failure()
         }
@@ -84,7 +84,7 @@ class SyncWorker @AssistedInject constructor(
         // a backgrounded, non-expedited worker can't legally start one, so this
         // throws ForegroundServiceStartNotAllowedException — the sync should still
         // run (just without the progress notification), never silently die.
-        startForegroundQuietly(notifications.progress(task.name, null, taskId))
+        startForegroundQuietly(taskId, notifications.progress(task.name, null, taskId))
 
         val runStartMs = System.currentTimeMillis()
         val runId = historyRepository.startRun(taskId)
@@ -176,7 +176,7 @@ class SyncWorker @AssistedInject constructor(
                                     "${progress.transferredFiles}/${progress.totalFiles} files · " +
                                     "${progress.errors} error(s)",
                             )
-                            startForegroundQuietly(notifications.progress(task.name, progress, taskId))
+                            startForegroundQuietly(taskId, notifications.progress(task.name, progress, taskId))
                         }
                     }
                 }
@@ -220,19 +220,45 @@ class SyncWorker @AssistedInject constructor(
 
         // Bound the unbounded sync_runs table: drop runs older than the retention window.
         runCatching { historyRepository.pruneOlderThan(System.currentTimeMillis() - RUN_RETENTION_MS) }
+            .onFailure { Log.w(TAG, "Failed to prune old sync runs", it) }
 
         val result = if (failure == null) {
             log.line("Completed: ${last?.transferredFiles ?: 0} file(s) transferred")
             finishSucceeded(runId, last, log.path.takeIf { log.flush() }, task.direction, runStartMs)
             // After a bisync, scan the destination for rclone conflict files
-            // and queue them for user resolution.
+            // and queue them for user resolution. detectFor → engine.listDir needs
+            // a daemon; the worker's own lease was already released in the finally
+            // above (which stopped the daemon + re-encrypted the config), so acquire
+            // a fresh lease here and release it (under NonCancellable, matching the
+            // cleanup pattern) — otherwise ensureDaemon() would start an orphan,
+            // unleased rclone process that nothing ever tears down.
             if (task.direction == SyncDirection.BISYNC) {
-                // detectFor returns Result<Int>; surface both a thrown error and a
-                // returned failure instead of silently reporting a clean sync.
-                runCatching { conflictRepository.detectFor(task) }
-                    .onFailure { Log.w(TAG, "conflict detection threw", it) }
-                    .getOrNull()
-                    ?.onFailure { Log.w(TAG, "conflict detection failed", it) }
+                var conflictLeased = false
+                try {
+                    engine.acquireDaemon()
+                    conflictLeased = true
+                    // detectFor returns Result<Int>; surface both a thrown error and a
+                    // returned failure instead of silently reporting a clean sync.
+                    runCatching { conflictRepository.detectFor(task) }
+                        .onFailure { Log.w(TAG, "conflict detection threw", it) }
+                        .getOrNull()
+                        ?.onFailure { Log.w(TAG, "conflict detection failed", it) }
+                } finally {
+                    if (conflictLeased) {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                            runCatching { engine.releaseDaemon() }
+                        }
+                    }
+                }
+            }
+            // Post a brief, quiet "Sync complete" so the foreground notification
+            // doesn't just silently vanish on success.
+            runCatching {
+                NotificationManagerCompat.from(applicationContext)
+                    .notify(
+                        SyncNotifications.resultId(taskId),
+                        notifications.complete(task.name, last?.transferredFiles ?: 0, taskId),
+                    )
             }
             Result.success()
         } else {
@@ -241,7 +267,7 @@ class SyncWorker @AssistedInject constructor(
             finishFailed(runId, last, msg, log.path.takeIf { log.flush() }, task.direction, runStartMs)
             runCatching {
                 NotificationManagerCompat.from(applicationContext)
-                    .notify(SyncNotifications.RESULT_NOTIFICATION_ID, notifications.error(task.name, msg, taskId))
+                    .notify(SyncNotifications.resultId(taskId), notifications.error(task.name, msg, taskId))
             }
             // Transient transport problems are worth retrying; everything else fails.
             if (failure is VirgaError.Network) Result.retry() else Result.failure()
@@ -254,7 +280,10 @@ class SyncWorker @AssistedInject constructor(
         // cancel its history/notification. Interval/periodic tasks repeat on their
         // own and don't need re-enqueuing here.
         if (task.scheduleDaysMask != 0 && task.enabled) {
+            // A swallowed failure here means the calendar task silently never runs
+            // again — log it so the drop is at least diagnosable.
             runCatching { scheduler.schedule(task) }
+                .onFailure { Log.w(TAG, "Failed to re-enqueue calendar schedule for task $taskId", it) }
         }
         return result
     }
@@ -353,9 +382,9 @@ class SyncWorker @AssistedInject constructor(
      * [IllegalStateException]. Either way the sync should continue without the
      * progress notification rather than failing or aborting a healthy transfer.
      */
-    private suspend fun startForegroundQuietly(notification: android.app.Notification) {
+    private suspend fun startForegroundQuietly(taskId: Long, notification: android.app.Notification) {
         try {
-            setForeground(foregroundInfo(notification))
+            setForeground(foregroundInfo(taskId, notification))
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -385,16 +414,16 @@ class SyncWorker @AssistedInject constructor(
         }
     }
 
-    private fun foregroundInfo(notification: android.app.Notification): ForegroundInfo =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ForegroundInfo(
-                SyncNotifications.FOREGROUND_NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
-            )
+    private fun foregroundInfo(taskId: Long, notification: android.app.Notification): ForegroundInfo {
+        // Per-task foreground id so concurrent "Sync all" runs don't share (and
+        // clobber) one progress notification + Cancel action.
+        val id = SyncNotifications.foregroundId(taskId)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ForegroundInfo(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
-            ForegroundInfo(SyncNotifications.FOREGROUND_NOTIFICATION_ID, notification)
+            ForegroundInfo(id, notification)
         }
+    }
 
     companion object {
         const val KEY_TASK_ID = "task_id"
