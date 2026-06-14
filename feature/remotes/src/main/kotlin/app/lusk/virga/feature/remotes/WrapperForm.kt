@@ -1,24 +1,13 @@
 package app.lusk.virga.feature.remotes
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import app.lusk.virga.core.common.model.Remote
@@ -128,61 +117,25 @@ internal fun WrapperForm(
 
 /**
  * Single remote picker dropdown for wrappers that wrap one remote
- * (alias, combine, chunker, compress, cache, hasher).
+ * (alias, combine, chunker, compress, cache, hasher). Delegates the dropdown
+ * itself to the shared [RemoteDropdownPicker].
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SingleRemotePicker(
     existingRemotes: List<Remote>,
     selectedRemote: String,
     onRemoteSelected: (String) -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-
     Text(
         stringResource(R.string.remotes_wrapper_pick_base),
         style = MaterialTheme.typography.titleSmall,
     )
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = it },
-    ) {
-        OutlinedTextField(
-            value = selectedRemote,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(stringResource(R.string.remotes_wrapper_base_remote_label)) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            existingRemotes.forEach { remote ->
-                DropdownMenuItem(
-                    text = {
-                        Column {
-                            Text(remote.name, style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                remote.type,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    },
-                    onClick = {
-                        onRemoteSelected(remote.name)
-                        expanded = false
-                    },
-                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
-                )
-            }
-        }
-    }
+    RemoteDropdownPicker(
+        selectedRemote = selectedRemote,
+        existingRemotes = existingRemotes,
+        label = R.string.remotes_wrapper_base_remote_label,
+        onRemoteSelected = onRemoteSelected,
+    )
 }
 
 /**

@@ -1,5 +1,6 @@
 package app.lusk.virga.feature.sync
 
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -66,59 +67,35 @@ internal fun AdvancedSection(form: SyncTaskForm, viewModel: SyncTaskEditViewMode
         }
         AnimatedVisibility(visible = expanded) {
             Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.md)) {
-                OutlinedTextField(
+                ValidatedAsciiField(
                     value = form.bwLimitWifi,
                     onValueChange = { viewModel.update { f -> f.copy(bwLimitWifi = it) } },
-                    label = { Text(stringResource(R.string.sync_edit_field_bw_wifi)) },
-                    placeholder = { Text(stringResource(R.string.sync_edit_field_bw_wifi_placeholder)) },
-                    isError = form.bwLimitWifiError != null,
-                    supportingText = if (form.bwLimitWifiError != null) {
-                        { Text(form.bwLimitWifiError!!) }
-                    } else {
-                        { Text(stringResource(R.string.sync_edit_field_bw_wifi_hint)) }
-                    },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Ascii,
-                        imeAction = ImeAction.Next,
+                    text = FieldText(
+                        R.string.sync_edit_field_bw_wifi,
+                        R.string.sync_edit_field_bw_wifi_placeholder,
+                        R.string.sync_edit_field_bw_wifi_hint,
                     ),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    error = form.bwLimitWifiError,
                 )
-                OutlinedTextField(
+                ValidatedAsciiField(
                     value = form.bwLimitMetered,
                     onValueChange = { viewModel.update { f -> f.copy(bwLimitMetered = it) } },
-                    label = { Text(stringResource(R.string.sync_edit_field_bw_metered)) },
-                    placeholder = { Text(stringResource(R.string.sync_edit_field_bw_metered_placeholder)) },
-                    isError = form.bwLimitMeteredError != null,
-                    supportingText = if (form.bwLimitMeteredError != null) {
-                        { Text(form.bwLimitMeteredError!!) }
-                    } else {
-                        { Text(stringResource(R.string.sync_edit_field_bw_metered_hint)) }
-                    },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Ascii,
-                        imeAction = ImeAction.Next,
+                    text = FieldText(
+                        R.string.sync_edit_field_bw_metered,
+                        R.string.sync_edit_field_bw_metered_placeholder,
+                        R.string.sync_edit_field_bw_metered_hint,
                     ),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    error = form.bwLimitMeteredError,
                 )
-                OutlinedTextField(
+                ValidatedAsciiField(
                     value = form.bufferSize,
                     onValueChange = { viewModel.update { f -> f.copy(bufferSize = it) } },
-                    label = { Text(stringResource(R.string.sync_edit_field_buffer)) },
-                    placeholder = { Text(stringResource(R.string.sync_edit_field_buffer_placeholder)) },
-                    isError = form.bufferSizeError != null,
-                    supportingText = if (form.bufferSizeError != null) {
-                        { Text(form.bufferSizeError!!) }
-                    } else {
-                        { Text(stringResource(R.string.sync_edit_field_buffer_hint)) }
-                    },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Ascii,
-                        imeAction = ImeAction.Next,
+                    text = FieldText(
+                        R.string.sync_edit_field_buffer,
+                        R.string.sync_edit_field_buffer_placeholder,
+                        R.string.sync_edit_field_buffer_hint,
                     ),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    error = form.bufferSizeError,
                 )
                 // ---- WS3.1 Tier-2 options ------------------------------------
                 ListItem(
@@ -185,6 +162,41 @@ internal fun AdvancedSection(form: SyncTaskForm, viewModel: SyncTaskEditViewMode
             }
         }
     }
+}
+
+/** Static label/placeholder/hint string resources for a [ValidatedAsciiField]. */
+private class FieldText(
+    @get:StringRes val label: Int,
+    @get:StringRes val placeholder: Int,
+    @get:StringRes val hint: Int,
+)
+
+/**
+ * A single-line ASCII [OutlinedTextField] that shows [error] in place of the
+ * hint when validation fails. The three bandwidth/buffer inputs share this exact
+ * shape, differing only in their bound value and string resources.
+ */
+@Composable
+private fun ValidatedAsciiField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    text: FieldText,
+    error: String?,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(stringResource(text.label)) },
+        placeholder = { Text(stringResource(text.placeholder)) },
+        isError = error != null,
+        supportingText = { Text(error ?: stringResource(text.hint)) },
+        keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Ascii,
+            imeAction = ImeAction.Next,
+        ),
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 private data class IntervalOption(val labelRes: Int?, val minutes: Int?)

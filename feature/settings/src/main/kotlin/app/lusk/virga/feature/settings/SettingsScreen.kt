@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.annotation.StringRes
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -179,49 +180,32 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            var meteredHasBeenFocused by remember { mutableStateOf(false) }
-            OutlinedTextField(
+            // Both fields commit the current Wi-Fi + metered pair on blur.
+            val commitBwLimits: () -> Unit = {
+                viewModel.setDefaultBwLimits(
+                    wifi = bwLimitWifi.trim().ifBlank { null },
+                    metered = bwLimitMetered.trim().ifBlank { null },
+                )
+            }
+            CommitOnBlurField(
                 value = bwLimitMetered,
                 onValueChange = { bwLimitMetered = it },
-                label = { Text(stringResource(R.string.settings_field_bw_metered)) },
-                placeholder = { Text(stringResource(R.string.settings_field_bw_metered_placeholder)) },
-                supportingText = { Text(stringResource(R.string.settings_field_bw_metered_hint)) },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .onFocusChanged { state ->
-                        if (state.isFocused) {
-                            meteredHasBeenFocused = true
-                        } else if (meteredHasBeenFocused) {
-                            viewModel.setDefaultBwLimits(
-                                wifi = bwLimitWifi.trim().ifBlank { null },
-                                metered = bwLimitMetered.trim().ifBlank { null },
-                            )
-                        }
-                    },
-                singleLine = true,
+                text = FieldText(
+                    R.string.settings_field_bw_metered,
+                    R.string.settings_field_bw_metered_placeholder,
+                    R.string.settings_field_bw_metered_hint,
+                ),
+                onCommit = commitBwLimits,
             )
-            var wifiHasBeenFocused by remember { mutableStateOf(false) }
-            OutlinedTextField(
+            CommitOnBlurField(
                 value = bwLimitWifi,
                 onValueChange = { bwLimitWifi = it },
-                label = { Text(stringResource(R.string.settings_field_bw_wifi)) },
-                placeholder = { Text(stringResource(R.string.settings_field_bw_wifi_placeholder)) },
-                supportingText = { Text(stringResource(R.string.settings_field_bw_wifi_hint)) },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .onFocusChanged { state ->
-                        if (state.isFocused) {
-                            wifiHasBeenFocused = true
-                        } else if (wifiHasBeenFocused) {
-                            viewModel.setDefaultBwLimits(
-                                wifi = bwLimitWifi.trim().ifBlank { null },
-                                metered = bwLimitMetered.trim().ifBlank { null },
-                            )
-                        }
-                    },
-                singleLine = true,
+                text = FieldText(
+                    R.string.settings_field_bw_wifi,
+                    R.string.settings_field_bw_wifi_placeholder,
+                    R.string.settings_field_bw_wifi_hint,
+                ),
+                onCommit = commitBwLimits,
             )
 
             if (storageAccessRelevant) StorageAccessSection()
@@ -496,4 +480,44 @@ private fun AcknowledgementsSheet(onOpenUrl: (String) -> Unit, onDismiss: () -> 
             }
         }
     }
+}
+
+/** Static label/placeholder/hint string resources for a [CommitOnBlurField]. */
+private class FieldText(
+    @get:StringRes val label: Int,
+    @get:StringRes val placeholder: Int,
+    @get:StringRes val hint: Int,
+)
+
+/**
+ * An ASCII [OutlinedTextField] that fires [onCommit] once focus leaves it, but
+ * only after it has been focused at least once (so the initial composition
+ * doesn't spuriously commit). Both default-bandwidth inputs share this.
+ */
+@Composable
+private fun CommitOnBlurField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    text: FieldText,
+    onCommit: () -> Unit,
+) {
+    var hasBeenFocused by remember { mutableStateOf(false) }
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(stringResource(text.label)) },
+        placeholder = { Text(stringResource(text.placeholder)) },
+        supportingText = { Text(stringResource(text.hint)) },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+        modifier = Modifier
+            .fillMaxWidth()
+            .onFocusChanged { state ->
+                if (state.isFocused) {
+                    hasBeenFocused = true
+                } else if (hasBeenFocused) {
+                    onCommit()
+                }
+            },
+        singleLine = true,
+    )
 }

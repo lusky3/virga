@@ -6,7 +6,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.data.PendingRemoteResult
 import app.lusk.virga.core.datastore.AppPreferences
@@ -102,6 +105,39 @@ class SyncTaskEditScreenshotTest {
             )
         }
         composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage()
+    }
+
+    /**
+     * Expands the collapsible Advanced section so its bandwidth/buffer fields
+     * actually compose — exercising the extracted `ValidatedAsciiField` helper,
+     * which stays unrendered (and uncovered) while the section is collapsed.
+     */
+    @Test
+    fun syncTaskEditScreen_advancedExpanded_rendersValidatedFields() {
+        // Advanced options are gated behind a preference; enable it so the
+        // AdvancedSection (and its toggle) actually compose.
+        val advancedPrefs: PreferencesRepository = mockk(relaxed = true) {
+            every { preferences } returns flowOf(AppPreferences(showAdvancedOptions = true))
+        }
+        val viewModel = SyncTaskEditViewModel(taskRepository, remoteRepository, scheduler, RemoteFolderPickStore(), PendingRemoteResult(), advancedPrefs)
+        composeRule.setContent {
+            MaterialTheme {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        SyncTaskEditScreen(taskId = 0L, onBack = {}, viewModel = viewModel)
+                    }
+                }
+            }
+        }
+        // The Advanced toggle reads "Show" when collapsed; tapping it composes the
+        // bandwidth/buffer fields (the extracted ValidatedAsciiField).
+        composeRule.waitForIdle()
+        // The toggle sits near the bottom of a long scrollable form; scroll it into
+        // view so the tap actually lands, then expand to compose the bw/buffer fields.
+        composeRule.onNodeWithText("Show").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Upload limit (Wi-Fi)").assertExists()
         composeRule.onRoot().captureRoboImage()
     }
 }

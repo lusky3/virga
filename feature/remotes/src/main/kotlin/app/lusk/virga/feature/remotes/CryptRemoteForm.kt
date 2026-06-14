@@ -1,5 +1,6 @@
 package app.lusk.virga.feature.remotes
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardOptions
@@ -40,7 +41,6 @@ import app.lusk.virga.core.common.model.Remote
  * No password value is logged or persisted here. The caller forwards
  * the values directly to the ViewModel which delegates to [RcloneEngine.createCryptRemote].
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CryptRemoteForm(
     existingRemotes: List<Remote>,
@@ -53,10 +53,6 @@ internal fun CryptRemoteForm(
     salt: String,
     onSaltChange: (String) -> Unit,
 ) {
-    var baseMenuExpanded by remember { mutableStateOf(false) }
-    var showPassword by remember { mutableStateOf(false) }
-    var showSalt by remember { mutableStateOf(false) }
-
     if (existingRemotes.isEmpty()) {
         Text(
             stringResource(R.string.remotes_crypt_no_base_remotes),
@@ -72,46 +68,13 @@ internal fun CryptRemoteForm(
         style = MaterialTheme.typography.titleSmall,
     )
 
-    ExposedDropdownMenuBox(
-        expanded = baseMenuExpanded,
-        onExpandedChange = { baseMenuExpanded = it },
-    ) {
-        OutlinedTextField(
-            value = selectedBaseRemote,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(stringResource(R.string.remotes_crypt_base_remote_label)) },
-            placeholder = { Text(stringResource(R.string.remotes_crypt_base_remote_placeholder)) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = baseMenuExpanded) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
-        )
-        ExposedDropdownMenu(
-            expanded = baseMenuExpanded,
-            onDismissRequest = { baseMenuExpanded = false },
-        ) {
-            existingRemotes.forEach { remote ->
-                DropdownMenuItem(
-                    text = {
-                        Column {
-                            Text(remote.name, style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                remote.type,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    },
-                    onClick = {
-                        onBaseRemoteSelected(remote.name)
-                        baseMenuExpanded = false
-                    },
-                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
-                )
-            }
-        }
-    }
+    RemoteDropdownPicker(
+        selectedRemote = selectedBaseRemote,
+        existingRemotes = existingRemotes,
+        label = R.string.remotes_crypt_base_remote_label,
+        onRemoteSelected = onBaseRemoteSelected,
+        placeholder = R.string.remotes_crypt_base_remote_placeholder,
+    )
 
     OutlinedTextField(
         value = basePath,
@@ -126,60 +89,117 @@ internal fun CryptRemoteForm(
         modifier = Modifier.fillMaxWidth(),
     )
 
-    OutlinedTextField(
+    MaskedPasswordField(
         value = password,
         onValueChange = onPasswordChange,
-        label = { Text(stringResource(R.string.remotes_crypt_password_label)) },
-        visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-        trailingIcon = {
-            IconButton(onClick = { showPassword = !showPassword }) {
-                Icon(
-                    imageVector = if (showPassword) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                    contentDescription = stringResource(
-                        if (showPassword) R.string.remotes_crypt_hide_password
-                        else R.string.remotes_crypt_show_password,
-                    ),
-                )
-            }
-        },
-        keyboardOptions = KeyboardOptions(
-            capitalization = KeyboardCapitalization.None,
-            autoCorrectEnabled = false,
-            keyboardType = KeyboardType.Password,
-        ),
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
+        label = R.string.remotes_crypt_password_label,
     )
 
-    OutlinedTextField(
+    MaskedPasswordField(
         value = salt,
         onValueChange = onSaltChange,
-        label = { Text(stringResource(R.string.remotes_crypt_salt_label)) },
-        visualTransformation = if (showSalt) VisualTransformation.None else PasswordVisualTransformation(),
-        trailingIcon = {
-            IconButton(onClick = { showSalt = !showSalt }) {
-                Icon(
-                    imageVector = if (showSalt) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                    contentDescription = stringResource(
-                        if (showSalt) R.string.remotes_crypt_hide_password
-                        else R.string.remotes_crypt_show_password,
-                    ),
-                )
-            }
-        },
-        keyboardOptions = KeyboardOptions(
-            capitalization = KeyboardCapitalization.None,
-            autoCorrectEnabled = false,
-            keyboardType = KeyboardType.Password,
-        ),
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
+        label = R.string.remotes_crypt_salt_label,
     )
 
     Text(
         stringResource(R.string.remotes_crypt_password_warning),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+/**
+ * Read-only dropdown that selects one of [existingRemotes] as a base. Shared by
+ * the crypt form and the single-remote wrapper picker, which rendered identical
+ * `ExposedDropdownMenuBox` bodies. [placeholder] is optional so callers that
+ * don't show one (the wrapper picker) can omit it.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun RemoteDropdownPicker(
+    selectedRemote: String,
+    existingRemotes: List<Remote>,
+    @StringRes label: Int,
+    onRemoteSelected: (String) -> Unit,
+    @StringRes placeholder: Int? = null,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+    ) {
+        OutlinedTextField(
+            value = selectedRemote,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(stringResource(label)) },
+            placeholder = placeholder?.let { res -> { Text(stringResource(res)) } },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            existingRemotes.forEach { remote ->
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(remote.name, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                remote.type,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
+                    onClick = {
+                        onRemoteSelected(remote.name)
+                        expanded = false
+                    },
+                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Password-masked [OutlinedTextField] with a show/hide eye toggle. The crypt
+ * password and salt/password2 inputs are identical apart from their label.
+ */
+@Composable
+private fun MaskedPasswordField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    @StringRes label: Int,
+) {
+    var visible by remember { mutableStateOf(false) }
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(stringResource(label)) },
+        visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
+        trailingIcon = {
+            IconButton(onClick = { visible = !visible }) {
+                Icon(
+                    imageVector = if (visible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                    contentDescription = stringResource(
+                        if (visible) R.string.remotes_crypt_hide_password
+                        else R.string.remotes_crypt_show_password,
+                    ),
+                )
+            }
+        },
+        keyboardOptions = KeyboardOptions(
+            capitalization = KeyboardCapitalization.None,
+            autoCorrectEnabled = false,
+            keyboardType = KeyboardType.Password,
+        ),
+        singleLine = true,
         modifier = Modifier.fillMaxWidth(),
     )
 }
