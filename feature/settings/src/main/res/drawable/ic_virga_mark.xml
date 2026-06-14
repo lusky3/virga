@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Virga mark (BRAND.md §3): a soft blue→teal streak that fades before a baseline,
+  trailed by three teal droplets — rain (virga) evaporating before it lands.
+  This mirrors the launcher icon's foreground so the About screen can show the
+  brand mark without reaching into the :app module's R.mipmap resources.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- The streak: a rounded vertical stadium with a vertical blue→teal→fade gradient. -->
+    <path android:pathData="M47,33 A7,7 0 0 1 61,33 L61,53 A7,7 0 0 1 47,53 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="54" android:startY="26"
+                android:endX="54" android:endY="60">
+                <item android:offset="0.0" android:color="#FF1E6FD9" />
+                <item android:offset="0.55" android:color="#FF1FA8A0" />
+                <item android:offset="1.0" android:color="#001FA8A0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Trailing droplets, fading as they fall. -->
+    <path android:fillColor="#FF1FA8A0"
+        android:pathData="M50,67 a4,4 0 1 0 8,0 a4,4 0 1 0 -8,0 Z" />
+    <path android:fillColor="#CC1FA8A0"
+        android:pathData="M51.4,75 a2.6,2.6 0 1 0 5.2,0 a2.6,2.6 0 1 0 -5.2,0 Z" />
+    <path android:fillColor="#991FA8A0"
+        android:pathData="M52.3,81 a1.7,1.7 0 1 0 3.4,0 a1.7,1.7 0 1 0 -3.4,0 Z" />
+</vector>

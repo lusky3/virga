@@ -54,4 +54,15 @@
     <string name="settings_btn_grant_storage">Grant storage access</string>
     <string name="settings_snack_no_storage_settings">Couldn\'t open storage settings on this device</string>
     <string name="settings_snack_no_battery_settings">Couldn\'t open battery settings on this device</string>
+
+    <!-- AboutScreen -->
+    <string name="about_title">About</string>
+    <string name="about_cd_back">Back</string>
+    <string name="about_app_name">Virga</string>
+    <string name="about_tagline">Scheduled, on-device cloud sync powered by rclone.</string>
+    <string name="about_version">%1$s (build %2$d)</string>
+    <string name="about_section_build_details">Build details</string>
+    <string name="about_build_distribution">Distribution: %1$s</string>
+    <string name="about_build_version">Version: %1$s (%2$d)</string>
+    <string name="about_build_rclone">rclone: %1$s</string>
 </resources>

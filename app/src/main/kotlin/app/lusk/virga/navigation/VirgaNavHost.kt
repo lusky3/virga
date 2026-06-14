@@ -44,6 +44,7 @@ import app.lusk.virga.R
 import app.lusk.virga.feature.explorer.FileBrowserScreen
 import app.lusk.virga.feature.remotes.AddRemoteScreen
 import app.lusk.virga.feature.remotes.RemotesScreen
+import app.lusk.virga.feature.settings.AboutScreen
 import app.lusk.virga.feature.settings.SettingsScreen
 import app.lusk.virga.feature.stats.StatsScreen
 import app.lusk.virga.feature.sync.ConflictsScreen
@@ -105,8 +106,11 @@ import kotlinx.serialization.Serializable
 /** Lifetime statistics screen. */
 @Serializable object StatsRoute : NavKey
 
-/** Full changelog listing, navigated to from the Home changelog banner or Settings. */
+/** Full changelog listing, navigated to from the Home changelog banner or About. */
 @Serializable object WhatsNewRoute : NavKey
+
+/** Standalone About screen — app identity, changelog, acknowledgements, and links. */
+@Serializable object AboutRoute : NavKey
 
 private data class TopLevel(
     val route: NavKey,
@@ -301,7 +305,7 @@ fun VirgaNavHost(
         entry<SettingsRoute> {
             SettingsScreen(
                 onOpenStats = dropUnlessResumed { navigator.navigate(StatsRoute) },
-                onOpenWhatsNew = dropUnlessResumed { navigator.navigate(WhatsNewRoute) },
+                onOpenAbout = dropUnlessResumed { navigator.navigate(AboutRoute) },
                 crashReportingAvailable = app.lusk.virga.BuildConfig.SENTRY_DSN.isNotBlank(),
                 // All-files-access builds (foss) can offer a storage-access grant in Settings.
                 storageAccessRelevant = app.lusk.virga.BuildConfig.SDCARD_ACCESS_AVAILABLE,
@@ -312,6 +316,14 @@ fun VirgaNavHost(
         }
         entry<WhatsNewRoute> {
             WhatsNewScreen(onBack = dropUnlessResumed { navigator.goBack() })
+        }
+        entry<AboutRoute> {
+            AboutScreen(
+                onBack = dropUnlessResumed { navigator.goBack() },
+                onViewChangelog = dropUnlessResumed { navigator.navigate(WhatsNewRoute) },
+                distribution = app.lusk.virga.BuildConfig.DISTRIBUTION,
+                rcloneVersion = app.lusk.virga.BuildConfig.RCLONE_VERSION,
+            )
         }
     }
 

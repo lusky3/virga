@@ -1,39 +1,22 @@
 package app.lusk.virga.feature.settings
 
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.annotation.StringRes
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.outlined.BarChart
-import androidx.compose.material.icons.outlined.BugReport
-import androidx.compose.material.icons.outlined.Code
-import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.Gavel
-import androidx.compose.material.icons.outlined.Lightbulb
-import androidx.compose.material.icons.outlined.NewReleases
-import androidx.compose.material.icons.outlined.Public
-import androidx.compose.material.icons.outlined.Shield
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -51,18 +34,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -76,7 +54,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsScreen(
     onOpenStats: () -> Unit = {},
-    onOpenWhatsNew: () -> Unit = {},
+    onOpenAbout: () -> Unit = {},
     // Build-time flags from the app module (keeps feature:settings BuildConfig-free).
     crashReportingAvailable: Boolean = false,
     storageAccessRelevant: Boolean = false,
@@ -99,9 +77,6 @@ fun SettingsScreen(
         mutableStateOf(prefs.defaultBwLimitWifi.orEmpty())
     }
 
-    var showHowItWorksDialog by remember { mutableStateOf(false) }
-    var showLicensesSheet by remember { mutableStateOf(false) }
-
     // Opens an external URL, falling back to a snackbar when no browser is present.
     val openUrl: (String) -> Unit = { url ->
         runCatching {
@@ -109,16 +84,6 @@ fun SettingsScreen(
         }.onFailure {
             scope.launch { snackbarHostState.showSnackbar(noBrowserMsg) }
         }
-    }
-
-    if (showHowItWorksDialog) {
-        HowVirgaWorksDialog(onDismiss = { showHowItWorksDialog = false })
-    }
-    if (showLicensesSheet) {
-        AcknowledgementsSheet(
-            onOpenUrl = openUrl,
-            onDismiss = { showLicensesSheet = false },
-        )
     }
 
     Scaffold(
@@ -256,88 +221,14 @@ fun SettingsScreen(
                 onClick = onOpenStats,
                 leadingIcon = Icons.Outlined.BarChart,
             )
+            // All app-identity / changelog / acknowledgements / reference links now
+            // live on the dedicated About screen.
             SettingsLinkRow(
-                label = stringResource(R.string.settings_item_whats_new),
-                onClick = onOpenWhatsNew,
-                leadingIcon = Icons.Outlined.NewReleases,
+                label = stringResource(R.string.settings_item_about),
+                onClick = onOpenAbout,
+                leadingIcon = Icons.Outlined.Info,
             )
-            // Virga-owned references first (learn → site → policy → project),
-            // then third-party references, then the version row.
-            val opensExternally = stringResource(R.string.settings_opens_externally)
-            SettingsLinkRow(
-                label = stringResource(R.string.settings_item_how_virga_works),
-                onClick = { showHowItWorksDialog = true },
-                leadingIcon = Icons.Outlined.Lightbulb,
-            )
-            SettingsLinkRow(
-                label = stringResource(R.string.settings_item_website),
-                onClick = { openUrl("https://virga.lusk.app") },
-                leadingIcon = Icons.Outlined.Public,
-                opensExternally = true,
-                externalLinkDescription = opensExternally,
-            )
-            SettingsLinkRow(
-                label = stringResource(R.string.settings_item_privacy_policy),
-                onClick = { openUrl("https://virga.lusk.app/privacy") },
-                leadingIcon = Icons.Outlined.Shield,
-                opensExternally = true,
-                externalLinkDescription = opensExternally,
-            )
-            SettingsLinkRow(
-                label = stringResource(R.string.settings_item_source_code),
-                onClick = { openUrl("https://github.com/lusky3/virga") },
-                leadingIcon = Icons.Outlined.Code,
-                opensExternally = true,
-                externalLinkDescription = opensExternally,
-            )
-            SettingsLinkRow(
-                label = stringResource(R.string.settings_item_report_bug),
-                onClick = { openUrl("https://github.com/lusky3/virga/issues") },
-                leadingIcon = Icons.Outlined.BugReport,
-                opensExternally = true,
-                externalLinkDescription = opensExternally,
-            )
-            SettingsLinkRow(
-                label = stringResource(R.string.settings_item_rclone_docs),
-                onClick = { openUrl("https://rclone.org/docs/") },
-                leadingIcon = Icons.Outlined.Description,
-                opensExternally = true,
-                externalLinkDescription = opensExternally,
-            )
-            SettingsLinkRow(
-                label = stringResource(R.string.settings_item_licenses),
-                onClick = { showLicensesSheet = true },
-                leadingIcon = Icons.Outlined.Gavel,
-            )
-            val versionName = remember {
-                runCatching {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        context.packageManager.getPackageInfo(
-                            context.packageName,
-                            PackageManager.PackageInfoFlags.of(0L),
-                        ).versionName ?: "—"
-                    } else {
-                        @Suppress("DEPRECATION")
-                        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "—"
-                    }
-                }.getOrDefault("—")
-            }
-            // A divider plus trailing version metadata (and no leading icon or
-            // open-in-new glyph) keep this static row distinct from the tappable
-            // links above it. A spacer the width of the rows' icon column keeps
-            // the "About" label aligned with them without implying tappability.
-            // Quiet centered footer (was an awkward left "About" / right version row).
-            HorizontalDivider()
-            Text(
-                text = stringResource(R.string.settings_about_footer, versionName),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = VirgaSpacing.lg),
-            )
-            // Bottom spacing so the footer clears the nav bar.
+            // Bottom spacing so the last row clears the nav bar.
             Spacer(Modifier.padding(bottom = VirgaSpacing.sm))
         }
     }
@@ -377,109 +268,6 @@ internal fun SectionTitle(text: String) {
         style = MaterialTheme.typography.titleMedium,
         modifier = Modifier.semantics { heading() },
     )
-}
-
-@Composable
-private fun HowVirgaWorksDialog(onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.settings_how_virga_works_title)) },
-        text = { Text(stringResource(R.string.settings_how_virga_works_body)) },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.settings_dialog_ok))
-            }
-        },
-    )
-}
-
-/** A bundled or linked open-source dependency, shown in the acknowledgements modal. */
-private data class OssLibrary(val name: String, val license: String, val url: String)
-
-/**
- * Curated from Virga's actual *runtime* dependencies (test/build-only tooling is
- * intentionally excluded). Keep in sync with the version catalog when shipping
- * dependencies change. Names/licenses are proper nouns, so they live in code
- * rather than strings.xml.
- */
-private val AcknowledgedLibraries: List<OssLibrary> = listOf(
-    OssLibrary("rclone", "MIT License", "https://rclone.org/"),
-    OssLibrary("Manrope (display font)", "SIL Open Font License 1.1", "https://fonts.google.com/specimen/Manrope"),
-    OssLibrary("AndroidX & Jetpack libraries", "Apache License 2.0", "https://developer.android.com/jetpack"),
-    OssLibrary("Jetpack Compose", "Apache License 2.0", "https://developer.android.com/jetpack/compose"),
-    OssLibrary("Material Components for Android", "Apache License 2.0", "https://github.com/material-components/material-components-android"),
-    OssLibrary("Dagger & Hilt", "Apache License 2.0", "https://dagger.dev/hilt/"),
-    OssLibrary("Kotlin", "Apache License 2.0", "https://kotlinlang.org/"),
-    OssLibrary("Kotlin Coroutines", "Apache License 2.0", "https://github.com/Kotlin/kotlinx.coroutines"),
-    OssLibrary("kotlinx.serialization", "Apache License 2.0", "https://github.com/Kotlin/kotlinx.serialization"),
-    OssLibrary("OkHttp", "Apache License 2.0", "https://square.github.io/okhttp/"),
-    OssLibrary("Bcrypt (favre)", "Apache License 2.0", "https://github.com/patrickfav/bcrypt"),
-)
-
-/**
- * Open-source acknowledgements. A [ModalBottomSheet] (not an AlertDialog) because
- * BRAND §11 reserves dialogs for short blocking confirms and routes longer,
- * scrolling content to a sheet. Each library row is a 48dp tappable link that
- * opens its homepage, with an explicit accessibility description and an
- * external-link glyph (BRAND §6, §14).
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun AcknowledgementsSheet(onOpenUrl: (String) -> Unit, onDismiss: () -> Unit) {
-    val opensExternally = stringResource(R.string.settings_opens_externally)
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = VirgaSpacing.lg)
-                .padding(bottom = VirgaSpacing.lg)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
-        ) {
-            Text(
-                stringResource(R.string.settings_licenses_title),
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier
-                    .semantics { heading() }
-                    .padding(bottom = VirgaSpacing.xs),
-            )
-            Text(
-                stringResource(R.string.settings_licenses_intro),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            AcknowledgedLibraries.forEach { lib ->
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable(role = Role.Button) { onOpenUrl(lib.url) }
-                        .defaultMinSize(minHeight = 48.dp)
-                        .semantics {
-                            contentDescription = "${lib.name}, ${lib.license}. $opensExternally"
-                        }
-                        .padding(vertical = VirgaSpacing.sm),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.md),
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(lib.name, style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            lib.license,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                        contentDescription = null, // the row carries the description
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
-            }
-        }
-    }
 }
 
 /** Static label/placeholder/hint string resources for a [CommitOnBlurField]. */
