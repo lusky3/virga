@@ -15,7 +15,9 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -1075,5 +1077,37 @@ class RcloneEngineImplTest {
         assertThat(error.message).contains("Stop running syncs")
 
         engine.releaseDaemon()
+    }
+
+    @Test fun `withDaemonForOAuth holds a lease not the lock so concurrent ops run during the wait`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.persistAndCleanup() } returns Unit
+
+        // Simulate the minutes-long paste wait: the OAuth block parks here while the
+        // engine is held. Under the old exclusive-lock impl the engine Mutex would be
+        // held for the whole wait; under the lease impl it stays free.
+        val pasteGate = CompletableDeferred<Unit>()
+        val oauth = launch(start = CoroutineStart.UNDISPATCHED) {
+            engine.withDaemonForOAuth { pasteGate.await() }
+        }
+        advanceUntilIdle() // OAuth now parked mid-wait, holding a lease (lock released)
+
+        // A concurrent consumer (e.g. a scheduled SyncWorker) acquires the daemon. If the
+        // lock were held for the wait this would block until paste/timeout — it must not.
+        val concurrent = async(start = CoroutineStart.UNDISPATCHED) { engine.acquireDaemon() }
+        advanceUntilIdle()
+        assertThat(concurrent.isCompleted).isTrue()
+        assertThat(concurrent.await()).isSameInstanceAs(fakeDaemon)
+        engine.releaseDaemon() // drop the concurrent consumer's lease (daemon survives)
+
+        // Completing the paste lets OAuth finish; as the last consumer it tears down + persists.
+        pasteGate.complete(Unit)
+        advanceUntilIdle()
+        oauth.join()
+        coVerify { daemonManager.stop(fakeDaemon) }
+        coVerify { configManager.persistAndCleanup() }
     }
 }

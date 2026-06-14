@@ -77,12 +77,12 @@ internal class DaemonOAuthFlow(
         transient.update { it.copy(oauthInProgress = true, message = null) }
         scope.launch {
             try {
-                // INVARIANT: the engine holds its NON-REENTRANT Mutex for this
-                // whole block — any repository/engine call made inside it
-                // (testConnectivity, refresh, …) re-acquires that Mutex and
-                // deadlocks permanently. Only drive the orchestrator in here;
-                // the terminal state is returned out of the block and ALL
-                // follow-up repository work happens after the lock is released.
+                // The engine holds a refcount LEASE (not its exclusive Mutex) for
+                // this block, so the minutes-long paste wait no longer stalls other
+                // engine ops (quota, listing, a scheduled sync). Still, only drive the
+                // orchestrator in here: the terminal state is returned out of the block
+                // and ALL follow-up repository work happens afterwards, so connectivity
+                // tests the PERSISTED config rather than the daemon's live working copy.
                 val terminal = repository.withDaemonForOAuth { daemon ->
                     val orchestrator = orchestratorFactory()
                     this@DaemonOAuthFlow.orchestrator = orchestrator

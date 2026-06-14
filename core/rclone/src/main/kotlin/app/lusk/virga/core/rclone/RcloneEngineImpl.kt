@@ -602,7 +602,55 @@ class RcloneEngineImpl @Inject constructor(
 
     private suspend fun mutatingConfig(block: suspend (RcloneDaemon) -> Unit) = withExclusiveDaemon(block)
 
-    override suspend fun <T> withDaemonForOAuth(block: suspend (RcloneDaemon) -> T): T = withExclusiveDaemon(block)
+    /**
+     * Runs an interactive daemon-mediated OAuth [block] under a refcount LEASE rather
+     * than the exclusive [lock]. The block typically suspends for minutes — the user
+     * runs `rclone authorize` elsewhere and pastes the result back — so holding the
+     * engine Mutex for its duration (as [withExclusiveDaemon] would) stalls every other
+     * engine op (quota, listing, a scheduled SyncWorker's [acquireDaemon]) until the
+     * paste or the 600s timeout. Instead:
+     *  - briefly hold [lock] to refuse while a sync leases the daemon (a config mutation
+     *    would race the OAuth config write — same guard as [withExclusiveDaemon]), ensure
+     *    the daemon, and take a lease;
+     *  - run [block] OUTSIDE the lock, so concurrent READS share the daemon harmlessly
+     *    and concurrent MUTATIONS stay refused by the leases>0 guard;
+     *  - tear down in finally with the SAME semantics as [withExclusiveDaemon] — persist
+     *    on success / discard on failure — but only when this is the LAST consumer; if a
+     *    sync co-leases, its own release persists later (the daemon-written remote stays
+     *    in the live config meanwhile, so the post-flow connectivity test still sees it).
+     *
+     * The teardown is [NonCancellable]: a cancelled caller must still drop the lease and
+     * stop the rclone process + handle the plaintext config rather than leak them.
+     */
+    override suspend fun <T> withDaemonForOAuth(block: suspend (RcloneDaemon) -> T): T {
+        val d = lock.withLock {
+            if (leases > 0) {
+                throw VirgaError.Rclone(message = "Stop running syncs before modifying remotes.")
+            }
+            val daemon = ensureDaemonLocked()
+            leases++
+            daemon
+        }
+        var ok = false
+        try {
+            val result = block(d)
+            ok = true
+            return result
+        } finally {
+            withContext(NonCancellable) {
+                lock.withLock {
+                    if (leases > 0) leases--
+                    if (leases == 0) {
+                        daemonManager.stop(d)
+                        daemon = null
+                        if (ok) configManager.persistAndCleanup() else runCatching { configManager.cleanup() }
+                    }
+                    // else: a concurrent sync still leases the daemon — leave it running;
+                    // that sync's releaseDaemon persists the OAuth-written remote later.
+                }
+            }
+        }
+    }
 
     private suspend fun rc(d: RcloneDaemon, command: String, params: JsonObject = JsonObject(emptyMap())): JsonObject =
         apiClient.call(d.baseUrl, d.user, d.pass, command, params)
