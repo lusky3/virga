@@ -9,6 +9,17 @@ data class ReleaseNotes(val versionName: String, val notes: List<String>)
  */
 val RELEASE_NOTES: List<ReleaseNotes> = listOf(
     ReleaseNotes(
+        versionName = "0.2.0",
+        notes = listOf(
+            "Configure any rclone provider — Box, Dropbox, OneDrive, Google Drive, pCloud, and more",
+            "Sign in with OAuth, or bring your own credentials",
+            "Daemon-mediated OAuth for providers without a bundled sign-in",
+            "Add crypt and wrapper remotes (union, alias, and others)",
+            "Import and export your rclone config",
+            "Backups now continue past unreadable files and report an error summary instead of stopping",
+        ),
+    ),
+    ReleaseNotes(
         versionName = "0.1.0",
         notes = listOf(
             "New Home dashboard with sync status and lifetime stats",

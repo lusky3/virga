@@ -61,6 +61,13 @@ val debugStoreFile: java.io.File? =
         ?.let { rootProject.file(it) }
         ?.takeIf { it.exists() }
 
+// rclone version single source of truth: parse the same shell-sourceable env file
+// rclone-build and the CI workflows read, so the version surfaced in the About
+// screen never drifts from the binary that actually ships.
+val rcloneVersion: String = rootProject.file("scripts/rclone-versions.env").readLines()
+    .first { it.trim().startsWith("RCLONE_VERSION=") }
+    .substringAfter('=').trim()
+
 // In-app update check (foss flavor only — polls the GitHub Releases API). On by
 // default for GitHub / sideload installs that have no store to update them.
 // F-Droid ships updates through its own client, so an app self-checking GitHub
@@ -78,7 +85,7 @@ android {
         // Injectable from CI (release.yml derives these from the git tag) so the
         // published build carries the real version, not a hardcoded 1 / 0.1.0.
         versionCode = System.getenv("VIRGA_VERSION_CODE")?.toIntOrNull() ?: 1
-        versionName = System.getenv("VIRGA_VERSION_NAME") ?: "0.1.0"
+        versionName = System.getenv("VIRGA_VERSION_NAME") ?: "0.2.0"
         testInstrumentationRunner = "app.lusk.virga.HiltTestRunner"
         vectorDrawables { useSupportLibrary = true }
 
@@ -96,6 +103,10 @@ android {
         // CrashReporter, which only initializes Sentry when this is non-blank AND the
         // user has enabled the Settings toggle.
         buildConfigField("String", "SENTRY_DSN", "\"${sentryDsn()}\"")
+
+        // Bundled rclone version (from scripts/rclone-versions.env) so the About
+        // screen can show exactly which rclone build ships in this APK.
+        buildConfigField("String", "RCLONE_VERSION", "\"$rcloneVersion\"")
 
         // Google Android OAuth clients require a redirect URI scheme of the
         // form com.googleusercontent.apps.<reversed-client-id>. The reversed
