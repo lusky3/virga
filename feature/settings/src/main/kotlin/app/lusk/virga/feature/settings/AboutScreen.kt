@@ -79,23 +79,10 @@ fun AboutScreen(
     distribution: String,
     rcloneVersion: String,
 ) {
-    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-    val noBrowserMsg = stringResource(R.string.settings_snack_no_browser)
-
+    val openUrl = rememberUrlOpener(snackbarHostState)
     var showHowItWorksDialog by remember { mutableStateOf(false) }
     var showLicensesSheet by remember { mutableStateOf(false) }
-
-    // Opens an external URL, falling back to a snackbar when no browser is present.
-    val openUrl: (String) -> Unit = { url ->
-        runCatching {
-            context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
-        }.onFailure {
-            scope.launch { snackbarHostState.showSnackbar(noBrowserMsg) }
-        }
-    }
-
     val (versionName, versionCode) = rememberAppVersion()
 
     if (showHowItWorksDialog) {
@@ -147,6 +134,18 @@ fun AboutScreen(
             // Bottom spacing so content clears the nav bar.
             Spacer(Modifier.height(VirgaSpacing.lg))
         }
+    }
+}
+
+/** Returns a URL opener that falls back to a snackbar when no browser is present. */
+@Composable
+private fun rememberUrlOpener(snackbarHostState: SnackbarHostState): (String) -> Unit {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val noBrowserMsg = stringResource(R.string.settings_snack_no_browser)
+    return { url ->
+        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri())) }
+            .onFailure { scope.launch { snackbarHostState.showSnackbar(noBrowserMsg) } }
     }
 }
 
