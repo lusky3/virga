@@ -134,7 +134,11 @@ internal fun RemoteDropdownPicker(
             onValueChange = {},
             readOnly = true,
             label = { Text(stringResource(label)) },
-            placeholder = placeholder?.let { res -> { Text(stringResource(res)) } },
+            placeholder = if (placeholder != null) {
+                { Text(stringResource(placeholder)) }
+            } else {
+                null
+            },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier
                 .fillMaxWidth()
