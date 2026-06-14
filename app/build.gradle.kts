@@ -65,13 +65,8 @@ val debugStoreFile: java.io.File? =
 // rclone-build and the CI workflows read, so the version surfaced in the About
 // screen never drifts from the binary that actually ships.
 val rcloneVersion: String = rootProject.file("scripts/rclone-versions.env").readLines()
-    .map { it.trim() }
-    .filter { it.isNotEmpty() && !it.startsWith("#") && it.contains('=') }
-    .associate { line ->
-        val (k, v) = line.split('=', limit = 2)
-        k.trim() to v.trim()
-    }
-    .getValue("RCLONE_VERSION")
+    .first { it.trim().startsWith("RCLONE_VERSION=") }
+    .substringAfter('=').trim()
 
 // In-app update check (foss flavor only — polls the GitHub Releases API). On by
 // default for GitHub / sideload installs that have no store to update them.
