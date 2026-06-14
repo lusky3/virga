@@ -97,15 +97,16 @@ class FileBrowserViewModel @Inject constructor(
     @StringRes
     private fun validateFolderName(name: String): Int? {
         val trimmed = name.trim()
-        if (trimmed.isEmpty()) return R.string.explorer_new_folder_invalid_name
-        if (trimmed == "." || trimmed == "..") return R.string.explorer_new_folder_invalid_name
-        if (trimmed.length > MAX_FOLDER_NAME_LENGTH) return R.string.explorer_new_folder_invalid_name
-        if (trimmed.any { it == '/' || it == '\\' || it.isISOControl() }) {
-            return R.string.explorer_new_folder_invalid_name
-        }
+        if (!isStructurallyValidFolderName(trimmed)) return R.string.explorer_new_folder_invalid_name
         val exists = _state.value.rawEntries.any { it.name.equals(trimmed, ignoreCase = true) }
-        if (exists) return R.string.explorer_new_folder_exists
-        return null
+        return if (exists) R.string.explorer_new_folder_exists else null
+    }
+
+    /** Name is non-empty, not `.`/`..`, within length, and free of separators/control chars. */
+    private fun isStructurallyValidFolderName(trimmed: String): Boolean {
+        if (trimmed.isEmpty() || trimmed == "." || trimmed == "..") return false
+        if (trimmed.length > MAX_FOLDER_NAME_LENGTH) return false
+        return trimmed.none { it == '/' || it == '\\' || it.isISOControl() }
     }
 
     /** L3: the in-flight folder creation, cancelled on dismiss/relaunch. */
