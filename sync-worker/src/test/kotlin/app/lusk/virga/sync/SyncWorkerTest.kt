@@ -72,9 +72,15 @@ class SyncWorkerTest {
     // inFlightOverride: when non-null, the built worker's anotherRunInFlight() seam
     // returns it (true = simulate a sibling run already in flight) without needing a
     // live WorkManager. null = production WorkManager-backed behaviour.
-    private fun buildWorker(inFlightOverride: Boolean? = null): SyncWorker =
+    private fun buildWorker(inFlightOverride: Boolean? = null, manual: Boolean = false): SyncWorker =
         TestListenableWorkerBuilder<SyncWorker>(context)
-            .setInputData(workDataOf(SyncWorker.KEY_TASK_ID to TASK_ID))
+            .setInputData(
+                if (manual) {
+                    workDataOf(SyncWorker.KEY_TASK_ID to TASK_ID, SyncWorker.KEY_MANUAL to true)
+                } else {
+                    workDataOf(SyncWorker.KEY_TASK_ID to TASK_ID)
+                },
+            )
             .setWorkerFactory(object : androidx.work.WorkerFactory() {
                 override fun createWorker(
                     appContext: Context,
@@ -232,6 +238,31 @@ class SyncWorkerTest {
         // It bailed before starting a run: no history was recorded for this worker.
         coVerify(exactly = 0) { historyRepository.startRun(any()) }
         coVerify(exactly = 0) { executor.run(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun anotherRunInFlight_manualRun_doesNotReenqueueCalendar() = runBlocking {
+        // A manual "_now" run must NOT re-arm the calendar: only the scheduled worker
+        // owns that cadence. If both re-armed, the both-skip TOCTOU window would queue
+        // TWO next occurrences (APPEND_OR_REPLACE) → duplicate back-to-back syncs.
+        val task = SyncTask(
+            id = TASK_ID,
+            name = "test",
+            sourcePath = "content://tree/source",
+            remoteName = "gdrive",
+            remotePath = "/Backup",
+            direction = SyncDirection.UPLOAD,
+            intervalMinutes = null,
+            scheduleDaysMask = 0b0010101, // calendar-scheduled
+            enabled = true,
+        )
+        coEvery { taskRepository.getTask(TASK_ID) } returns task
+
+        val result = buildWorker(inFlightOverride = true, manual = true).doWork()
+
+        assertThat(result).isEqualTo(ListenableWorker.Result.success())
+        // The scheduled worker owns re-arming; this manual run must not touch it.
+        coVerify(exactly = 0) { scheduler.schedule(any()) }
     }
 
     @Test

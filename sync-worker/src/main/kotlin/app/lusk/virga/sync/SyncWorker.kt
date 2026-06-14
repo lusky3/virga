@@ -56,6 +56,10 @@ open class SyncWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         val taskId = inputData.getLong(KEY_TASK_ID, -1L)
         if (taskId <= 0) return Result.failure()
+        // A manual ("_now") run must never re-arm the calendar: the scheduled
+        // worker owns that cadence, so re-arming from a manual run would append a
+        // duplicate next occurrence (APPEND_OR_REPLACE) alongside the scheduled one.
+        val isManualRun = inputData.getBoolean(KEY_MANUAL, false)
         val task = taskRepository.getTask(taskId) ?: run {
             // The task was deleted (e.g. its remote was removed) but periodic work
             // for it may still be scheduled. Cancel it so this zombie stops firing,
@@ -86,13 +90,13 @@ open class SyncWorker @AssistedInject constructor(
             Log.w(TAG, "Skipping sync of task $taskId: another run is already in flight")
             // Bailing here must still arm the next calendar occurrence — otherwise a
             // calendar-scheduled run that skips drops its own re-enqueue, and that
-            // occurrence silently never repeats. In the common case the winning run
-            // re-enqueues, but there's a TOCTOU window where the scheduled and manual
-            // "_now" workers each observe the other as RUNNING and BOTH skip, leaving
-            // the calendar un-armed. Re-arm unconditionally here so skipping is safe.
+            // occurrence silently never repeats. The re-arm is gated to the scheduled
+            // worker (isManualRun = false): if the manual "_now" run also re-armed, the
+            // TOCTOU window where both skip would queue TWO next occurrences. With the
+            // gate, only the scheduled worker re-arms, so skipping is safe AND single.
             // (The residual TOCTOU race that lets both runs skip the actual sync is
             // accepted for now; the full DB-lease redesign is out of scope.)
-            reenqueueCalendar(task)
+            reenqueueCalendar(task, isManualRun)
             return Result.success()
         }
 
@@ -317,18 +321,21 @@ open class SyncWorker @AssistedInject constructor(
         // re-enqueue (APPEND_OR_REPLACE) can't race this still-RUNNING worker and
         // cancel its history/notification. Interval/periodic tasks repeat on their
         // own and don't need re-enqueuing here.
-        reenqueueCalendar(task)
+        reenqueueCalendar(task, isManualRun)
         return result
     }
 
     /**
      * Arm the NEXT occurrence of a calendar-scheduled [task]. A calendar schedule
      * runs as a one-shot, so each run must queue the next one or the schedule dies.
-     * No-op for interval/periodic tasks (they repeat on their own) and disabled
-     * tasks. Called both on the normal completion path and the
-     * [anotherRunInFlight] skip path so bailing never drops the schedule.
+     * No-op for interval/periodic tasks (they repeat on their own), disabled
+     * tasks, and manual "_now" runs ([isManualRun]) — only the scheduled worker
+     * owns the calendar cadence, so re-arming from a manual run would double-arm
+     * it. Called both on the normal completion path and the [anotherRunInFlight]
+     * skip path so bailing never drops the schedule.
      */
-    private fun reenqueueCalendar(task: SyncTask) {
+    private fun reenqueueCalendar(task: SyncTask, isManualRun: Boolean) {
+        if (isManualRun) return
         if (task.scheduleDaysMask == 0 || !task.enabled) return
         // A swallowed failure here means the calendar task silently never runs
         // again — log it so the drop is at least diagnosable.
@@ -475,6 +482,9 @@ open class SyncWorker @AssistedInject constructor(
 
     companion object {
         const val KEY_TASK_ID = "task_id"
+        // Set by SyncScheduler.syncNow: marks the manual "_now" run so it never
+        // re-arms the calendar (only the scheduled worker owns that cadence).
+        const val KEY_MANUAL = "manual"
         const val UNIQUE_PREFIX = "sync_task_"
         private const val TAG = "SyncWorker"
         // Retain ~30 days of sync history; older runs are pruned each invocation.

@@ -18,10 +18,10 @@ import app.lusk.virga.core.database.entity.SyncTaskEntity
  * Schema is at version 2: the app is pre-release, so the incremental v1→v7 migration
  * history (added while iterating) was collapsed into a single v1 baseline rather than
  * carried forward. v2 drops RemoteEntity.displayName and re-indexes sync_runs on
- * startedAtEpochMs (no Migration: the debug-only destructive fallback wipes local data).
- * Real [androidx.room.migration.Migration]s are added once there are installs with data
- * to preserve. Until then, DatabaseModule's debug-only destructive fallback handles any
- * local schema edits.
+ * startedAtEpochMs (no Migration: DatabaseModule's unconditional destructive fallback
+ * wipes local data on any schema change). Real [androidx.room.migration.Migration]s are
+ * added once there are installs with data to preserve; until then the destructive
+ * fallback (applied in all build types pre-release) handles any schema edit.
  */
 @Database(
     entities = [
