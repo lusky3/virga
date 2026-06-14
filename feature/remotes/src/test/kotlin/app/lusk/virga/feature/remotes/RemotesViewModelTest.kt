@@ -897,6 +897,55 @@ class RemotesViewModelTest {
     }
 
     @Test
+    fun `providersReady distinguishes loading from loaded-but-empty so the dialog falls back`() =
+        runTest(mainDispatcher.dispatcher) {
+            // HIGH regression vs v0.1.0: a FAILED/EMPTY schema load is reported by
+            // the repository as an empty list, which leaves pickerEntries() null —
+            // indistinguishable from STILL-LOADING. providersReady must flip true
+            // once the load finishes (even empty) so the Add dialog stops spinning
+            // and falls through to the freeform fallback.
+            coEvery { repository.providers() } returns emptyList()
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.providersReady.collect {} }
+            advanceUntilIdle()
+
+            // Before any load attempt: not ready (still "loading" from the UI's view).
+            assertThat(vm.providersReady.value).isFalse()
+            assertThat(vm.pickerEntries()).isNull()
+
+            vm.ensureProvidersLoaded()
+            advanceUntilIdle()
+
+            // Load finished but produced no usable catalog: ready is true while
+            // pickerEntries stays null — the two states are now distinguishable.
+            assertThat(vm.providersReady.value).isTrue()
+            assertThat(vm.pickerEntries()).isNull()
+            collector.cancel()
+        }
+
+    @Test
+    fun `providersReady becomes true with a usable catalog after a successful load`() =
+        runTest(mainDispatcher.dispatcher) {
+            coEvery { repository.providers() } returns listOf(
+                RemoteProvider("sftp", "SFTP", listOf(
+                    RemoteOption("host", "", "string", true, false, null, emptyList(), false),
+                )),
+            )
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.providersReady.collect {} }
+            advanceUntilIdle()
+
+            assertThat(vm.providersReady.value).isFalse()
+
+            vm.ensureProvidersLoaded()
+            advanceUntilIdle()
+
+            assertThat(vm.providersReady.value).isTrue()
+            assertThat(vm.pickerEntries()).isNotNull()
+            collector.cancel()
+        }
+
+    @Test
     fun `setupKindFor classifies providers correctly`() = runTest(mainDispatcher.dispatcher) {
         coEvery { repository.providers() } returns listOf(
             RemoteProvider("drive", "Google Drive", listOf(

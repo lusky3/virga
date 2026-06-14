@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -110,6 +111,19 @@ class RemotesViewModel @Inject constructor(
 
     /** Public read-only view of the provider schema for the UI to collect. */
     val providers: StateFlow<List<RemoteProvider>?> = _providers
+
+    /**
+     * True once a provider-schema load has *finished* — regardless of whether it
+     * yielded a usable catalog. Distinguishes "still loading" (false) from "load
+     * done but empty/failed" (true with [pickerEntries] still null), so the Add
+     * dialog can show a spinner only while genuinely loading and otherwise fall
+     * back to the freeform form instead of spinning forever (HIGH regression
+     * vs v0.1.0: a failed/empty schema dead-ended on an indefinite spinner).
+     */
+    val providersReady: StateFlow<Boolean> =
+        _providers
+            .map { it != null }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     /**
      * Lazily fetches the `config/providers` schema. Safe to call repeatedly —

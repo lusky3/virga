@@ -206,15 +206,22 @@ internal fun AddRemoteDialog(
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            // The schema load has FINISHED once providersLoaded is non-null (an
+            // empty list means it failed or returned nothing). Gate the Picker
+            // spinner on this — NOT on pickerEntries — so a failed/empty load
+            // falls through to the freeform fallback (else arm) instead of
+            // spinning forever (HIGH regression vs v0.1.0).
+            val providersLoading = providersLoaded == null
             when {
-                // Step: Picker — show loading when provider schema hasn't loaded yet
-                step == AddStep.Picker && pickerEntries == null -> {
+                // Step: Picker — show loading only while the schema is genuinely
+                // still loading.
+                step == AddStep.Picker && providersLoading -> {
                     Box(Modifier.fillMaxWidth().padding(VirgaSpacing.xl), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
                     }
                 }
 
-                // Step: Picker — show the provider picker when available
+                // Step: Picker — show the provider picker when the catalog loaded.
                 step == AddStep.Picker && pickerEntries != null -> {
                     ProviderPicker(
                         entries = pickerEntries,
