@@ -34,6 +34,10 @@ import kotlinx.coroutines.flow.catch
 @HiltWorker
 // `open` so unit tests can override the WorkManager-backed [anotherRunInFlight]
 // seam without standing up a live WorkManager; production behaviour is unchanged.
+// LongParameterList is suppressed: every constructor arg is an @AssistedInject DI
+// dependency (a known detekt false-positive for injected constructors), not a
+// hand-passed parameter list — and Codacy runs detekt with no ignoreAnnotated config.
+@Suppress("LongParameterList")
 open class SyncWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted params: WorkerParameters,
