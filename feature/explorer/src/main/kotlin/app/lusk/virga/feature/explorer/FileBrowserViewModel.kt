@@ -85,6 +85,9 @@ class FileBrowserViewModel @Inject constructor(
 
     /** Dismisses the create-folder dialog and clears its error/in-flight state. */
     fun dismissCreateFolderDialog() {
+        // Cancel any in-flight mkdir so dismissing can't later navigate into a folder
+        // the user backed out of.
+        createFolderJob?.cancel()
         _state.update {
             it.copy(showCreateFolderDialog = false, createFolderError = null, creatingFolder = false)
         }
