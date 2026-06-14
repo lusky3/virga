@@ -32,7 +32,7 @@ class SyncScheduler @Inject constructor(
     /** Enqueues an immediate one-time sync of [taskId]. */
     fun syncNow(taskId: Long) {
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
-            .setInputData(workDataOf(SyncWorker.KEY_TASK_ID to taskId))
+            .setInputData(workDataOf(SyncWorker.KEY_TASK_ID to taskId, SyncWorker.KEY_MANUAL to true))
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()
         workManager.enqueueUniqueWork(

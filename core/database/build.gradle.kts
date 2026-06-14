@@ -10,8 +10,6 @@ android {
     defaultConfig {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-    // BuildConfig.DEBUG gates the destructive-migration fallback (debug only).
-    buildFeatures { buildConfig = true }
     // Let Robolectric unit tests read the exported Room schema JSONs so
     // MigrationTestHelper can validate migrations (e.g. Migration5to6Test).
     testOptions { unitTests.isIncludeAndroidResources = true }

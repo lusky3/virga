@@ -2,7 +2,6 @@ package app.lusk.virga.core.database.di
 
 import android.content.Context
 import androidx.room.Room
-import app.lusk.virga.core.database.BuildConfig
 import app.lusk.virga.core.database.VirgaDatabase
 import app.lusk.virga.core.database.dao.AppStatsDao
 import app.lusk.virga.core.database.dao.ConflictDao
@@ -24,17 +23,14 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): VirgaDatabase =
         Room.databaseBuilder(context, VirgaDatabase::class.java, VirgaDatabase.NAME)
-            // No migrations yet: the schema is a single pre-release v1 baseline (see
-            // VirgaDatabase). The debug-only destructive fallback wipes data on any local
-            // schema edit during development. A RELEASE build registers no migrations, so
-            // the first post-release schema change (v1→v2) MUST add a real Migration here
-            // or Room will throw at startup — the intended guard against silent data loss.
-            .apply {
-                if (BuildConfig.DEBUG) {
-                    fallbackToDestructiveMigration(dropAllTables = true)
-                    fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
-                }
-            }
+            // Pre-production policy: destructive migration is acceptable in ALL build types
+            // (release included), since there are no shipped users and wiping app data on a
+            // schema change is fine. No Migration objects are registered yet, so without this
+            // fallback a release build upgrading across a schema bump (e.g. v1→v2) would throw
+            // at first DB access and crash on launch. Revisit with a real Migration once the
+            // app has shipped users and data preservation matters.
+            .fallbackToDestructiveMigration(dropAllTables = true)
+            .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
             .build()
 
     @Provides fun provideRemoteDao(db: VirgaDatabase): RemoteDao = db.remoteDao()
