@@ -413,6 +413,13 @@ class RcloneEngineImpl @Inject constructor(
         })
     }
 
+    override suspend fun mkdir(remote: String, path: String): Unit = withLease { d ->
+        rc(d, "operations/mkdir", buildJsonObject {
+            put("fs", remote)
+            put(KEY_REMOTE, path)
+        })
+    }
+
     override suspend fun testConnectivity(remoteName: String): Result<Unit> = withLease { d ->
         val fs = "$remoteName:"
         try {

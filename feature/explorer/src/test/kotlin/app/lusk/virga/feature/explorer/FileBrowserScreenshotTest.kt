@@ -107,6 +107,30 @@ class FileBrowserScreenshotTest {
     }
 
     @Test
+    fun fileBrowserScreen_createFolderDialog() {
+        val vm = viewModel(populatedListing)
+        // Pick mode renders the "New folder" FAB + the create-folder dialog; drive the
+        // VM into the dialog-open state before composing so the golden captures it.
+        vm.selectRemote("gdrive")
+        vm.openCreateFolderDialog()
+        // The AlertDialog renders into a separate window, so the composeRule's onRoot()
+        // espresso tree never settles to idle (the dialog window keeps it busy). Use the
+        // standalone composable-lambda capture, which renders + captures a single resolved
+        // frame including the dialog overlay without relying on espresso idle.
+        captureRoboImage(
+            filePath = "src/test/snapshots/" +
+                "app.lusk.virga.feature.explorer.FileBrowserScreenshotTest." +
+                "fileBrowserScreen_createFolderDialog.png",
+        ) {
+            VirgaTheme {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    FileBrowserScreen(onBack = {}, pickMode = true, viewModel = vm)
+                }
+            }
+        }
+    }
+
+    @Test
     fun fileBrowserScreen_empty() {
         val vm = viewModel(emptyList())
         vm.selectRemote("gdrive")

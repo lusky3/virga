@@ -399,6 +399,37 @@ class RcloneEngineImplTest {
         assertThat(files).isEmpty()
     }
 
+    // --- mkdir ---
+
+    @Test fun `mkdir issues operations_mkdir with fs and remote params`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+
+        val capturedParams = mutableListOf<kotlinx.serialization.json.JsonObject>()
+        coEvery { apiClient.call(any(), any(), any(), "operations/mkdir", capture(capturedParams)) } returns buildJsonObject {}
+
+        engine.startDaemon()
+        engine.mkdir("gdrive:", "Photos/2024")
+
+        val req = capturedParams.first()
+        assertThat(req["fs"]?.jsonPrimitive?.contentOrNull).isEqualTo("gdrive:")
+        assertThat(req["remote"]?.jsonPrimitive?.contentOrNull).isEqualTo("Photos/2024")
+    }
+
+    @Test fun `mkdir propagates VirgaError on RC failure`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "operations/mkdir", any()) } throws
+            VirgaError.Rclone(exitCode = 403, message = "permission denied")
+
+        engine.startDaemon()
+        val error = assertThrows<VirgaError.Rclone> { engine.mkdir("gdrive:", "blocked") }
+
+        assertThat(error.message).contains("permission denied")
+    }
+
     // --- sync job flow ---
 
     @Test fun `sync emits SyncProgress and completes on successful job`() = runTest(testDispatcher) {

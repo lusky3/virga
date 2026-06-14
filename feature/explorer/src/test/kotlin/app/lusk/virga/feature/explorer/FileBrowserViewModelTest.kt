@@ -255,6 +255,168 @@ class FileBrowserViewModelTest {
     }
 
     // -------------------------------------------------------------------------
+    // createFolder
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `createFolder creates the joined child path then navigates into it`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { engine.listDir(any(), any()) } returns emptyList()
+        coEvery { engine.mkdir(any(), any()) } returns Unit
+        val vm = viewModel()
+        vm.selectRemote("gdrive")
+        advanceUntilIdle()
+        vm.open(dir("Photos").copy(path = "Photos"))
+        advanceUntilIdle()
+
+        vm.openCreateFolderDialog()
+        vm.createFolder("2024")
+        advanceUntilIdle()
+
+        // mkdir is called with the joined "<current path>/<name>" via the repository
+        // ("$remote:" prefix added by the engine boundary).
+        coVerify { engine.mkdir("gdrive:", "Photos/2024") }
+        // Navigated into the freshly created folder and the dialog closed.
+        assertThat(vm.state.value.path).isEqualTo("Photos/2024")
+        assertThat(vm.state.value.remoteName).isEqualTo("gdrive")
+        assertThat(vm.state.value.showCreateFolderDialog).isFalse()
+        assertThat(vm.state.value.creatingFolder).isFalse()
+        assertThat(vm.state.value.createFolderError).isNull()
+    }
+
+    @Test
+    fun `createFolder at root joins without a leading slash`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { engine.listDir(any(), any()) } returns emptyList()
+        coEvery { engine.mkdir(any(), any()) } returns Unit
+        val vm = viewModel()
+        vm.selectRemote("gdrive")
+        advanceUntilIdle()
+
+        vm.createFolder("NewFolder")
+        advanceUntilIdle()
+
+        coVerify { engine.mkdir("gdrive:", "NewFolder") }
+        assertThat(vm.state.value.path).isEqualTo("NewFolder")
+    }
+
+    @Test
+    fun `createFolder rejects a blank name without calling mkdir`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { engine.listDir(any(), any()) } returns emptyList()
+        val vm = viewModel()
+        vm.selectRemote("gdrive")
+        advanceUntilIdle()
+
+        vm.createFolder("   ")
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.createFolderError).isEqualTo(R.string.explorer_new_folder_invalid_name)
+        coVerify(exactly = 0) { engine.mkdir(any(), any()) }
+    }
+
+    @Test
+    fun `createFolder rejects a name with a slash without calling mkdir`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { engine.listDir(any(), any()) } returns emptyList()
+        val vm = viewModel()
+        vm.selectRemote("gdrive")
+        advanceUntilIdle()
+
+        vm.createFolder("a/b")
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.createFolderError).isEqualTo(R.string.explorer_new_folder_invalid_name)
+        coVerify(exactly = 0) { engine.mkdir(any(), any()) }
+    }
+
+    @Test
+    fun `createFolder rejects the parent-dir name without calling mkdir`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { engine.listDir(any(), any()) } returns emptyList()
+        val vm = viewModel()
+        vm.selectRemote("gdrive")
+        advanceUntilIdle()
+
+        vm.createFolder("..")
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.createFolderError).isEqualTo(R.string.explorer_new_folder_invalid_name)
+        coVerify(exactly = 0) { engine.mkdir(any(), any()) }
+    }
+
+    @Test
+    fun `createFolder rejects a case-insensitive duplicate without calling mkdir`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { engine.listDir(any(), any()) } returns listOf(dir("Photos"))
+        val vm = viewModel()
+        vm.selectRemote("gdrive")
+        advanceUntilIdle()
+
+        vm.createFolder("photos")
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.createFolderError).isEqualTo(R.string.explorer_new_folder_exists)
+        coVerify(exactly = 0) { engine.mkdir(any(), any()) }
+    }
+
+    @Test
+    fun `createFolder rejects a name with a backslash without calling mkdir`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { engine.listDir(any(), any()) } returns emptyList()
+        val vm = viewModel()
+        vm.selectRemote("gdrive")
+        advanceUntilIdle()
+
+        vm.createFolder("a\\b")
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.createFolderError).isEqualTo(R.string.explorer_new_folder_invalid_name)
+        coVerify(exactly = 0) { engine.mkdir(any(), any()) }
+    }
+
+    @Test
+    fun `createFolder rejects a name with a control character without calling mkdir`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { engine.listDir(any(), any()) } returns emptyList()
+        val vm = viewModel()
+        vm.selectRemote("gdrive")
+        advanceUntilIdle()
+
+        vm.createFolder("a\tb")
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.createFolderError).isEqualTo(R.string.explorer_new_folder_invalid_name)
+        coVerify(exactly = 0) { engine.mkdir(any(), any()) }
+    }
+
+    @Test
+    fun `createFolder rejects an over-length name without calling mkdir`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { engine.listDir(any(), any()) } returns emptyList()
+        val vm = viewModel()
+        vm.selectRemote("gdrive")
+        advanceUntilIdle()
+
+        vm.createFolder("a".repeat(256))
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.createFolderError).isEqualTo(R.string.explorer_new_folder_invalid_name)
+        coVerify(exactly = 0) { engine.mkdir(any(), any()) }
+    }
+
+    @Test
+    fun `createFolder surfaces an error and does not navigate when mkdir fails`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { engine.listDir(any(), any()) } returns emptyList()
+        coEvery { engine.mkdir(any(), any()) } throws
+            app.lusk.virga.core.common.error.VirgaError.Rclone(message = "boom")
+        val vm = viewModel()
+        vm.selectRemote("gdrive")
+        advanceUntilIdle()
+
+        vm.openCreateFolderDialog()
+        vm.createFolder("NewFolder")
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.createFolderError).isEqualTo(R.string.explorer_new_folder_failed)
+        assertThat(vm.state.value.creatingFolder).isFalse()
+        // Stayed in the current directory; the dialog remains open to allow a retry.
+        assertThat(vm.state.value.path).isEqualTo("")
+        assertThat(vm.state.value.showCreateFolderDialog).isTrue()
+    }
+
+    // -------------------------------------------------------------------------
     // selectRemoteIfUnset
     // -------------------------------------------------------------------------
 

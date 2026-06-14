@@ -19,6 +19,13 @@ class FileBrowserRepository @Inject constructor(
         engine.listDir("$remoteName:", path)
 
     /**
+     * Creates directory [path] within [remoteName] (idempotent). Throws
+     * [app.lusk.virga.core.common.error.VirgaError] on failure.
+     */
+    suspend fun mkdir(remoteName: String, path: String) =
+        engine.mkdir("$remoteName:", path)
+
+    /**
      * Releases the daemon when browsing closes — best-effort: stops it only if no
      * sync is currently leasing it (the browser is a non-leasing consumer using the
      * warm daemon), so closing the browser can't kill an in-flight sync.
