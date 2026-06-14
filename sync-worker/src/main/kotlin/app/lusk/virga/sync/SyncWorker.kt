@@ -16,6 +16,7 @@ import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.common.model.SyncProgress
 import app.lusk.virga.core.common.model.SyncStatus
+import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.data.ConflictRepository
 import app.lusk.virga.core.data.StatsRepository
 import app.lusk.virga.core.data.SyncHistoryRepository
@@ -31,7 +32,9 @@ import kotlinx.coroutines.flow.catch
  * recorded in [SyncHistoryRepository].
  */
 @HiltWorker
-class SyncWorker @AssistedInject constructor(
+// `open` so unit tests can override the WorkManager-backed [anotherRunInFlight]
+// seam without standing up a live WorkManager; production behaviour is unchanged.
+open class SyncWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted params: WorkerParameters,
     private val executor: SyncExecutor,
@@ -77,6 +80,15 @@ class SyncWorker @AssistedInject constructor(
         // emptied source. Exclude this worker's own WorkInfo from the check.
         if (anotherRunInFlight(taskId)) {
             Log.w(TAG, "Skipping sync of task $taskId: another run is already in flight")
+            // Bailing here must still arm the next calendar occurrence — otherwise a
+            // calendar-scheduled run that skips drops its own re-enqueue, and that
+            // occurrence silently never repeats. In the common case the winning run
+            // re-enqueues, but there's a TOCTOU window where the scheduled and manual
+            // "_now" workers each observe the other as RUNNING and BOTH skip, leaving
+            // the calendar un-armed. Re-arm unconditionally here so skipping is safe.
+            // (The residual TOCTOU race that lets both runs skip the actual sync is
+            // accepted for now; the full DB-lease redesign is out of scope.)
+            reenqueueCalendar(task)
             return Result.success()
         }
 
@@ -301,13 +313,23 @@ class SyncWorker @AssistedInject constructor(
         // re-enqueue (APPEND_OR_REPLACE) can't race this still-RUNNING worker and
         // cancel its history/notification. Interval/periodic tasks repeat on their
         // own and don't need re-enqueuing here.
-        if (task.scheduleDaysMask != 0 && task.enabled) {
-            // A swallowed failure here means the calendar task silently never runs
-            // again — log it so the drop is at least diagnosable.
-            runCatching { scheduler.schedule(task) }
-                .onFailure { Log.w(TAG, "Failed to re-enqueue calendar schedule for task $taskId", it) }
-        }
+        reenqueueCalendar(task)
         return result
+    }
+
+    /**
+     * Arm the NEXT occurrence of a calendar-scheduled [task]. A calendar schedule
+     * runs as a one-shot, so each run must queue the next one or the schedule dies.
+     * No-op for interval/periodic tasks (they repeat on their own) and disabled
+     * tasks. Called both on the normal completion path and the
+     * [anotherRunInFlight] skip path so bailing never drops the schedule.
+     */
+    private fun reenqueueCalendar(task: SyncTask) {
+        if (task.scheduleDaysMask == 0 || !task.enabled) return
+        // A swallowed failure here means the calendar task silently never runs
+        // again — log it so the drop is at least diagnosable.
+        runCatching { scheduler.schedule(task) }
+            .onFailure { Log.w(TAG, "Failed to re-enqueue calendar schedule for task ${task.id}", it) }
     }
 
     /** Record a SUCCESS run from the last observed [progress] snapshot. */
@@ -421,7 +443,7 @@ class SyncWorker @AssistedInject constructor(
      * than this one. Guards against the scheduled and manual ("_now") runs of the
      * same task executing concurrently (shared staging dir, mirror data loss).
      */
-    private fun anotherRunInFlight(taskId: Long): Boolean {
+    internal open fun anotherRunInFlight(taskId: Long): Boolean {
         val names = listOf(
             UNIQUE_PREFIX + taskId,
             UNIQUE_PREFIX + taskId + "_now",
