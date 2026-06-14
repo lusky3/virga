@@ -1110,4 +1110,38 @@ class RcloneEngineImplTest {
         coVerify { daemonManager.stop(fakeDaemon) }
         coVerify { configManager.persistAndCleanup() }
     }
+
+    @Test fun `withDaemonForOAuth failure while a sync co-leases discards the tainted config on the last release`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.persistAndCleanup() } returns Unit
+        coEvery { configManager.cleanup() } returns Unit
+
+        // OAuth takes its lease and parks mid-flow (paste wait), lock released.
+        val gate = CompletableDeferred<Unit>()
+        val oauth = launch(start = CoroutineStart.UNDISPATCHED) {
+            runCatching { engine.withDaemonForOAuth<Unit> { gate.await(); throw VirgaError.Rclone(message = "oauth failed") } }
+        }
+        advanceUntilIdle() // parked, leases = 1
+
+        // A concurrent sync co-leases the shared daemon (leases = 2).
+        engine.acquireDaemon()
+
+        // OAuth resumes and fails. It can't tear down (sync still leases), so it must
+        // NOT persist — it records the discard intent for the last leaseholder instead.
+        gate.complete(Unit)
+        advanceUntilIdle()
+        oauth.join()
+        coVerify(exactly = 0) { daemonManager.stop(fakeDaemon) }    // daemon stays up for the sync
+        coVerify(exactly = 0) { configManager.persistAndCleanup() } // nothing persisted yet
+
+        // The sync releases last → daemon torn down and the tainted (token-less) config
+        // DISCARDED, not persisted — matching withExclusiveDaemon's discard-on-failure.
+        engine.releaseDaemon()
+        coVerify { daemonManager.stop(fakeDaemon) }
+        coVerify { configManager.cleanup() }
+        coVerify(exactly = 0) { configManager.persistAndCleanup() }
+    }
 }
