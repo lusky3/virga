@@ -125,6 +125,7 @@ class SettingsScreenshotTest {
             .performScrollTo()
             .performClick()
         composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage()
     }
 
     // Note: a storageAccessRelevant=false variant was dropped — StorageAccessSection
