@@ -190,17 +190,21 @@ fun SettingsScreen(
             CommitOnBlurField(
                 value = bwLimitMetered,
                 onValueChange = { bwLimitMetered = it },
-                label = R.string.settings_field_bw_metered,
-                placeholder = R.string.settings_field_bw_metered_placeholder,
-                hint = R.string.settings_field_bw_metered_hint,
+                text = FieldText(
+                    R.string.settings_field_bw_metered,
+                    R.string.settings_field_bw_metered_placeholder,
+                    R.string.settings_field_bw_metered_hint,
+                ),
                 onCommit = commitBwLimits,
             )
             CommitOnBlurField(
                 value = bwLimitWifi,
                 onValueChange = { bwLimitWifi = it },
-                label = R.string.settings_field_bw_wifi,
-                placeholder = R.string.settings_field_bw_wifi_placeholder,
-                hint = R.string.settings_field_bw_wifi_hint,
+                text = FieldText(
+                    R.string.settings_field_bw_wifi,
+                    R.string.settings_field_bw_wifi_placeholder,
+                    R.string.settings_field_bw_wifi_hint,
+                ),
                 onCommit = commitBwLimits,
             )
 
@@ -478,6 +482,13 @@ private fun AcknowledgementsSheet(onOpenUrl: (String) -> Unit, onDismiss: () -> 
     }
 }
 
+/** Static label/placeholder/hint string resources for a [CommitOnBlurField]. */
+private class FieldText(
+    @get:StringRes val label: Int,
+    @get:StringRes val placeholder: Int,
+    @get:StringRes val hint: Int,
+)
+
 /**
  * An ASCII [OutlinedTextField] that fires [onCommit] once focus leaves it, but
  * only after it has been focused at least once (so the initial composition
@@ -487,18 +498,16 @@ private fun AcknowledgementsSheet(onOpenUrl: (String) -> Unit, onDismiss: () -> 
 private fun CommitOnBlurField(
     value: String,
     onValueChange: (String) -> Unit,
-    @StringRes label: Int,
-    @StringRes placeholder: Int,
-    @StringRes hint: Int,
+    text: FieldText,
     onCommit: () -> Unit,
 ) {
     var hasBeenFocused by remember { mutableStateOf(false) }
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text(stringResource(label)) },
-        placeholder = { Text(stringResource(placeholder)) },
-        supportingText = { Text(stringResource(hint)) },
+        label = { Text(stringResource(text.label)) },
+        placeholder = { Text(stringResource(text.placeholder)) },
+        supportingText = { Text(stringResource(text.hint)) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
         modifier = Modifier
             .fillMaxWidth()

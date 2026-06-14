@@ -70,25 +70,31 @@ internal fun AdvancedSection(form: SyncTaskForm, viewModel: SyncTaskEditViewMode
                 ValidatedAsciiField(
                     value = form.bwLimitWifi,
                     onValueChange = { viewModel.update { f -> f.copy(bwLimitWifi = it) } },
-                    label = R.string.sync_edit_field_bw_wifi,
-                    placeholder = R.string.sync_edit_field_bw_wifi_placeholder,
-                    hint = R.string.sync_edit_field_bw_wifi_hint,
+                    text = FieldText(
+                        R.string.sync_edit_field_bw_wifi,
+                        R.string.sync_edit_field_bw_wifi_placeholder,
+                        R.string.sync_edit_field_bw_wifi_hint,
+                    ),
                     error = form.bwLimitWifiError,
                 )
                 ValidatedAsciiField(
                     value = form.bwLimitMetered,
                     onValueChange = { viewModel.update { f -> f.copy(bwLimitMetered = it) } },
-                    label = R.string.sync_edit_field_bw_metered,
-                    placeholder = R.string.sync_edit_field_bw_metered_placeholder,
-                    hint = R.string.sync_edit_field_bw_metered_hint,
+                    text = FieldText(
+                        R.string.sync_edit_field_bw_metered,
+                        R.string.sync_edit_field_bw_metered_placeholder,
+                        R.string.sync_edit_field_bw_metered_hint,
+                    ),
                     error = form.bwLimitMeteredError,
                 )
                 ValidatedAsciiField(
                     value = form.bufferSize,
                     onValueChange = { viewModel.update { f -> f.copy(bufferSize = it) } },
-                    label = R.string.sync_edit_field_buffer,
-                    placeholder = R.string.sync_edit_field_buffer_placeholder,
-                    hint = R.string.sync_edit_field_buffer_hint,
+                    text = FieldText(
+                        R.string.sync_edit_field_buffer,
+                        R.string.sync_edit_field_buffer_placeholder,
+                        R.string.sync_edit_field_buffer_hint,
+                    ),
                     error = form.bufferSizeError,
                 )
                 // ---- WS3.1 Tier-2 options ------------------------------------
@@ -158,27 +164,32 @@ internal fun AdvancedSection(form: SyncTaskForm, viewModel: SyncTaskEditViewMode
     }
 }
 
+/** Static label/placeholder/hint string resources for a [ValidatedAsciiField]. */
+private class FieldText(
+    @get:StringRes val label: Int,
+    @get:StringRes val placeholder: Int,
+    @get:StringRes val hint: Int,
+)
+
 /**
- * A single-line ASCII [OutlinedTextField] that shows [error] in place of [hint]
- * when validation fails. The three bandwidth/buffer inputs share this exact
+ * A single-line ASCII [OutlinedTextField] that shows [error] in place of the
+ * hint when validation fails. The three bandwidth/buffer inputs share this exact
  * shape, differing only in their bound value and string resources.
  */
 @Composable
 private fun ValidatedAsciiField(
     value: String,
     onValueChange: (String) -> Unit,
-    @StringRes label: Int,
-    @StringRes placeholder: Int,
-    @StringRes hint: Int,
+    text: FieldText,
     error: String?,
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text(stringResource(label)) },
-        placeholder = { Text(stringResource(placeholder)) },
+        label = { Text(stringResource(text.label)) },
+        placeholder = { Text(stringResource(text.placeholder)) },
         isError = error != null,
-        supportingText = { Text(error ?: stringResource(hint)) },
+        supportingText = { Text(error ?: stringResource(text.hint)) },
         keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.Ascii,
             imeAction = ImeAction.Next,
