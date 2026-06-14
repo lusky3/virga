@@ -2,7 +2,6 @@ package app.lusk.virga.feature.sync
 
 import android.net.Uri
 import android.os.Environment
-import androidx.annotation.StringRes
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -35,7 +33,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -51,13 +48,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import app.lusk.virga.core.designsystem.component.ToggleRow
 import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.model.SyncDirection
@@ -263,17 +260,17 @@ fun SyncTaskEditScreen(
             }
 
             // Wi-Fi only toggle
-            LabeledSwitchRow(
-                label = R.string.sync_edit_field_wifi_only,
+            ToggleRow(
+                label = stringResource(R.string.sync_edit_field_wifi_only),
                 checked = form.wifiOnly,
-                onCheckedChange = { v -> viewModel.update { f -> f.copy(wifiOnly = v) } },
+                onChange = { v -> viewModel.update { f -> f.copy(wifiOnly = v) } },
             )
 
             // Require charging toggle
-            LabeledSwitchRow(
-                label = R.string.sync_edit_field_require_charging,
+            ToggleRow(
+                label = stringResource(R.string.sync_edit_field_require_charging),
                 checked = form.requiresCharging,
-                onCheckedChange = { v -> viewModel.update { f -> f.copy(requiresCharging = v) } },
+                onChange = { v -> viewModel.update { f -> f.copy(requiresCharging = v) } },
             )
 
             // Filters (Tier 1) — include/exclude rule builder.
@@ -439,33 +436,4 @@ private fun directionHintRes(dir: SyncDirection): Int = when (dir) {
     SyncDirection.BISYNC -> R.string.sync_direction_hint_bisync
 }
 
-/**
- * A full-width row that toggles a boolean [Switch] when tapped anywhere. The
- * Wi-Fi-only and require-charging constraints render identically through this.
- */
-@Composable
-private fun LabeledSwitchRow(
-    @StringRes label: Int,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .toggleable(
-                value = checked,
-                role = Role.Switch,
-                onValueChange = onCheckedChange,
-            )
-            .padding(vertical = VirgaSpacing.xs),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            stringResource(label),
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyLarge,
-        )
-        Switch(checked = checked, onCheckedChange = null)
-    }
-}
 
