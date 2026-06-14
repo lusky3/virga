@@ -5,7 +5,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import app.lusk.virga.core.datastore.AppPreferences
 import app.lusk.virga.core.datastore.PreferencesRepository
 import app.lusk.virga.core.designsystem.theme.VirgaTheme
@@ -92,6 +96,37 @@ class SettingsScreenshotTest {
         composeRule.waitForIdle()
         composeRule.onRoot().captureRoboImage()
     }
+    /**
+     * Types into the metered bandwidth field then moves focus to the Wi-Fi field,
+     * forcing the metered field to blur. That exercises `CommitOnBlurField`'s
+     * focus-then-blur branch and the `commitBwLimits` callback, which a static
+     * render never reaches.
+     */
+    @Test
+    fun settingsScreen_bandwidthField_commitsOnBlur() {
+        composeRule.setContent {
+            VirgaTheme {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    SettingsScreen(
+                        crashReportingAvailable = true,
+                        storageAccessRelevant = false,
+                        viewModel = viewModel(),
+                    )
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        // Focus + edit the metered field…
+        composeRule.onNodeWithText("Default metered bandwidth limit")
+            .performScrollTo()
+            .performTextInput("1M")
+        // …then move focus to the Wi-Fi field so the metered field blurs and commits.
+        composeRule.onNodeWithText("Default Wi-Fi bandwidth limit")
+            .performScrollTo()
+            .performClick()
+        composeRule.waitForIdle()
+    }
+
     // Note: a storageAccessRelevant=false variant was dropped — StorageAccessSection
     // renders below the capture viewport, so the two produced byte-identical goldens.
     // The =true case above is what exercises the ShadowEnvNoManager path (the section
