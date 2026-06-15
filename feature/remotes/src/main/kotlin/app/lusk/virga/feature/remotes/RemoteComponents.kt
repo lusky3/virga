@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import app.lusk.virga.core.designsystem.component.VirgaCard
@@ -23,6 +25,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
@@ -59,8 +63,11 @@ internal fun RemoteCard(
     onOpenBrowser: () -> Unit,
     onCreateTask: (String) -> Unit,
     onDelete: () -> Unit,
+    onTestConnectivity: () -> Unit = {},
     quota: RemoteQuota? = null,
     quotaLoading: Boolean = false,
+    connectivity: ConnectivityResult? = null,
+    connectivityTesting: Boolean = false,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -84,6 +91,7 @@ internal fun RemoteCard(
                 )
                 Text(friendlyType, style = MaterialTheme.typography.bodyMedium)
                 RemoteQuotaRow(quota, quotaLoading)
+                RemoteConnectivityRow(connectivity, connectivityTesting)
             }
 
             // Overflow menu
@@ -104,6 +112,10 @@ internal fun RemoteCard(
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.remotes_card_menu_new_task)) },
                     onClick = { menuExpanded = false; onCreateTask(remote.name) },
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.remotes_card_menu_test_connectivity)) },
+                    onClick = { menuExpanded = false; onTestConnectivity() },
                 )
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.remotes_card_menu_delete)) },
@@ -171,5 +183,74 @@ private fun RemoteQuotaRow(quota: RemoteQuota?, loading: Boolean) {
                 )
             }
         }
+    }
+}
+
+/**
+ * Shows the result of an on-demand connectivity test. While [testing] is true, shows
+ * an indeterminate progress bar with a "Testing…" label. On a finished result, shows
+ * "Connected" (success) or "Connection failed" (failure) with appropriate color.
+ * Renders nothing when no test has been started and nothing is in flight.
+ */
+@Composable
+private fun RemoteConnectivityRow(result: ConnectivityResult?, testing: Boolean) {
+    when {
+        testing -> ConnectivityTestingRow()
+        result == ConnectivityResult.SUCCESS -> ConnectivityStatusRow(
+            icon = Icons.Filled.Wifi,
+            label = stringResource(R.string.remotes_connectivity_success),
+            color = MaterialTheme.colorScheme.primary,
+        )
+        result == ConnectivityResult.FAILURE -> ConnectivityStatusRow(
+            icon = Icons.Filled.WifiOff,
+            label = stringResource(R.string.remotes_connectivity_failed),
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+}
+
+/** In-flight state: a "Testing…" label over an indeterminate progress bar. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun ConnectivityTestingRow() {
+    val testingLabel = stringResource(R.string.remotes_connectivity_testing)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = VirgaSpacing.xs)
+            .semantics { liveRegion = LiveRegionMode.Polite },
+    ) {
+        Text(
+            testingLabel,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        LinearWavyProgressIndicator(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = VirgaSpacing.xs)
+                .semantics { contentDescription = testingLabel },
+        )
+    }
+}
+
+/** Finished state: an [icon] + [label] tinted [color] (success or failure share this). */
+@Composable
+private fun ConnectivityStatusRow(icon: ImageVector, label: String, color: Color) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = VirgaSpacing.xs)
+            // Announce the finished outcome to screen readers, like the testing state.
+            .semantics { liveRegion = LiveRegionMode.Polite },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = color)
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = color,
+            modifier = Modifier.padding(start = VirgaSpacing.xs),
+        )
     }
 }
