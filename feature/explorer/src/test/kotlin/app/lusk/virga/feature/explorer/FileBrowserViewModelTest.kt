@@ -416,6 +416,64 @@ class FileBrowserViewModelTest {
         assertThat(vm.state.value.showCreateFolderDialog).isTrue()
     }
 
+    @Test
+    fun `createFolder surfaces an error for a non-VirgaError exception`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { engine.listDir(any(), any()) } returns emptyList()
+        // A plain RuntimeException (not VirgaError, not CancellationException) hits the
+        // generic catch arm — still surfaced as the generic "create failed" message.
+        coEvery { engine.mkdir(any(), any()) } throws IllegalStateException("kaboom")
+        val vm = viewModel()
+        vm.selectRemote("gdrive")
+        advanceUntilIdle()
+
+        vm.openCreateFolderDialog()
+        vm.createFolder("NewFolder")
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.createFolderError).isEqualTo(R.string.explorer_new_folder_failed)
+        assertThat(vm.state.value.creatingFolder).isFalse()
+        assertThat(vm.state.value.path).isEqualTo("")
+    }
+
+    @Test
+    fun `dismissCreateFolderDialog cancels an in-flight mkdir so it never navigates`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { engine.listDir(any(), any()) } returns emptyList()
+        // mkdir suspends until cancelled so the create job is still in flight on dismiss.
+        coEvery { engine.mkdir(any(), any()) } coAnswers { kotlinx.coroutines.awaitCancellation() }
+        val vm = viewModel()
+        vm.selectRemote("gdrive")
+        advanceUntilIdle()
+
+        vm.openCreateFolderDialog()
+        vm.createFolder("NewFolder")
+        // Let createFolder launch and reach the suspended mkdir, flipping creatingFolder on.
+        advanceUntilIdle()
+        assertThat(vm.state.value.creatingFolder).isTrue()
+
+        vm.dismissCreateFolderDialog()
+        advanceUntilIdle()
+
+        // Dismiss cancels the job: dialog closed, in-flight flag cleared, no error, and
+        // critically NO navigation into the half-created folder.
+        assertThat(vm.state.value.showCreateFolderDialog).isFalse()
+        assertThat(vm.state.value.creatingFolder).isFalse()
+        assertThat(vm.state.value.createFolderError).isNull()
+        assertThat(vm.state.value.path).isEqualTo("")
+    }
+
+    @Test
+    fun `createFolder is a no-op when no remote is selected`() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        // No selectRemote(): remoteName is null, so createFolder returns before validating
+        // or touching the engine.
+        vm.createFolder("NewFolder")
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { engine.mkdir(any(), any()) }
+        assertThat(vm.state.value.createFolderError).isNull()
+        assertThat(vm.state.value.path).isEqualTo("")
+    }
+
     // -------------------------------------------------------------------------
     // selectRemoteIfUnset
     // -------------------------------------------------------------------------
