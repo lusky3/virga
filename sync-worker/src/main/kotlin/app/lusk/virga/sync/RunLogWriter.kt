@@ -39,7 +39,22 @@ internal class RunLogWriter(filesDir: File, runId: Long) {
         file.writeText(Redaction.secrets(sb.toString()))
     }.isSuccess
 
-    private companion object {
-        const val LOG_DIR = "run_logs"
+    companion object {
+        private const val LOG_DIR = "run_logs"
+
+        /**
+         * Sweeps the per-run log dir, deleting any `run_<id>.log` last modified
+         * before [beforeEpochMs] — keeping internal storage bounded on the same
+         * cutoff as the DB history prune (the DB-row prune alone left these files
+         * to grow without limit). Tolerates a missing dir and per-file failures.
+         */
+        fun pruneOlderThan(filesDir: File, beforeEpochMs: Long) {
+            val files = File(filesDir, LOG_DIR).listFiles() ?: return
+            for (file in files) {
+                if (file.lastModified() < beforeEpochMs) {
+                    runCatching { file.delete() }
+                }
+            }
+        }
     }
 }

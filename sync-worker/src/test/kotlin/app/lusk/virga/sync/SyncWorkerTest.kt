@@ -22,6 +22,10 @@ import io.mockk.coVerify
 import io.mockk.coVerifyOrder
 import io.mockk.just
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.slot
+import io.mockk.unmockkObject
+import io.mockk.verify
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.runBlocking
@@ -263,6 +267,36 @@ class SyncWorkerTest {
         assertThat(result).isEqualTo(ListenableWorker.Result.success())
         // The scheduled worker owns re-arming; this manual run must not touch it.
         coVerify(exactly = 0) { scheduler.schedule(any()) }
+    }
+
+    @Test
+    fun successfulRun_prunesOldRunLogFiles() = runBlocking {
+        // 0.3.0 log-pruning: after a run finishes, the worker sweeps stale run_logs/
+        // files on the SAME cutoff as the DB-row prune so internal storage stays
+        // bounded. RunLogWriter.pruneOlderThan is a companion call → mockkObject it.
+        mockkObject(RunLogWriter)
+        try {
+            val task = task(direction = SyncDirection.UPLOAD)
+            coEvery { taskRepository.getTask(TASK_ID) } returns task
+            coEvery { staging.prepare(any(), any(), any()) } returns
+                LocalStaging.StagedSource(localPath = task.sourcePath, isStaged = false)
+            coEvery { executor.run(any(), any(), any(), any(), any()) } returns
+                flow { emit(progress(transferred = 1)) }
+
+            val result = buildWorker().doWork()
+
+            assertThat(result).isEqualTo(ListenableWorker.Result.success())
+            // The point of the change: the log sweep shares ONE cutoff with the DB
+            // prune. We can't pin the wall-clock value, but we can capture both and
+            // assert they're identical.
+            val dbCutoff = slot<Long>()
+            val logCutoff = slot<Long>()
+            coVerify { historyRepository.pruneOlderThan(capture(dbCutoff)) }
+            verify { RunLogWriter.pruneOlderThan(any(), capture(logCutoff)) }
+            assertThat(logCutoff.captured).isEqualTo(dbCutoff.captured)
+        } finally {
+            unmockkObject(RunLogWriter)
+        }
     }
 
     @Test

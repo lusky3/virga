@@ -239,8 +239,12 @@ open class SyncWorker @AssistedInject constructor(
         }
 
         // Bound the unbounded sync_runs table: drop runs older than the retention window.
-        runCatching { historyRepository.pruneOlderThan(System.currentTimeMillis() - RUN_RETENTION_MS) }
+        // One shared cutoff so the DB rows and their on-disk log files prune together.
+        val pruneBefore = System.currentTimeMillis() - RUN_RETENTION_MS
+        runCatching { historyRepository.pruneOlderThan(pruneBefore) }
             .onFailure { Log.w(TAG, "Failed to prune old sync runs", it) }
+        runCatching { RunLogWriter.pruneOlderThan(applicationContext.filesDir, pruneBefore) }
+            .onFailure { Log.w(TAG, "Failed to prune old run logs", it) }
 
         val result = if (failure == null) {
             // A COPY/backup run that hit file-level errors (a file couldn't be read or
