@@ -2,11 +2,14 @@ package app.lusk.virga.feature.remotes
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -25,6 +28,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 
@@ -37,7 +41,11 @@ import app.lusk.virga.core.designsystem.theme.VirgaSpacing
  * machine, [tokenPrompt] carries its instructions: the form switches to the
  * paste stage — instructions, a token field, and Submit/Cancel — and resumes
  * the flow via [onSubmitToken].
+ *
+ * When rclone asks for a required field with no usable default, [fieldPrompt]
+ * is non-null: the form shows a labelled input field and resumes via [onSubmitFieldAnswer].
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun DaemonOAuthForm(
     providerName: String,
@@ -45,8 +53,10 @@ internal fun DaemonOAuthForm(
     nameUsable: Boolean,
     oauthInProgress: Boolean,
     tokenPrompt: String?,
+    fieldPrompt: DaemonOAuthFieldPrompt? = null,
     onConnect: (clientId: String, clientSecret: String) -> Unit,
     onSubmitToken: (token: String) -> Unit,
+    onSubmitFieldAnswer: (answer: String) -> Unit = {},
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -85,6 +95,16 @@ internal fun DaemonOAuthForm(
             visualTransformation = PasswordVisualTransformation(),
         )
         when {
+            // Field-input stage: rclone requires a value for a specific option
+            // with no usable default. Show label, help, examples, and an input
+            // field; Submit resumes the flow, Cancel aborts it.
+            fieldPrompt != null -> {
+                DaemonOAuthFieldInput(
+                    prompt = fieldPrompt,
+                    onSubmit = onSubmitFieldAnswer,
+                    onCancel = onCancel,
+                )
+            }
             // Paste stage: rclone is waiting for the output of `rclone authorize`
             // run on another machine. Show its instructions verbatim plus a
             // token field; Submit resumes the flow, Cancel aborts it.
@@ -144,6 +164,67 @@ internal fun DaemonOAuthForm(
                 ) {
                     Text(stringResource(R.string.remotes_daemon_oauth_connect))
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Input section shown when rclone requires a field value with no usable default.
+ * Extracted to keep [DaemonOAuthForm]'s composable body under the Lizard nloc limit.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DaemonOAuthFieldInput(
+    prompt: DaemonOAuthFieldPrompt,
+    onSubmit: (String) -> Unit,
+    onCancel: () -> Unit,
+) {
+    var fieldValue by remember { mutableStateOf("") }
+    Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
+        Text(
+            text = prompt.help.ifBlank { prompt.label },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedTextField(
+            value = fieldValue,
+            onValueChange = { fieldValue = it },
+            label = { Text(prompt.label) },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.None,
+                autoCorrectEnabled = false,
+            ),
+            visualTransformation =
+                if (prompt.isPassword) PasswordVisualTransformation() else VisualTransformation.None,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (prompt.examples.isNotEmpty()) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
+                prompt.examples.forEach { example ->
+                    AssistChip(
+                        onClick = { fieldValue = example },
+                        label = { Text(example) },
+                    )
+                }
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm, Alignment.End),
+        ) {
+            TextButton(onClick = onCancel) {
+                Text(stringResource(R.string.remotes_daemon_oauth_cancel))
+            }
+            Button(
+                // Submit the raw value: isNotBlank() already blocks empty input, and
+                // trimming would corrupt credentials where leading/trailing whitespace
+                // is meaningful (tokens, secrets).
+                onClick = { onSubmit(fieldValue); fieldValue = "" },
+                enabled = fieldValue.isNotBlank(),
+            ) {
+                Text(stringResource(R.string.remotes_daemon_oauth_field_submit))
             }
         }
     }

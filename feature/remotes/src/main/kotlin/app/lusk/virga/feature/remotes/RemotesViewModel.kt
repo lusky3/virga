@@ -660,6 +660,7 @@ class RemotesViewModel @Inject constructor(
                 quotaLoading = quota.loading,
                 quotaEpoch = quota.epoch,
                 daemonOAuthTokenPrompt = t.daemonOAuthTokenPrompt,
+                daemonOAuthFieldPrompt = t.daemonOAuthFieldPrompt,
                 connectivityResults = connectivity.results,
                 connectivityTesting = connectivity.testing,
                 pendingEncryptedImport = t.pendingEncryptedImport,
@@ -740,6 +741,12 @@ class RemotesViewModel @Inject constructor(
      * prompt. No-op when no flow is awaiting a token.
      */
     fun submitDaemonOAuthToken(token: String) = daemonOAuth.submitToken(token)
+
+    /**
+     * Forwards a field answer the user supplied to the in-flight daemon OAuth
+     * flow and dismisses the field prompt. No-op when no flow is awaiting input.
+     */
+    fun submitDaemonOAuthFieldAnswer(answer: String) = daemonOAuth.submitFieldAnswer(answer)
 
     fun cancelDaemonOAuth() = daemonOAuth.cancel()
 

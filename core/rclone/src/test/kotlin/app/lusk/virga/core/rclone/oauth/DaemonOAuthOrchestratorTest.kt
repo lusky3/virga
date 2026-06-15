@@ -14,13 +14,17 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -87,6 +91,33 @@ class DaemonOAuthOrchestratorTest {
             put("Type", type)
             put("DefaultStr", defaultStr)
             put("Help", help)
+        }
+    }
+
+    /** A question that is Required with no DefaultStr — must surface as AwaitingFieldInput. */
+    private fun requiredQuestion(
+        stateToken: String,
+        name: String,
+        help: String = "",
+        examples: List<String> = emptyList(),
+        isPassword: Boolean = false,
+    ): JsonObject = buildJsonObject {
+        put("State", stateToken)
+        put("Error", "")
+        put("Result", "")
+        putJsonObject("Option") {
+            put("Name", name)
+            put("Type", "string")
+            put("Required", true)
+            put("Help", help)
+            put("IsPassword", isPassword)
+            put("Default", JsonNull)
+            // DefaultStr intentionally absent (required + no default)
+            if (examples.isNotEmpty()) {
+                putJsonArray("Examples") {
+                    examples.forEach { ex -> add(buildJsonObject { put("Value", ex) }) }
+                }
+            }
         }
     }
 
@@ -332,5 +363,125 @@ class DaemonOAuthOrchestratorTest {
         assertThat(orchestrator.state.value).isEqualTo(
             DaemonOAuthOrchestrator.State.Failed("Unexpected response from rclone"),
         )
+    }
+
+    @Test
+    fun `required question with no default surfaces AwaitingFieldInput and submitFieldAnswer resumes`() = runTest(testDispatcher) {
+        enqueueResponses(
+            requiredQuestion("*req-field,0", "access_key_id", help = "AWS Access Key ID"),
+            terminal(),
+        )
+
+        val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
+        orchestrator.start("mys3", "s3", null, null, daemon, this)
+        runCurrent()
+
+        assertThat(orchestrator.state.value).isEqualTo(
+            DaemonOAuthOrchestrator.State.AwaitingFieldInput(
+                optionName = "access_key_id",
+                label = "access_key_id",
+                help = "AWS Access Key ID",
+                examples = emptyList(),
+                isPassword = false,
+            ),
+        )
+
+        orchestrator.submitFieldAnswer("AKIAIOSFODNN7EXAMPLE")
+        advanceUntilIdle()
+
+        assertThat(orchestrator.state.value)
+            .isEqualTo(DaemonOAuthOrchestrator.State.Complete("mys3"))
+        // Verify the answer was sent as the result in the continuation.
+        assertThat(requests[1].optStr("result")).isEqualTo("AKIAIOSFODNN7EXAMPLE")
+    }
+
+    @Test
+    fun `non-required question auto-answers with default and does not emit AwaitingFieldInput`() = runTest(testDispatcher) {
+        // Regression guard: non-required questions must still auto-default — no
+        // AwaitingFieldInput may be emitted for them.
+        enqueueResponses(
+            question("*opt-field,0", "scope", defaultStr = "drive"),
+            terminal(),
+        )
+
+        val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
+        orchestrator.start("mygdrive", "drive", null, null, daemon, this)
+        advanceUntilIdle()
+
+        assertThat(orchestrator.state.value)
+            .isEqualTo(DaemonOAuthOrchestrator.State.Complete("mygdrive"))
+        // State is Complete, never AwaitingFieldInput (checked via final value alone).
+        assertThat(orchestrator.state.value)
+            .isNotInstanceOf(DaemonOAuthOrchestrator.State.AwaitingFieldInput::class.java)
+        // The default "drive" was sent in the continuation without any user interaction.
+        assertThat(requests[1].optStr("result")).isEqualTo("drive")
+    }
+
+    @Test
+    fun `required question with an array-typed Default auto-defaults without crashing`() = runTest(testDispatcher) {
+        // Robustness: a Required option whose Default serializes as a JSON array
+        // (CommaSepList/SpaceSepList) must not throw on `.jsonPrimitive`. The
+        // structured default counts as usable, so the question auto-answers
+        // rather than surfacing AwaitingFieldInput or failing the flow.
+        enqueueResponses(
+            buildJsonObject {
+                put("State", "*opt-list,0")
+                put("Error", "")
+                put("Result", "")
+                putJsonObject("Option") {
+                    put("Name", "exclude")
+                    put("Type", "CommaSepList")
+                    put("Required", true)
+                    put("DefaultStr", "")
+                    putJsonArray("Default") {}
+                    put("Help", "")
+                }
+            },
+            terminal(),
+        )
+
+        val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
+        orchestrator.start("mys3", "s3", null, null, daemon, this)
+        advanceUntilIdle()
+
+        assertThat(orchestrator.state.value)
+            .isEqualTo(DaemonOAuthOrchestrator.State.Complete("mys3"))
+        assertThat(orchestrator.state.value)
+            .isNotInstanceOf(DaemonOAuthOrchestrator.State.AwaitingFieldInput::class.java)
+    }
+
+    @Test
+    fun `required question with a malformed Examples entry surfaces AwaitingFieldInput without crashing`() = runTest(testDispatcher) {
+        // Robustness: a non-object entry in Examples must be skipped, not crash
+        // the flow on the `.jsonObject` accessor.
+        enqueueResponses(
+            buildJsonObject {
+                put("State", "*opt-field,0")
+                put("Error", "")
+                put("Result", "")
+                putJsonObject("Option") {
+                    put("Name", "access_key_id")
+                    put("Type", "string")
+                    put("Required", true)
+                    put("Help", "Access key")
+                    put("Default", JsonNull)
+                    putJsonArray("Examples") {
+                        add(JsonPrimitive("not-an-object"))
+                        add(buildJsonObject { put("Value", "AKIA") })
+                    }
+                }
+            },
+        )
+
+        val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
+        orchestrator.start("mys3", "s3", null, null, daemon, this)
+        // runCurrent (not advanceUntilIdle) so virtual time doesn't advance past the
+        // orchestrator's timeout while it suspends awaiting the (never-supplied) answer.
+        runCurrent()
+
+        val state = orchestrator.state.value
+        assertThat(state).isInstanceOf(DaemonOAuthOrchestrator.State.AwaitingFieldInput::class.java)
+        assertThat((state as DaemonOAuthOrchestrator.State.AwaitingFieldInput).examples)
+            .containsExactly("AKIA")
     }
 }

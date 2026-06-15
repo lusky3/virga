@@ -4,8 +4,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import com.google.common.truth.Truth.assertThat
 import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.common.model.RemoteOption
 import org.junit.Rule
@@ -218,5 +222,38 @@ class RemoteFormsCoverageTest {
             )
         }
         composeRule.onNodeWithText("Sign-in expired").assertDoesNotExist()
+    }
+
+    @Test
+    fun daemonOAuthForm_fieldPrompt_rendersHelpLabelExampleChip_andSubmits() {
+        var submitted: String? = null
+        render {
+            DaemonOAuthForm(
+                providerName = "Amazon S3",
+                nameUsable = true,
+                oauthInProgress = true,
+                tokenPrompt = null,
+                fieldPrompt = DaemonOAuthFieldPrompt(
+                    optionName = "access_key_id",
+                    label = "Access Key ID",
+                    help = "Your AWS access key",
+                    examples = listOf("AKIAIOSFODNN7EXAMPLE"),
+                    isPassword = false,
+                ),
+                onConnect = { _, _ -> },
+                onSubmitToken = {},
+                onSubmitFieldAnswer = { submitted = it },
+                onCancel = {},
+            )
+        }
+        // Help text, the field label, and the example chip all render.
+        composeRule.onNodeWithText("Your AWS access key").assertIsDisplayed()
+        composeRule.onNodeWithText("Access Key ID").assertIsDisplayed()
+        // Submit is gated until a value is present; tapping the example chip fills it.
+        composeRule.onNodeWithText("Submit").assertIsNotEnabled()
+        composeRule.onNodeWithText("AKIAIOSFODNN7EXAMPLE").performClick()
+        composeRule.onNodeWithText("Submit").assertIsEnabled()
+        composeRule.onNodeWithText("Submit").performClick()
+        assertThat(submitted).isEqualTo("AKIAIOSFODNN7EXAMPLE")
     }
 }

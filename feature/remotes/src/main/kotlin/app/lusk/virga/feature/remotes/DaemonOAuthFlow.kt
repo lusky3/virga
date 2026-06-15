@@ -101,6 +101,19 @@ internal class DaemonOAuthFlow(
                                 transient.update { t -> t.copy(daemonOAuthTokenPrompt = s.instructions) }
                                 false
                             }
+                            // Not terminal: surface a required-no-default field prompt;
+                            // submitFieldAnswer resumes the flow.
+                            is DaemonOAuthOrchestrator.State.AwaitingFieldInput -> {
+                                val prompt = DaemonOAuthFieldPrompt(
+                                    optionName = s.optionName,
+                                    label = s.label,
+                                    help = s.help,
+                                    examples = s.examples,
+                                    isPassword = s.isPassword,
+                                )
+                                transient.update { t -> t.copy(daemonOAuthFieldPrompt = prompt) }
+                                false
+                            }
                             is DaemonOAuthOrchestrator.State.Complete,
                             is DaemonOAuthOrchestrator.State.Failed,
                             DaemonOAuthOrchestrator.State.TimedOut,
@@ -122,6 +135,7 @@ internal class DaemonOAuthFlow(
                             it.copy(
                                 oauthInProgress = false,
                                 daemonOAuthTokenPrompt = null,
+                                daemonOAuthFieldPrompt = null,
                                 message = if (connResult.isFailure) {
                                     strings.connectivityWarning(terminal.remoteName)
                                 } else {
@@ -133,7 +147,12 @@ internal class DaemonOAuthFlow(
                     is DaemonOAuthOrchestrator.State.Failed -> {
                         deletePhantomRemote(name)
                         transient.update {
-                            it.copy(oauthInProgress = false, daemonOAuthTokenPrompt = null, message = terminal.message)
+                            it.copy(
+                                oauthInProgress = false,
+                                daemonOAuthTokenPrompt = null,
+                                daemonOAuthFieldPrompt = null,
+                                message = terminal.message,
+                            )
                         }
                     }
                     DaemonOAuthOrchestrator.State.TimedOut -> {
@@ -142,6 +161,7 @@ internal class DaemonOAuthFlow(
                             it.copy(
                                 oauthInProgress = false,
                                 daemonOAuthTokenPrompt = null,
+                                daemonOAuthFieldPrompt = null,
                                 message = strings.oauthTimedOut(),
                             )
                         }
@@ -149,7 +169,11 @@ internal class DaemonOAuthFlow(
                     DaemonOAuthOrchestrator.State.Cancelled -> {
                         deletePhantomRemote(name)
                         transient.update {
-                            it.copy(oauthInProgress = false, daemonOAuthTokenPrompt = null)
+                            it.copy(
+                                oauthInProgress = false,
+                                daemonOAuthTokenPrompt = null,
+                                daemonOAuthFieldPrompt = null,
+                            )
                         }
                     }
                     else -> Unit // unreachable: first{} only returns terminal states
@@ -160,7 +184,13 @@ internal class DaemonOAuthFlow(
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 transient.update { it.copy(oauthInProgress = false, message = e.toUserMessage()) }
             } finally {
-                transient.update { it.copy(oauthInProgress = false, daemonOAuthTokenPrompt = null) }
+                transient.update {
+                    it.copy(
+                        oauthInProgress = false,
+                        daemonOAuthTokenPrompt = null,
+                        daemonOAuthFieldPrompt = null,
+                    )
+                }
                 orchestrator = null
             }
         }
@@ -174,6 +204,15 @@ internal class DaemonOAuthFlow(
     fun submitToken(token: String) {
         orchestrator?.submitToken(token)
         transient.update { it.copy(daemonOAuthTokenPrompt = null) }
+    }
+
+    /**
+     * Forwards the field answer the user supplied to the in-flight daemon OAuth
+     * flow and dismisses the prompt. No-op when no flow is awaiting a field answer.
+     */
+    fun submitFieldAnswer(answer: String) {
+        orchestrator?.submitFieldAnswer(answer)
+        transient.update { it.copy(daemonOAuthFieldPrompt = null) }
     }
 
     fun cancel() {

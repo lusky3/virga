@@ -4,6 +4,19 @@ import android.net.Uri
 import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.common.model.RemoteQuota
 
+/**
+ * UI-facing descriptor for a daemon-OAuth required field that has no usable
+ * default. The VM surfaces this to the UI while the orchestrator awaits the
+ * user's answer via [RemotesViewModel.submitDaemonOAuthFieldAnswer].
+ */
+data class DaemonOAuthFieldPrompt(
+    val optionName: String,
+    val label: String,
+    val help: String,
+    val examples: List<String> = emptyList(),
+    val isPassword: Boolean = false,
+)
+
 /** Per-remote connectivity test outcome — set only after an explicit user trigger. */
 enum class ConnectivityResult { SUCCESS, FAILURE }
 
@@ -40,6 +53,9 @@ data class RemotesUiState(
      *  `rclone authorize` on another machine, paste the result back); null
      *  when no token is being awaited. */
     val daemonOAuthTokenPrompt: String? = null,
+    /** Non-null while the daemon-OAuth state machine is awaiting a user-supplied
+     *  field value for a required option with no usable default. */
+    val daemonOAuthFieldPrompt: DaemonOAuthFieldPrompt? = null,
     /** remoteName → connectivity result; absent means not yet tested. */
     val connectivityResults: Map<String, ConnectivityResult> = emptyMap(),
     /** Remotes whose connectivity test is currently in flight. */
@@ -70,6 +86,9 @@ internal data class RemotesTransientState(
     val message: String? = null,
     /** Paste-token instructions from the daemon OAuth flow; null = no prompt. */
     val daemonOAuthTokenPrompt: String? = null,
+    /** Non-null while the daemon-OAuth state machine is awaiting a user-supplied
+     *  field value for a required option with no usable default. */
+    val daemonOAuthFieldPrompt: DaemonOAuthFieldPrompt? = null,
     /** Non-null while awaiting a passphrase to decrypt an encrypted import. Cleared
      *  on successful decrypt, dismiss, or when a non-encrypted file is imported. */
     val pendingEncryptedImport: Uri? = null,

@@ -12,7 +12,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -76,6 +80,21 @@ class DaemonOAuthOrchestrator(
          */
         data class AwaitingTokenPaste(val instructions: String) : State
 
+        /**
+         * rclone asked a question that is marked Required with no usable default.
+         * The user must supply a value; resume the machine with [submitFieldAnswer].
+         * [label] is the option's Name (or a humanized form), [help] is rclone's
+         * Help text, [examples] is the list of example values (may be empty), and
+         * [isPassword] signals whether the input should be masked.
+         */
+        data class AwaitingFieldInput(
+            val optionName: String,
+            val label: String,
+            val help: String,
+            val examples: List<String> = emptyList(),
+            val isPassword: Boolean = false,
+        ) : State
+
         data class Complete(val remoteName: String) : State
         data class Failed(val message: String) : State
         data object TimedOut : State
@@ -87,6 +106,7 @@ class DaemonOAuthOrchestrator(
 
     private var job: Job? = null
     private var pendingToken: CompletableDeferred<String>? = null
+    private var pendingFieldAnswer: CompletableDeferred<String>? = null
 
     fun start(
         name: String,
@@ -111,6 +131,7 @@ class DaemonOAuthOrchestrator(
                 _state.value = State.Failed(e.message ?: "Unknown error")
             } finally {
                 pendingToken = null
+                pendingFieldAnswer = null
             }
         }
     }
@@ -125,6 +146,14 @@ class DaemonOAuthOrchestrator(
      */
     fun submitToken(token: String) {
         pendingToken?.complete(token)
+    }
+
+    /**
+     * Feeds the field answer supplied by the user into the waiting state machine.
+     * No-op unless the orchestrator is in [State.AwaitingFieldInput].
+     */
+    fun submitFieldAnswer(answer: String) {
+        pendingFieldAnswer?.complete(answer)
     }
 
     private suspend fun runStateMachine(
@@ -193,7 +222,7 @@ class DaemonOAuthOrchestrator(
                 // (see class KDoc). "false" routes to the paste-token question.
                 "config_is_local" -> "false"
                 "config_token" -> awaitPastedToken(option)
-                else -> defaultAnswer(option)
+                else -> if (requiresUserInput(option)) awaitFieldInput(option) else defaultAnswer(option)
             }
 
             response = rc(daemon, "config/create", buildJsonObject {
@@ -227,18 +256,69 @@ class DaemonOAuthOrchestrator(
         }
     }
 
-    // TODO(0.3.0): Surface unknown required questions as form fields instead of
-    // auto-answering with defaults. Track which providers need this in ProviderCatalog.
+    /**
+     * Surfaces a required-no-default question as [State.AwaitingFieldInput] and
+     * suspends until [submitFieldAnswer] supplies the user's answer.
+     */
+    private suspend fun awaitFieldInput(option: JsonObject): String {
+        val name = option["Name"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        val help = option["Help"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        val isPassword = option["IsPassword"]?.jsonPrimitive?.booleanOrNull ?: false
+        val examples = (option["Examples"] as? JsonArray)
+            ?.mapNotNull { (it as? JsonObject)?.get("Value")?.jsonPrimitive?.contentOrNull }
+            ?: emptyList()
+        val deferred = CompletableDeferred<String>()
+        pendingFieldAnswer = deferred
+        _state.value = State.AwaitingFieldInput(
+            optionName = name,
+            label = name,
+            help = help,
+            examples = examples,
+            isPassword = isPassword,
+        )
+        return try {
+            deferred.await()
+        } finally {
+            pendingFieldAnswer = null
+        }
+    }
+
+    /**
+     * True when a question must be surfaced to the user: it is marked Required
+     * AND has no usable default. The Required+no-default signal comes from rclone
+     * directly — no ProviderCatalog-based tracking is needed.
+     */
+    private fun requiresUserInput(option: JsonObject): Boolean {
+        val required = option["Required"]?.jsonPrimitive?.booleanOrNull ?: false
+        if (!required) return false
+        val defaultStr = option["DefaultStr"]?.jsonPrimitive?.contentOrNull
+        if (!defaultStr.isNullOrBlank()) return false
+        return !hasUsableDefault(option["Default"])
+    }
+
+    /**
+     * True when [default] carries a usable value. A structured default (a
+     * `CommaSepList`/`SpaceSepList` serializes as a JSON array) counts as usable;
+     * crucially we must NOT call `.jsonPrimitive` on a non-primitive, which throws.
+     */
+    private fun hasUsableDefault(default: JsonElement?): Boolean = when {
+        default == null || default is JsonNull -> false
+        default is JsonPrimitive -> !default.contentOrNull.isNullOrBlank()
+        else -> true
+    }
+
     private fun defaultAnswer(option: JsonObject): String {
         // rclone always supplies DefaultStr (the canonical string form of the
         // default, e.g. "false" for bools, "" for strings) — prefer it.
         val defaultStr = option["DefaultStr"]?.jsonPrimitive?.contentOrNull
         if (defaultStr != null) return defaultStr
         val type = option["Type"]?.jsonPrimitive?.contentOrNull
-        val default = option["Default"]
+        // `as? JsonPrimitive` guards against array/object defaults, which would
+        // throw on `.jsonPrimitive`.
+        val default = option["Default"] as? JsonPrimitive
         return when {
-            type == "bool" -> (default?.jsonPrimitive?.booleanOrNull ?: false).toString()
-            default != null -> default.jsonPrimitive.contentOrNull ?: ""
+            type == "bool" -> (default?.booleanOrNull ?: false).toString()
+            default != null -> default.contentOrNull ?: ""
             else -> ""
         }
     }
