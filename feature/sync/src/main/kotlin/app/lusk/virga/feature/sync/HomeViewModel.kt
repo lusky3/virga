@@ -11,7 +11,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -67,8 +66,6 @@ class HomeViewModel @Inject constructor(
 
     /** Triggers an on-demand run of every enabled task ("Back up now"). */
     fun backUpNow() = viewModelScope.launch {
-        taskRepository.tasks.first()
-            .filter { it.enabled }
-            .forEach { scheduler.syncNow(it.id) }
+        scheduler.syncAllEnabled()
     }
 }

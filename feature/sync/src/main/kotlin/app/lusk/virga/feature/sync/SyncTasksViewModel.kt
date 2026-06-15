@@ -20,7 +20,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -214,12 +213,12 @@ class SyncTasksViewModel @Inject constructor(
 
     /** Run every enabled task now. */
     fun syncAllEnabled() = viewModelScope.launch {
-        val enabled = taskRepository.tasks.first().filter { it.enabled }
-        enabled.forEach { scheduler.syncNow(it.id) }
-        _message.value = if (enabled.isEmpty()) {
+        // Enqueue + count in one read so the message can't disagree with what ran.
+        val enabledCount = scheduler.syncAllEnabled()
+        _message.value = if (enabledCount == 0) {
             context.getString(R.string.sync_tasks_msg_no_enabled_tasks)
         } else {
-            context.resources.getQuantityString(R.plurals.sync_tasks_msg_syncing, enabled.size, enabled.size)
+            context.resources.getQuantityString(R.plurals.sync_tasks_msg_syncing, enabledCount, enabledCount)
         }
     }
 

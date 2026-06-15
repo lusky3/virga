@@ -15,6 +15,7 @@ import app.lusk.virga.sync.SyncProgressMonitor
 import app.lusk.virga.sync.SyncScheduler
 import com.google.common.truth.Truth.assertThat
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
@@ -533,18 +534,21 @@ class SyncTasksViewModelTest {
     // --- syncAllEnabled -----------------------------------------------------
 
     @Test
-    fun syncAllEnabled_schedulesOnlyEnabledTasks() = runTest(mainDispatcher.dispatcher) {
-        val enabled1 = task(id = 1, enabled = true)
-        val enabled2 = task(id = 2, enabled = true)
-        val disabled = task(id = 3, enabled = false)
-        tasksFlow.value = listOf(enabled1, enabled2, disabled)
+    fun syncAllEnabled_delegatesToSchedulerAndMessagesFromCount() = runTest(mainDispatcher.dispatcher) {
+        // Enabled-only filtering now lives in SyncScheduler.syncAllEnabled (covered by
+        // SyncSchedulerTest); the VM delegates and messages off the returned count.
+        coEvery { scheduler.syncAllEnabled() } returns 2
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.uiState.collect {} }
 
-        viewModel().syncAllEnabled()
+        vm.syncAllEnabled()
         advanceUntilIdle()
 
-        verify(exactly = 1) { scheduler.syncNow(1L) }
-        verify(exactly = 1) { scheduler.syncNow(2L) }
-        verify(exactly = 0) { scheduler.syncNow(3L) }
+        coVerify(exactly = 1) { scheduler.syncAllEnabled() }
+        verify(exactly = 0) { scheduler.syncNow(any()) }
+        // count > 0 → the "syncing N" message, not the empty-state message.
+        assertThat(vm.uiState.value.message).isNotEqualTo("No enabled tasks")
+        job.cancel()
     }
 
     @Test
