@@ -22,6 +22,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.time.Instant
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.booleanOrNull
@@ -499,13 +500,16 @@ class RcloneEngineImpl @Inject constructor(
         // running other concurrent "sync all" jobs whose transfers would otherwise
         // be returned and mis-attributed to this run.
         val result = rc(d, "core/transferred", buildJsonObject { put("group", group) })
-        val array = result["transferred"]?.jsonArray ?: return@withLease emptyList()
-        array.mapNotNull { element ->
-            val obj = runCatching { element.jsonObject }.getOrNull() ?: return@mapNotNull null
-            val name = obj["name"]?.jsonPrimitive?.contentOrNull
-            if (name.isNullOrBlank()) return@mapNotNull null
-            val error = obj["error"]?.jsonPrimitive?.contentOrNull ?: ""
-            TransferredFile(name = name, error = error)
+        val entries: List<JsonElement> = result["transferred"]?.jsonArray ?: emptyList()
+        entries.mapNotNull { element ->
+            val obj = runCatching { element.jsonObject }.getOrNull()
+            val name = obj?.get("name")?.jsonPrimitive?.contentOrNull
+            // Skip entries with no usable name (if/else avoids labelled returns).
+            if (name.isNullOrBlank()) {
+                null
+            } else {
+                TransferredFile(name = name, error = obj["error"]?.jsonPrimitive?.contentOrNull ?: "")
+            }
         }
     }
 
