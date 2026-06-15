@@ -18,7 +18,7 @@ import java.util.Locale
  */
 internal class RunLogWriter(filesDir: File, runId: Long) {
     private val dir = File(filesDir, LOG_DIR)
-    private val file = File(dir, "run_$runId.log")
+    private val file = File(dir, "$LOG_PREFIX$runId$LOG_SUFFIX")
     private val sb = StringBuilder()
     private val clock = SimpleDateFormat("HH:mm:ss", Locale.US)
 
@@ -39,7 +39,30 @@ internal class RunLogWriter(filesDir: File, runId: Long) {
         file.writeText(Redaction.secrets(sb.toString()))
     }.isSuccess
 
-    private companion object {
-        const val LOG_DIR = "run_logs"
+    companion object {
+        private const val LOG_DIR = "run_logs"
+        private const val LOG_PREFIX = "run_"
+        private const val LOG_SUFFIX = ".log"
+
+        /**
+         * Sweeps the per-run log dir, deleting any `run_<id>.log` last modified
+         * before [beforeEpochMs] — keeping internal storage bounded on the same
+         * cutoff as the DB history prune (the DB-row prune alone left these files
+         * to grow without limit). Only our own `run_*.log` files are touched, so a
+         * stray or future co-located file is left alone. Tolerates a missing dir
+         * and per-file failures.
+         */
+        fun pruneOlderThan(filesDir: File, beforeEpochMs: Long) {
+            val files = File(filesDir, LOG_DIR).listFiles() ?: return
+            for (file in files) {
+                if (!file.isOwnLog()) continue
+                if (file.lastModified() < beforeEpochMs) {
+                    runCatching { file.delete() }
+                }
+            }
+        }
+
+        private fun File.isOwnLog(): Boolean =
+            isFile && name.startsWith(LOG_PREFIX) && name.endsWith(LOG_SUFFIX)
     }
 }
