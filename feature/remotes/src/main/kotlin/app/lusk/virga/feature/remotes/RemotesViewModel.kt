@@ -6,7 +6,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import app.lusk.virga.core.common.error.toUserMessage
-import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.common.model.RemoteOption
 import app.lusk.virga.core.common.model.RemoteProvider
 import app.lusk.virga.core.common.model.RemoteQuota
@@ -47,39 +46,6 @@ internal fun sensitiveKeysFrom(
     .filter { it.isPassword && values[it.name]?.isNotBlank() == true }
     .map { it.name }
     .toSet()
-
-data class RemotesUiState(
-    val remotes: List<Remote> = emptyList(),
-    val refreshing: Boolean = false,
-    val oauthInProgress: Boolean = false,
-    val message: String? = null,
-    /** providerId → user-supplied client ID, for providers using their own keys. */
-    val customClientIds: Map<String, String> = emptyMap(),
-    /** remoteName → quota; absent means not yet fetched or unsupported. */
-    val quotas: Map<String, RemoteQuota> = emptyMap(),
-    /** Remotes whose quota fetch is currently in flight — show a loading bar. */
-    val quotaLoading: Set<String> = emptySet(),
-    /** Bumped by [RemotesViewModel.refresh]; cards key their quota fetch on it so
-     *  a pull-to-refresh re-fires the lazy fetch even though the card stays composed. */
-    val quotaEpoch: Int = 0,
-    /** rclone's instructions for the daemon-OAuth paste-token prompt (run
-     *  `rclone authorize` on another machine, paste the result back); null
-     *  when no token is being awaited. */
-    val daemonOAuthTokenPrompt: String? = null,
-)
-
-/**
- * The VM-owned transient slice of [RemotesUiState]. Top-level (not nested in the
- * VM) because the OAuth flow collaborators ([DaemonOAuthFlow], [SystemOAuthFlow])
- * share the same `MutableStateFlow` instance and apply their updates to it.
- */
-internal data class RemotesTransientState(
-    val refreshing: Boolean = false,
-    val oauthInProgress: Boolean = false,
-    val message: String? = null,
-    /** Paste-token instructions from the daemon OAuth flow; null = no prompt. */
-    val daemonOAuthTokenPrompt: String? = null,
-)
 
 @HiltViewModel
 class RemotesViewModel @Inject constructor(
@@ -186,13 +152,20 @@ class RemotesViewModel @Inject constructor(
     private val transient = MutableStateFlow(RemotesTransientState())
 
     /** Quota fetch results, in-flight set, and the refresh epoch, kept in one flow
-     *  so [combineState] stays within the 5-argument [combine] overload. */
+     *  so [combineState] stays within the vararg [combine] overload. */
     private data class QuotaState(
         val quotas: Map<String, RemoteQuota> = emptyMap(),
         val loading: Set<String> = emptySet(),
         val epoch: Int = 0,
     )
     private val _quotaState = MutableStateFlow(QuotaState())
+
+    /** Connectivity test results and in-flight set — updated only on explicit user trigger. */
+    private data class ConnectivityState(
+        val results: Map<String, ConnectivityResult> = emptyMap(),
+        val testing: Set<String> = emptySet(),
+    )
+    private val _connectivityState = MutableStateFlow(ConnectivityState())
 
     /** Remotes whose quota fetch has been STARTED (regardless of outcome), so a
      *  failing/offline remote isn't re-fetched every time its card scrolls back
@@ -337,6 +310,30 @@ class RemotesViewModel @Inject constructor(
          *  starting daemon) could otherwise leave the "checking…" bar spinning
          *  forever — this guarantees it always resolves. */
         private const val QUOTA_TIMEOUT_MS = 12_000L
+        /** Cap on a single connectivity test; a null result (timeout) → FAILURE. */
+        private const val CONNECTIVITY_TIMEOUT_MS = 12_000L
+    }
+
+    /**
+     * On-demand connectivity test for [remoteName]. Guards only against a concurrent
+     * in-flight test; allows re-testing once a prior test has finished.
+     */
+    fun testConnectivity(remoteName: String) {
+        if (remoteName in _connectivityState.value.testing) return
+        _connectivityState.update { it.copy(testing = it.testing + remoteName) }
+        viewModelScope.launch {
+            val result = withTimeoutOrNull(CONNECTIVITY_TIMEOUT_MS) {
+                repository.testConnectivity(remoteName)
+            }
+            val outcome = if (result?.isSuccess == true) ConnectivityResult.SUCCESS
+                          else ConnectivityResult.FAILURE
+            _connectivityState.update { s ->
+                s.copy(
+                    results = s.results + (remoteName to outcome),
+                    testing = s.testing - remoteName,
+                )
+            }
+        }
     }
 
     fun clearMessage() {
@@ -367,7 +364,13 @@ class RemotesViewModel @Inject constructor(
     }
 
     private fun combineState(): StateFlow<RemotesUiState> =
-        combine(repository.remotes, transient, oauthKeyStore.clientIds, _quotaState) { remotes, t, customIds, quota ->
+        combine(
+            repository.remotes,
+            transient,
+            oauthKeyStore.clientIds,
+            _quotaState,
+            _connectivityState,
+        ) { remotes, t, customIds, quota, connectivity ->
             RemotesUiState(
                 remotes = remotes,
                 refreshing = t.refreshing,
@@ -378,6 +381,8 @@ class RemotesViewModel @Inject constructor(
                 quotaLoading = quota.loading,
                 quotaEpoch = quota.epoch,
                 daemonOAuthTokenPrompt = t.daemonOAuthTokenPrompt,
+                connectivityResults = connectivity.results,
+                connectivityTesting = connectivity.testing,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RemotesUiState())
 

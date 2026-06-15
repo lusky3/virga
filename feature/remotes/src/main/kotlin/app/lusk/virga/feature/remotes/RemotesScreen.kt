@@ -204,8 +204,11 @@ fun RemotesScreen(
                                 onOpenBrowser = { onOpenBrowser(remote.name) },
                                 onCreateTask = onCreateTask,
                                 onDelete = { remoteToDelete = remote },
+                                onTestConnectivity = { viewModel.testConnectivity(remote.name) },
                                 quota = state.quotas[remote.name],
                                 quotaLoading = remote.name in state.quotaLoading,
+                                connectivity = state.connectivityResults[remote.name],
+                                connectivityTesting = remote.name in state.connectivityTesting,
                             )
                         }
                     }

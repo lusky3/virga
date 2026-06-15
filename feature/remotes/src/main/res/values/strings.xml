@@ -33,8 +33,14 @@
     <!-- RemoteCard overflow menu -->
     <string name="remotes_card_menu_browse">Browse</string>
     <string name="remotes_card_menu_new_task">New sync task</string>
+    <string name="remotes_card_menu_test_connectivity">Test connectivity</string>
     <string name="remotes_card_menu_delete">Delete</string>
     <string name="remotes_card_cd_overflow">More options</string>
+
+    <!-- RemoteCard connectivity row -->
+    <string name="remotes_connectivity_testing">Testing…</string>
+    <string name="remotes_connectivity_success">Connected</string>
+    <string name="remotes_connectivity_failed">Connection failed</string>
 
     <!-- AddRemoteDialog -->
     <string name="remotes_add_dialog_title">Add cloud account</string>

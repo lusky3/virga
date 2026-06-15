@@ -139,6 +139,50 @@ class RemotesScreenshotTest {
     }
 
     @Test
+    fun remoteCard_connectivityFailure() {
+        composeRule.setContent {
+            MaterialTheme {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        RemoteCard(
+                            remote = Remote(name = "gdrive", type = "drive"),
+                            onOpenBrowser = {},
+                            onCreateTask = {},
+                            onDelete = {},
+                            onTestConnectivity = {},
+                            connectivity = ConnectivityResult.FAILURE,
+                            connectivityTesting = false,
+                        )
+                    }
+                }
+            }
+        }
+        composeRule.onRoot().captureRoboImage()
+    }
+
+    @Test
+    fun remoteCard_connectivityTesting() {
+        composeRule.setContent {
+            MaterialTheme {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        RemoteCard(
+                            remote = Remote(name = "backblaze", type = "b2"),
+                            onOpenBrowser = {},
+                            onCreateTask = {},
+                            onDelete = {},
+                            onTestConnectivity = {},
+                            connectivity = null,
+                            connectivityTesting = true,
+                        )
+                    }
+                }
+            }
+        }
+        composeRule.onRoot().captureRoboImage()
+    }
+
+    @Test
     fun credentialForm_typedFields() {
         val options = listOf(
             RemoteOption(

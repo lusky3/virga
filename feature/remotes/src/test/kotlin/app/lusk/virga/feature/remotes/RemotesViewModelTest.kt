@@ -29,8 +29,10 @@ import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -868,6 +870,97 @@ class RemotesViewModelTest {
         coVerify(exactly = 2) { repository.about("g") }
         collector.cancel()
     }
+
+    // --- testConnectivity (on-demand, re-runnable) ------------------------------
+
+    @Test
+    fun `testConnectivity shows testing while in flight then succeeds`() =
+        runTest(mainDispatcher.dispatcher) {
+            val gate = CompletableDeferred<Result<Unit>>()
+            coEvery { repository.testConnectivity("g") } coAnswers { gate.await() }
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            vm.testConnectivity("g")
+            runCurrent()
+
+            // In flight: remote is in the testing set, no result yet.
+            assertThat(vm.uiState.value.connectivityTesting).contains("g")
+            assertThat(vm.uiState.value.connectivityResults).doesNotContainKey("g")
+
+            gate.complete(Result.success(Unit))
+            advanceUntilIdle()
+
+            assertThat(vm.uiState.value.connectivityTesting).doesNotContain("g")
+            assertThat(vm.uiState.value.connectivityResults["g"]).isEqualTo(ConnectivityResult.SUCCESS)
+            collector.cancel()
+        }
+
+    @Test
+    fun `testConnectivity failure stores FAILURE result and clears testing`() =
+        runTest(mainDispatcher.dispatcher) {
+            coEvery { repository.testConnectivity("g") } returns Result.failure(RuntimeException("offline"))
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            vm.testConnectivity("g")
+            advanceUntilIdle()
+
+            assertThat(vm.uiState.value.connectivityTesting).doesNotContain("g")
+            assertThat(vm.uiState.value.connectivityResults["g"]).isEqualTo(ConnectivityResult.FAILURE)
+            collector.cancel()
+        }
+
+    @Test
+    fun `testConnectivity concurrent tap is deduped but re-runnable after completion`() =
+        runTest(mainDispatcher.dispatcher) {
+            val gate = CompletableDeferred<Result<Unit>>()
+            coEvery { repository.testConnectivity("g") } coAnswers { gate.await() }
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            // Two taps while in-flight → only one call to the repository.
+            vm.testConnectivity("g")
+            runCurrent()
+            vm.testConnectivity("g")
+            runCurrent()
+            coVerify(exactly = 1) { repository.testConnectivity("g") }
+
+            // Complete the gate and wait for the coroutine to finish.
+            gate.complete(Result.success(Unit))
+            advanceUntilIdle()
+
+            // A tap AFTER completion must re-run — the guard must not be permanent.
+            vm.testConnectivity("g")
+            advanceUntilIdle()
+            coVerify(exactly = 2) { repository.testConnectivity("g") }
+            collector.cancel()
+        }
+
+    @Test
+    fun `testConnectivity timeout stores FAILURE result and clears testing`() =
+        runTest(mainDispatcher.dispatcher) {
+            // The repository call never completes; virtual time advances past the
+            // CONNECTIVITY_TIMEOUT_MS (12_000 ms) window so withTimeoutOrNull fires.
+            coEvery { repository.testConnectivity("g") } coAnswers {
+                awaitCancellation()
+            }
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            vm.testConnectivity("g")
+            // Jump past the 12-second timeout using virtual time (instant in tests).
+            advanceTimeBy(13_000)
+            advanceUntilIdle()
+
+            assertThat(vm.uiState.value.connectivityTesting).doesNotContain("g")
+            assertThat(vm.uiState.value.connectivityResults["g"]).isEqualTo(ConnectivityResult.FAILURE)
+            collector.cancel()
+        }
 
     private fun OAuthProvider.unused() = Unit  // silence unused-import warning for OAuthProvider import
 
