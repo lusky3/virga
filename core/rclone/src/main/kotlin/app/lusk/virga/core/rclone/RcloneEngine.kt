@@ -16,12 +16,14 @@ import kotlinx.coroutines.flow.Flow
  * is an absolute filesystem path (requires MANAGE_EXTERNAL_STORAGE for SD cards).
  *
  * ## Failure convention
- * Every operation signals failure the same way: `suspend` methods **throw**
+ * Most operations signal failure the same way: `suspend` methods **throw**
  * [app.lusk.virga.core.common.error.VirgaError] on failure (rather than some
  * returning `Result` and others throwing), and the streaming [sync]/[bisync]
  * flows surface failures by terminating the flow with a `VirgaError`. Callers
  * that need a `Result` (e.g. repositories at the UI boundary) wrap the call in
- * `runCatching`.
+ * `runCatching`. The sole exception is [dedupe], a fire-and-forget maintenance
+ * action that returns [Result] directly because its caller always treats failure
+ * as a non-fatal, surfaced-to-snackbar outcome rather than a thrown error.
  */
 interface RcloneEngine {
     suspend fun startDaemon(): RcloneDaemon

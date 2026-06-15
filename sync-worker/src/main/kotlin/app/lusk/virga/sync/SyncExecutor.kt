@@ -116,10 +116,13 @@ class SyncExecutor @Inject constructor(
             dest = remote,
             options = SyncOptions(
                 direction = task.direction,
-                // Forward the task's performance knobs so a verify behaves like the
-                // real run it previews (checkers especially matter — check is
-                // checker-bound). A verify is user-initiated with no metered signal,
-                // so it uses the Wi-Fi bandwidth limit rather than the metered cap.
+                // Forward the task's performance + comparison config so a verify behaves
+                // like the real run it previews (checkers especially matter — check is
+                // checker-bound; checksum decides hash-vs-size compare; extraConfig is
+                // the power-user escape hatch). A verify is user-initiated with no
+                // metered signal, so it uses the Wi-Fi bandwidth limit. Transfer/delete
+                // knobs (deleteExtraneous, maxDelete, maxTransfer, backupDir) are
+                // intentionally omitted — a check transfers and deletes nothing.
                 bwLimit = task.bwLimitWifi,
                 transfers = task.transfers,
                 checkers = task.checkers,
@@ -129,6 +132,8 @@ class SyncExecutor @Inject constructor(
                 maxSize = task.maxSize.ifBlank { null },
                 minAge = task.minAge.ifBlank { null },
                 maxAge = task.maxAge.ifBlank { null },
+                checksum = task.checksum,
+                extraConfig = ExtraConfigParser.parseToMap(task.extraConfig),
             ),
         )
     }

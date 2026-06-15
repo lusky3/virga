@@ -199,7 +199,13 @@ fun SyncTaskSummaryScreen(
                 } else if (result.differences == 0) {
                     Text(stringResource(R.string.sync_verify_in_sync))
                 } else {
-                    Text(stringResource(R.string.sync_verify_differs, result.differences))
+                    Text(
+                        pluralStringResource(
+                            R.plurals.sync_verify_differs,
+                            result.differences,
+                            result.differences,
+                        ),
+                    )
                 }
             },
             confirmButton = {

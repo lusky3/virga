@@ -3,6 +3,7 @@ package app.lusk.virga.sync
 import app.lusk.virga.core.common.model.SyncProgress
 import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.rclone.RcloneEngine
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.withContext
@@ -48,6 +49,12 @@ class CheckUseCase @Inject constructor(
             executor.runCheck(task)
                 .catch { error = it.message ?: "Verify failed" }
                 .collect { last = it }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            // A failure before the flow starts (e.g. acquireDaemon couldn't launch the
+            // daemon) bypasses the flow .catch — surface it as a result, not a throw.
+            error = e.message ?: "Verify failed"
         } finally {
             if (leased) withContext(NonCancellable) { runCatching { engine.releaseDaemon() } }
         }
