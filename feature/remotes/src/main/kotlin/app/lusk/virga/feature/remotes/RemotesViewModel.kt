@@ -291,19 +291,19 @@ class RemotesViewModel @Inject constructor(
                     it.copy(editMode = null, message = context.getString(R.string.remotes_msg_no_changes))
                 }
                 onResult(true, null)
-                return@launch
-            }
-            val sensitiveAmongChanged = changed.keys.intersect(passwordKeys)
-            val result = repository.updateRemote(name, changed, sensitiveAmongChanged)
-            if (result.isSuccess) {
-                transient.update {
-                    it.copy(
-                        editMode = null,
-                        message = context.getString(R.string.remotes_msg_remote_updated, name),
-                    )
+            } else {
+                val sensitiveAmongChanged = changed.keys.intersect(passwordKeys)
+                val result = repository.updateRemote(name, changed, sensitiveAmongChanged)
+                if (result.isSuccess) {
+                    transient.update {
+                        it.copy(
+                            editMode = null,
+                            message = context.getString(R.string.remotes_msg_remote_updated, name),
+                        )
+                    }
                 }
+                onResult(result.isSuccess, result.exceptionOrNull()?.toUserMessage())
             }
-            onResult(result.isSuccess, result.exceptionOrNull()?.toUserMessage())
         }
     }
 
