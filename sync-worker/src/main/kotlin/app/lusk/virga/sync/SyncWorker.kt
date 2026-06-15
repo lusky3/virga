@@ -222,25 +222,7 @@ open class SyncWorker @AssistedInject constructor(
             val errorCount = last?.errors ?: 0
             val statsGroup = last?.statsGroup
             if (failure == null && errorCount > 0 && statsGroup != null) {
-                runCatching { engine.transferredFiles(statsGroup) }.getOrNull()
-                    ?.filter { it.error.isNotBlank() }
-                    ?.let { failures ->
-                        val capped = if (failures.size > FAILED_FILES_CAP) {
-                            log.line("Per-file failure list truncated to $FAILED_FILES_CAP entries (${failures.size} total).")
-                            failures.take(FAILED_FILES_CAP)
-                        } else failures
-                        // Sanitise the tab field-separator and newline row-separator out of
-                        // both fields: rclone errors are often multi-line, and a raw newline
-                        // would split one entry across rows (the continuation has no tab and
-                        // is dropped on parse). Keeps exactly one "path\terror" per line.
-                        failedFiles = capped.joinToString("\n") {
-                            "${it.name.sanitiseRow()}\t${it.error.sanitiseRow()}"
-                        }
-                        if (failedFiles.isNotEmpty()) {
-                            log.line("Failed files (${capped.size}):")
-                            capped.forEach { log.line("  ${it.name}: ${it.error}") }
-                        }
-                    }
+                failedFiles = captureFailedFiles(statsGroup, log)
             }
 
             // For staged downloads, copy rclone's output back into the SAF tree
@@ -387,6 +369,39 @@ open class SyncWorker @AssistedInject constructor(
         // again — log it so the drop is at least diagnosable.
         runCatching { scheduler.schedule(task) }
             .onFailure { Log.w(TAG, "Failed to re-enqueue calendar schedule for task ${task.id}", it) }
+    }
+
+    /**
+     * Best-effort per-file failure capture for a partial-success run, scoped to the
+     * run's [statsGroup]. Returns the failures as newline-joined "path\terror" lines
+     * (tab/newline sanitised), or "" if there are none — or on any non-cancellation
+     * error: a stats-fetch failure must never turn a completed run into a crash.
+     * [kotlinx.coroutines.CancellationException] is rethrown so structured concurrency
+     * (worker cancellation) is preserved — a plain `runCatching` would swallow it.
+     */
+    @Suppress("TooGenericExceptionCaught")
+    private suspend fun captureFailedFiles(statsGroup: String, log: RunLogWriter): String {
+        val transfers = try {
+            engine.transferredFiles(statsGroup)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            return ""
+        }
+        val failures = transfers.filter { it.error.isNotBlank() }
+        if (failures.isEmpty()) return ""
+        val capped = if (failures.size > FAILED_FILES_CAP) {
+            log.line("Per-file failure list truncated to $FAILED_FILES_CAP entries (${failures.size} total).")
+            failures.take(FAILED_FILES_CAP)
+        } else {
+            failures
+        }
+        log.line("Failed files (${capped.size}):")
+        capped.forEach { log.line("  ${it.name}: ${it.error}") }
+        // Sanitise the tab field-separator and newline row-separator out of both fields:
+        // rclone errors are often multi-line; a raw newline would split one entry across
+        // rows (the continuation has no tab and is dropped on parse). One entry per line.
+        return capped.joinToString("\n") { "${it.name.sanitiseRow()}\t${it.error.sanitiseRow()}" }
     }
 
     /** Record a SUCCESS run from the last observed [progress] snapshot. */
