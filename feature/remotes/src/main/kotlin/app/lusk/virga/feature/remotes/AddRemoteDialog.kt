@@ -259,19 +259,17 @@ internal fun AddRemoteDialog(
                     }
                 }
             }
-            return@ModalBottomSheet
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = VirgaSpacing.lg, vertical = VirgaSpacing.sm)
-                .padding(bottom = VirgaSpacing.lg),
-            verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
-        ) {
-            Text(
-                stringResource(R.string.remotes_add_dialog_title),
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = VirgaSpacing.lg, vertical = VirgaSpacing.sm)
+                    .padding(bottom = VirgaSpacing.lg),
+                verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
+            ) {
+                Text(
+                    stringResource(R.string.remotes_add_dialog_title),
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(bottom = VirgaSpacing.sm),
             )
@@ -462,6 +460,7 @@ internal fun AddRemoteDialog(
                     )
                 }
             }
+        }
         }
     }
 }
