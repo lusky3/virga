@@ -109,7 +109,7 @@
              readable on disk. exported=false + grantUriPermissions: only the
              specific content:// URIs we hand out via Intent are accessible. -->
         <provider
-            android:name="androidx.core.content.FileProvider"
+            android:name=".VirgaFileProvider"
             android:authorities="${applicationId}.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
