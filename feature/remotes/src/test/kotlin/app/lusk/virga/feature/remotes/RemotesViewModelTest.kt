@@ -996,7 +996,15 @@ class RemotesViewModelTest {
     @Test fun `beginEditRemote loads params and sets editMode`() = runTest(mainDispatcher.dispatcher) {
         val params = mapOf("type" to "drive", "client_id" to "abc", "token" to "tok")
         coEvery { repository.getRemoteParams("gdrive") } returns Result.success(params)
-        coEvery { repository.providers() } returns emptyList()
+        coEvery { repository.providers() } returns listOf(
+            RemoteProvider(
+                "drive", "Google Drive",
+                listOf(
+                    RemoteOption("client_id", "Client ID", "string", false, false, null, emptyList(), false),
+                    RemoteOption("token", "Token", "string", false, false, null, emptyList(), false),
+                ),
+            ),
+        )
 
         val vm = viewModel()
         val collector = backgroundScope.launch { vm.uiState.collect {} }
@@ -1029,7 +1037,15 @@ class RemotesViewModelTest {
 
     @Test fun `submitEdit sends only changed keys to updateRemote`() = runTest(mainDispatcher.dispatcher) {
         val loaded = mapOf("type" to "sftp", "host" to "example.com", "user" to "alice")
-        coEvery { repository.providers() } returns emptyList()
+        coEvery { repository.providers() } returns listOf(
+            RemoteProvider(
+                "sftp", "SFTP",
+                listOf(
+                    RemoteOption("host", "Host", "string", false, false, null, emptyList(), false),
+                    RemoteOption("user", "User", "string", false, false, null, emptyList(), false),
+                ),
+            ),
+        )
         coEvery { repository.getRemoteParams("sftp1") } returns Result.success(loaded)
         coEvery { repository.updateRemote(any(), any(), any()) } returns Result.success(Unit)
         coEvery { repository.refresh() } returns Result.success(Unit)
@@ -1069,10 +1085,11 @@ class RemotesViewModelTest {
         vm.beginEditRemote("sftp1")
         advanceUntilIdle()
 
-        // host unchanged, pass blank (keep current)
+        // host unchanged, pass blank (keep current) → nothing changed, so updateRemote
+        // must NOT be called (no needless exclusive-lock acquisition).
         vm.submitEdit("sftp1", mapOf("host" to "h", "pass" to "")) { _, _ -> }
         advanceUntilIdle()
-        coVerify { repository.updateRemote("sftp1", emptyMap(), emptySet()) }
+        coVerify(exactly = 0) { repository.updateRemote(any(), emptyMap(), any()) }
 
         // First submitEdit cleared editMode — re-enter edit session before second submit.
         vm.beginEditRemote("sftp1")

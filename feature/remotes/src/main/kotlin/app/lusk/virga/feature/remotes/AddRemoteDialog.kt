@@ -255,7 +255,7 @@ internal fun AddRemoteDialog(
                         Text(stringResource(R.string.remotes_back))
                     }
                     TextButton(onClick = { onEditConfirm(editTypedValues.toMap()) }) {
-                        Text(stringResource(R.string.remotes_add_create))
+                        Text(stringResource(R.string.remotes_edit_save))
                     }
                 }
             }

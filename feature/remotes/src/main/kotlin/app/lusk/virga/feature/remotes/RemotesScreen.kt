@@ -327,7 +327,8 @@ fun RemotesScreen(
         )
     }
 
-    if (showAdd) {
+    // Edit takes precedence: never stack the add + edit sheets if both are somehow set.
+    if (showAdd && state.editMode == null) {
         AddRemoteDialog(
             oauthProviders = viewModel.oauthProviders,
             error = manualError,

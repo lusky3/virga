@@ -234,6 +234,11 @@ class RemotesViewModel @Inject constructor(
                 val type = config["type"].orEmpty()
                 // allOptionsForBackend now has the schema: returns the full option list.
                 val options = allOptionsForBackend(type) ?: emptyList()
+                // Refuse to open the editor without a usable field schema — otherwise the
+                // dialog shows no editable fields and the password-key set can't be derived.
+                if (options.isEmpty()) {
+                    error(context.getString(R.string.remotes_edit_schema_unavailable))
+                }
                 val passwordKeys = options.filter { it.isPassword }.map { it.name }.toSet()
                 EditModeState(
                     remoteName = name,
@@ -279,6 +284,15 @@ class RemotesViewModel @Inject constructor(
                     else -> null                                      // unchanged
                 }
             }.toMap()
+            // Nothing edited → don't acquire the exclusive config lock (which would also
+            // fail with a confusing "stop running syncs" error if a sync is active).
+            if (changed.isEmpty()) {
+                transient.update {
+                    it.copy(editMode = null, message = context.getString(R.string.remotes_msg_no_changes))
+                }
+                onResult(true, null)
+                return@launch
+            }
             val sensitiveAmongChanged = changed.keys.intersect(passwordKeys)
             val result = repository.updateRemote(name, changed, sensitiveAmongChanged)
             if (result.isSuccess) {
