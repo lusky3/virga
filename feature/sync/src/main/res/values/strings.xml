@@ -154,7 +154,7 @@
     <string name="sync_edit_field_bw_wifi_hint">Optional. Leave blank for no limit. Supports a single rate (1M, 10M:1M) or a timetable (08:00,1M 22:00,off).</string>
     <string name="sync_edit_field_bw_metered">Upload limit (metered data)</string>
     <string name="sync_edit_field_bw_metered_placeholder">e.g. 1M or 08:00,512k 22:00,off</string>
-    <string name="sync_edit_field_bw_metered_hint">Optional. Leave blank for no limit on metered connections. Supports timetables.</string>
+    <string name="sync_edit_field_bw_metered_hint">Optional. Leave blank for no limit on metered connections. Supports a single rate (1M, 10M:1M) or a timetable (08:00,1M 22:00,off).</string>
     <!-- MaxTransfer data cap (B6) -->
     <string name="sync_edit_field_max_transfer">Data cap per run</string>
     <string name="sync_edit_field_max_transfer_placeholder">e.g. 10G</string>

@@ -412,8 +412,11 @@ class SyncTaskEditViewModel @Inject constructor(
             val trimmed = value.trim()
             if (trimmed.isBlank()) return null
             if (BW_LIMIT_SINGLE_REGEX.matches(trimmed)) return null
-            // Accept a timetable: one-or-more space-separated HH:MM,RATE tokens.
-            if (trimmed.split(' ').all { BW_LIMIT_TOKEN_REGEX.matches(it) }) return null
+            // Accept a timetable: one-or-more whitespace-separated HH:MM,RATE tokens.
+            // Split on a whitespace run (not a single space) so pasted input with
+            // doubled spaces doesn't yield an empty token and spuriously fail.
+            val tokens = trimmed.split(Regex("""\s+""")).filter { it.isNotBlank() }
+            if (tokens.isNotEmpty() && tokens.all { BW_LIMIT_TOKEN_REGEX.matches(it) }) return null
             return "Invalid bandwidth limit — use e.g. 1M, 10M:1M, or a timetable like 08:00,512k 19:00,off"
         }
 

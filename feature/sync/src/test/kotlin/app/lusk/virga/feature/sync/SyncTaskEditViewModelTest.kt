@@ -398,6 +398,15 @@ class SyncTaskEditViewModelTest {
     }
 
     @Test
+    fun bwLimitWifiError_isNullForTimetableWithDoubledSpaces() {
+        // Pasted input with repeated whitespace between tokens must still validate
+        // (split on a whitespace run, not a single space).
+        val vm = viewModel()
+        vm.update { it.copy(bwLimitWifi = "08:00,512k  22:00,off") }
+        assertThat(vm.form.value.bwLimitWifiError).isNull()
+    }
+
+    @Test
     fun bwLimitWifiError_isNullForOffToken() {
         val vm = viewModel()
         vm.update { it.copy(bwLimitWifi = "08:00,off") }
