@@ -103,6 +103,21 @@
             android:foregroundServiceType="dataSync"
             tools:node="merge" />
 
+        <!-- F3 (0.3.0): FileProvider for sharing/opening exported files (config
+             export, history CSV/JSON, file open/share/download). Backed by the
+             app's cache dir so shared artifacts are transient and never world-
+             readable on disk. exported=false + grantUriPermissions: only the
+             specific content:// URIs we hand out via Intent are accessible. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- Phase 3 WS3.6: Glance home-screen widget.
              SEC: exported is required by the AppWidget framework — the launcher
              must be able to send APPWIDGET_UPDATE. The receiver exposes no

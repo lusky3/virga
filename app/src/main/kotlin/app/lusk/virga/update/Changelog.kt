@@ -9,6 +9,15 @@ data class ReleaseNotes(val versionName: String, val notes: List<String>)
  */
 val RELEASE_NOTES: List<ReleaseNotes> = listOf(
     ReleaseNotes(
+        versionName = "0.3.0",
+        notes = listOf(
+            "Create a new destination folder right from the folder picker",
+            "Test a remote's connectivity on demand from its card menu",
+            "Importing a config now warns you before it replaces your remotes",
+            "Old per-run sync logs are pruned automatically, so they no longer grow without bound",
+        ),
+    ),
+    ReleaseNotes(
         versionName = "0.2.0",
         notes = listOf(
             "Configure any rclone provider — Box, Dropbox, OneDrive, Google Drive, pCloud, and more",
