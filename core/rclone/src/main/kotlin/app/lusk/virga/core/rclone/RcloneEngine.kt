@@ -93,6 +93,24 @@ interface RcloneEngine {
     suspend fun deleteRemote(name: String)
 
     /**
+     * Renames [oldName] to [newName] by copying the config under [newName] then
+     * deleting [oldName], both within one exclusive-config section (one
+     * [mutatingConfig] block, one daemon lease). rclone has no atomic rename command.
+     *
+     * The old remote's stored values (already in rclone's obscured form) are
+     * re-created verbatim WITHOUT re-obscuring (opt.obscure is NOT set). Setting
+     * obscure=true here would double-obscure already-obscured passwords and corrupt
+     * the credentials. The [oldName] remote is untouched if [config/create] fails.
+     *
+     * Does NOT update the database — callers must repoint [SyncTaskEntity.remoteName]
+     * rows from [oldName] to [newName] after this returns successfully.
+     *
+     * Throws [app.lusk.virga.core.common.error.VirgaError.Rclone] on failure,
+     * consistent with the throw-on-failure convention of this interface.
+     */
+    suspend fun renameRemote(oldName: String, newName: String)
+
+    /**
      * Updates an existing remote's config by sending only [params] (the changed keys)
      * to rclone's `config/update` RC endpoint. Routes through [mutatingConfig] which
      * wraps [withExclusiveDaemon] — refuses while syncs hold leases, and

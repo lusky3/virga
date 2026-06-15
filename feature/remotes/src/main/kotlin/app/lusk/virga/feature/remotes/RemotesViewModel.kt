@@ -514,6 +514,65 @@ class RemotesViewModel @Inject constructor(
         }
     }
 
+    // --- Rename remote -----------------------------------------------------------
+
+    /** Opens the rename dialog for [name]. Mutually exclusive with edit/add. */
+    fun beginRenameRemote(name: String) {
+        transient.update { it.copy(renameTarget = name, editMode = null) }
+    }
+
+    /** Dismisses the rename dialog without any action. */
+    fun dismissRenameRemote() {
+        transient.update { it.copy(renameTarget = null, renameInFlight = false) }
+    }
+
+    /**
+     * Validates [newName] and, if valid, renames the remote from [oldName] to
+     * [newName]. Returns an error string on validation failure (inline in dialog)
+     * or null on success. Surfaces result via snackbar and refreshes the list.
+     *
+     * Validation rules (mirror AddRemoteDialog):
+     * - [newName] must be non-blank.
+     * - [newName] must differ from [oldName].
+     * - [newName] must not already be used by another remote.
+     * - [newName] must be structurally valid (isValidRemoteName).
+     */
+    fun submitRename(
+        oldName: String,
+        newName: String,
+        onValidationError: (String) -> Unit,
+    ) {
+        val trimmed = newName.trim()
+        val existingNames = uiState.value.remotes.map { it.name }
+        val validationError = when {
+            trimmed.isBlank() ->
+                context.getString(R.string.remotes_rename_error_blank)
+            trimmed == oldName ->
+                context.getString(R.string.remotes_rename_error_same)
+            existingNames.any { it == trimmed } ->
+                context.getString(R.string.remotes_rename_error_taken, trimmed)
+            !app.lusk.virga.core.common.validation.isValidRemoteName(trimmed) ->
+                context.getString(R.string.remotes_add_name_invalid)
+            else -> null
+        }
+        if (validationError != null) {
+            onValidationError(validationError)
+            return
+        }
+        transient.update { it.copy(renameInFlight = true) }
+        viewModelScope.launch {
+            val result = repository.renameRemote(oldName, trimmed)
+            transient.update { state ->
+                val msg = if (result.isSuccess) {
+                    context.getString(R.string.remotes_msg_remote_renamed, oldName, trimmed)
+                } else {
+                    result.exceptionOrNull()?.toUserMessage()
+                }
+                state.copy(renameTarget = null, renameInFlight = false, message = msg)
+            }
+        }
+    }
+
     private fun combineState(): StateFlow<RemotesUiState> =
         combine(
             repository.remotes,
@@ -537,6 +596,8 @@ class RemotesViewModel @Inject constructor(
                 pendingEncryptedImport = t.pendingEncryptedImport,
                 editMode = t.editMode,
                 editLoading = t.editLoading,
+                renameTarget = t.renameTarget,
+                renameInFlight = t.renameInFlight,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RemotesUiState())
 

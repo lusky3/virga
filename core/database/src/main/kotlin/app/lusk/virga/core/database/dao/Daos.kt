@@ -68,6 +68,13 @@ interface SyncTaskDao {
     /** Deletes all tasks targeting [remoteName] — used to clean up after a remote is removed. */
     @Query("DELETE FROM sync_tasks WHERE remoteName = :remoteName")
     suspend fun deleteByRemoteName(remoteName: String)
+
+    /**
+     * Repoints all tasks from [oldName] to [newName] after a remote rename.
+     * A plain UPDATE — no schema change, no cascade delete. Tasks are preserved.
+     */
+    @Query("UPDATE sync_tasks SET remoteName = :newName WHERE remoteName = :oldName")
+    suspend fun repointRemoteName(oldName: String, newName: String)
 }
 
 @Dao
@@ -235,4 +242,12 @@ interface ConflictDao {
     /** Prune resolved rows whose basePath is no longer detected (their files were removed). */
     @Query("DELETE FROM conflicts WHERE taskId = :taskId AND resolved = 1 AND basePath NOT IN (:keptBasePaths)")
     suspend fun pruneResolvedNotIn(taskId: Long, keptBasePaths: List<String>)
+
+    /**
+     * Repoints all conflict rows from [oldName] to [newName] after a remote rename.
+     * Preserves resolution state and all other columns. Must be called in the same
+     * success path as [SyncTaskDao.repointRemoteName].
+     */
+    @Query("UPDATE conflicts SET remoteName = :newName WHERE remoteName = :oldName")
+    suspend fun repointRemoteName(oldName: String, newName: String)
 }

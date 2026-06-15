@@ -263,6 +263,50 @@ class RcloneEngineImpl @Inject constructor(
         }
     }
 
+    /**
+     * Renames [oldName] → [newName] inside one exclusive config section:
+     * 1. Reads existing params via config/get.
+     * 2. Creates the new remote via config/create.
+     * 3. Deletes the old remote via config/delete.
+     *
+     * IMPORTANT: the values from config/get are already in rclone's obscured form.
+     * We pass them to config/create WITHOUT opt.obscure so rclone writes them as-is.
+     * Setting obscure=true would re-obscure already-obscured values and corrupt passwords.
+     *
+     * If config/create fails, the old remote is untouched (safe). Does NOT touch the DB.
+     */
+    override suspend fun renameRemote(oldName: String, newName: String) {
+        mutatingConfig { d ->
+            val current = rc(d, "config/get", buildJsonObject { put("name", oldName) })
+            val type = current["type"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            if (type.isBlank()) {
+                throw VirgaError.Rclone(
+                    message = "Cannot rename \"$oldName\": remote not found or has no type.",
+                )
+            }
+            // Build params: all primitive values except "type" (type is a top-level field).
+            val params = current.entries.mapNotNull { (k, v) ->
+                if (k == "type") null
+                else {
+                    val str = runCatching { v.jsonPrimitive.contentOrNull }.getOrNull()
+                    if (str != null) k to str else null
+                }
+            }.toMap()
+            // Create the new remote first — old is untouched if this fails.
+            rc(d, "config/create", buildJsonObject {
+                put("name", newName)
+                put("type", type)
+                putJsonObject("parameters") { params.forEach { (k, v) -> put(k, v) } }
+                putJsonObject("opt") {
+                    put("nonInteractive", true)
+                    // DO NOT set obscure=true: the values from config/get are already in
+                    // rclone's obscured form. Re-obscuring would corrupt the passwords.
+                }
+            })
+            rc(d, "config/delete", buildJsonObject { put("name", oldName) })
+        }
+    }
+
     override suspend fun updateRemote(
         name: String,
         params: Map<String, String>,
