@@ -28,6 +28,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 
@@ -195,7 +196,8 @@ private fun DaemonOAuthFieldInput(
                 capitalization = KeyboardCapitalization.None,
                 autoCorrectEnabled = false,
             ),
-            visualTransformation = if (prompt.isPassword) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+            visualTransformation =
+                if (prompt.isPassword) PasswordVisualTransformation() else VisualTransformation.None,
             modifier = Modifier.fillMaxWidth(),
         )
         if (prompt.examples.isNotEmpty()) {

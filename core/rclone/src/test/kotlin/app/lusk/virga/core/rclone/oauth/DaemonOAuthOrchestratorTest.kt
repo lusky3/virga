@@ -415,4 +415,37 @@ class DaemonOAuthOrchestratorTest {
         // The default "drive" was sent in the continuation without any user interaction.
         assertThat(requests[1].optStr("result")).isEqualTo("drive")
     }
+
+    @Test
+    fun `required question with an array-typed Default auto-defaults without crashing`() = runTest(testDispatcher) {
+        // Robustness: a Required option whose Default serializes as a JSON array
+        // (CommaSepList/SpaceSepList) must not throw on `.jsonPrimitive`. The
+        // structured default counts as usable, so the question auto-answers
+        // rather than surfacing AwaitingFieldInput or failing the flow.
+        enqueueResponses(
+            buildJsonObject {
+                put("State", "*opt-list,0")
+                put("Error", "")
+                put("Result", "")
+                putJsonObject("Option") {
+                    put("Name", "exclude")
+                    put("Type", "CommaSepList")
+                    put("Required", true)
+                    put("DefaultStr", "")
+                    putJsonArray("Default") {}
+                    put("Help", "")
+                }
+            },
+            terminal(),
+        )
+
+        val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
+        orchestrator.start("mys3", "s3", null, null, daemon, this)
+        advanceUntilIdle()
+
+        assertThat(orchestrator.state.value)
+            .isEqualTo(DaemonOAuthOrchestrator.State.Complete("mys3"))
+        assertThat(orchestrator.state.value)
+            .isNotInstanceOf(DaemonOAuthOrchestrator.State.AwaitingFieldInput::class.java)
+    }
 }

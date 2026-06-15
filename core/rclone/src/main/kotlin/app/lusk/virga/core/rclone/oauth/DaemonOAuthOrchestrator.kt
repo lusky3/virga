@@ -13,8 +13,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -293,9 +295,18 @@ class DaemonOAuthOrchestrator(
         if (!required) return false
         val defaultStr = option["DefaultStr"]?.jsonPrimitive?.contentOrNull
         if (!defaultStr.isNullOrBlank()) return false
-        val default = option["Default"]
-        return default == null || default is JsonNull ||
-            default.jsonPrimitive.contentOrNull.isNullOrBlank()
+        return !hasUsableDefault(option["Default"])
+    }
+
+    /**
+     * True when [default] carries a usable value. A structured default (a
+     * `CommaSepList`/`SpaceSepList` serializes as a JSON array) counts as usable;
+     * crucially we must NOT call `.jsonPrimitive` on a non-primitive, which throws.
+     */
+    private fun hasUsableDefault(default: JsonElement?): Boolean = when {
+        default == null || default is JsonNull -> false
+        default is JsonPrimitive -> !default.contentOrNull.isNullOrBlank()
+        else -> true
     }
 
     private fun defaultAnswer(option: JsonObject): String {
@@ -304,10 +315,12 @@ class DaemonOAuthOrchestrator(
         val defaultStr = option["DefaultStr"]?.jsonPrimitive?.contentOrNull
         if (defaultStr != null) return defaultStr
         val type = option["Type"]?.jsonPrimitive?.contentOrNull
-        val default = option["Default"]
+        // `as? JsonPrimitive` guards against array/object defaults, which would
+        // throw on `.jsonPrimitive`.
+        val default = option["Default"] as? JsonPrimitive
         return when {
-            type == "bool" -> (default?.jsonPrimitive?.booleanOrNull ?: false).toString()
-            default != null -> default.jsonPrimitive.contentOrNull ?: ""
+            type == "bool" -> (default?.booleanOrNull ?: false).toString()
+            default != null -> default.contentOrNull ?: ""
             else -> ""
         }
     }
