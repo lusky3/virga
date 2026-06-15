@@ -9,6 +9,10 @@
     <string name="remotes_export_dialog_title">Export config?</string>
     <string name="remotes_export_dialog_body">The exported file contains your credentials and tokens in plain text. Anyone with this file can access your remotes — store it somewhere safe.</string>
     <string name="remotes_export_dialog_confirm">Export</string>
+    <!-- Import-config confirmation dialog -->
+    <string name="remotes_import_dialog_title">Import config?</string>
+    <string name="remotes_import_dialog_body">Importing replaces all of your current remotes with the ones in this file. Remotes that aren\'t in the file will be removed. This can\'t be undone.</string>
+    <string name="remotes_import_dialog_confirm">Import</string>
     <string name="remotes_fab_label">Add cloud account</string>
     <string name="remotes_oauth_in_progress">Completing sign-in…</string>
     <string name="remotes_cd_oauth_progress">Signing in</string>
