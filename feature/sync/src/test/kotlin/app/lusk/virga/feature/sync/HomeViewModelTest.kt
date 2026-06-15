@@ -12,6 +12,7 @@ import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
 import app.lusk.virga.sync.SyncScheduler
 import com.google.common.truth.Truth.assertThat
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -162,20 +163,20 @@ class HomeViewModelTest {
     // --- backUpNow ---------------------------------------------------------
 
     @Test
-    fun backUpNow_triggersSyncForEnabledTasksOnly() = runTest(mainDispatcher.dispatcher) {
+    fun backUpNow_delegatesToSchedulerSyncAllEnabled() = runTest(mainDispatcher.dispatcher) {
+        // Enabled-only filtering now lives in SyncScheduler.syncAllEnabled (covered
+        // by SyncSchedulerTest); the VM just delegates and never loops syncNow itself.
         tasksFlow.value = listOf(
             task(id = 1L, enabled = true),
             task(id = 2L, enabled = false),
-            task(id = 3L, enabled = true),
         )
         val vm = viewModel()
 
         vm.backUpNow()
         advanceUntilIdle()
 
-        verify(exactly = 1) { scheduler.syncNow(1L) }
-        verify(exactly = 1) { scheduler.syncNow(3L) }
-        verify(exactly = 0) { scheduler.syncNow(2L) }
+        coVerify(exactly = 1) { scheduler.syncAllEnabled() }
+        verify(exactly = 0) { scheduler.syncNow(any()) }
     }
 
     @Test
