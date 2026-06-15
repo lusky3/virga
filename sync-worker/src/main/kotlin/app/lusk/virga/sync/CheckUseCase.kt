@@ -39,6 +39,11 @@ class CheckUseCase @Inject constructor(
 ) {
     fun isAvailableFor(task: SyncTask): Boolean = !task.sourcePath.startsWith("content://")
 
+    // Catches Throwable deliberately: any failure to acquire/launch the daemon must
+    // become a CheckResult.error rather than escaping. CancellationException is
+    // rethrown first, so cooperative cancellation is preserved (a plain runCatching
+    // around the suspend acquire would swallow it).
+    @Suppress("TooGenericExceptionCaught")
     suspend fun verify(task: SyncTask): CheckResult {
         var last: SyncProgress? = null
         var error: String? = null

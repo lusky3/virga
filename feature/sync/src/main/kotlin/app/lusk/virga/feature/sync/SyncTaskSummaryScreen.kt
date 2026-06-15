@@ -243,6 +243,68 @@ private data class VerifyActionState(
     val onVerify: () -> Unit,
 )
 
+/** Bundles the preview (dry-run) action state, mirroring [VerifyActionState]. */
+private data class PreviewActionState(
+    val available: Boolean,
+    val running: Boolean,
+    val onPreview: () -> Unit,
+)
+
+/**
+ * The Run/Cancel + Preview + Verify action row. Extracted from [SummaryContent]'s
+ * LazyColumn item so that item lambda stays under the complexity/length limits.
+ */
+@Composable
+private fun SummaryActionsRow(
+    isActive: Boolean,
+    onSyncNow: () -> Unit,
+    onCancelSync: () -> Unit,
+    preview: PreviewActionState,
+    verify: VerifyActionState,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (isActive) {
+            OutlinedButton(onClick = onCancelSync) {
+                Icon(Icons.Filled.Cancel, contentDescription = null)
+                Spacer(Modifier.width(VirgaSpacing.sm))
+                Text(stringResource(R.string.sync_task_cd_cancel))
+            }
+        } else {
+            FilledTonalButton(onClick = onSyncNow) {
+                Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                Spacer(Modifier.width(VirgaSpacing.sm))
+                Text(stringResource(R.string.sync_task_cd_sync_now))
+            }
+            if (preview.available) {
+                Spacer(Modifier.width(VirgaSpacing.sm))
+                OutlinedButton(onClick = preview.onPreview, enabled = !preview.running) {
+                    Icon(Icons.Filled.Preview, contentDescription = null)
+                    Spacer(Modifier.width(VirgaSpacing.sm))
+                    Text(
+                        stringResource(
+                            if (preview.running) R.string.sync_preview_running
+                            else R.string.sync_preview_action,
+                        ),
+                    )
+                }
+            }
+            if (verify.available) {
+                Spacer(Modifier.width(VirgaSpacing.sm))
+                OutlinedButton(onClick = verify.onVerify, enabled = !verify.running) {
+                    Icon(Icons.Filled.Verified, contentDescription = null)
+                    Spacer(Modifier.width(VirgaSpacing.sm))
+                    Text(
+                        stringResource(
+                            if (verify.running) R.string.sync_verify_running
+                            else R.string.sync_verify_action,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun SummaryContent(
     task: SyncTask,
@@ -268,48 +330,14 @@ private fun SummaryContent(
         verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
     ) {
         item {
-            // Run / Cancel + Enabled toggle.
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (isActive) {
-                    OutlinedButton(onClick = onCancelSync) {
-                        Icon(Icons.Filled.Cancel, contentDescription = null)
-                        Spacer(Modifier.width(VirgaSpacing.sm))
-                        Text(stringResource(R.string.sync_task_cd_cancel))
-                    }
-                } else {
-                    FilledTonalButton(onClick = onSyncNow) {
-                        Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                        Spacer(Modifier.width(VirgaSpacing.sm))
-                        Text(stringResource(R.string.sync_task_cd_sync_now))
-                    }
-                    if (previewAvailable) {
-                        Spacer(Modifier.width(VirgaSpacing.sm))
-                        OutlinedButton(onClick = onPreview, enabled = !previewRunning) {
-                            Icon(Icons.Filled.Preview, contentDescription = null)
-                            Spacer(Modifier.width(VirgaSpacing.sm))
-                            Text(
-                                stringResource(
-                                    if (previewRunning) R.string.sync_preview_running
-                                    else R.string.sync_preview_action,
-                                ),
-                            )
-                        }
-                    }
-                    if (verify.available) {
-                        Spacer(Modifier.width(VirgaSpacing.sm))
-                        OutlinedButton(onClick = verify.onVerify, enabled = !verify.running) {
-                            Icon(Icons.Filled.Verified, contentDescription = null)
-                            Spacer(Modifier.width(VirgaSpacing.sm))
-                            Text(
-                                stringResource(
-                                    if (verify.running) R.string.sync_verify_running
-                                    else R.string.sync_verify_action,
-                                ),
-                            )
-                        }
-                    }
-                }
-            }
+            // Run / Cancel + Preview + Verify actions, then Enabled toggle.
+            SummaryActionsRow(
+                isActive = isActive,
+                onSyncNow = onSyncNow,
+                onCancelSync = onCancelSync,
+                preview = PreviewActionState(previewAvailable, previewRunning, onPreview),
+                verify = verify,
+            )
             if (liveProgress != null) {
                 Spacer(Modifier.height(VirgaSpacing.md))
                 LiveSyncPanel(progress = liveProgress)
