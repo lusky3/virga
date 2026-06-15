@@ -107,6 +107,48 @@ class FileBrowserScreenshotTest {
     }
 
     @Test
+    fun fileBrowserScreen_pickMode() {
+        val vm = viewModel(populatedListing)
+        // Pick mode renders the "New folder" FAB Column (the CreateNewFolder FAB +
+        // the "Select this folder" extended FAB). Composing under setContent always
+        // exercises that branch — captureRoboImage is a no-op in plain test mode, so
+        // the standalone-lambda form never composed and left those lines uncovered.
+        vm.selectRemote("gdrive")
+        composeRule.setContent {
+            VirgaTheme {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    FileBrowserScreen(onBack = {}, pickMode = true, viewModel = vm)
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage()
+    }
+
+    @Test
+    fun fileBrowserScreen_createFolderDialog() {
+        val vm = viewModel(populatedListing)
+        // Pick mode + dialog-open renders the CreateFolderDialog over the screen. The dialog
+        // window never settles to idle under this rule's host, so capture the resolved frame
+        // via the standalone composable-lambda form (which doesn't rely on espresso idle).
+        // Dialog *composition* coverage is exercised by FileBrowserDialogCoverageTest, which
+        // hosts a real ComponentActivity where the dialog window can reach idle.
+        vm.selectRemote("gdrive")
+        vm.openCreateFolderDialog()
+        captureRoboImage(
+            filePath = "src/test/snapshots/" +
+                "app.lusk.virga.feature.explorer.FileBrowserScreenshotTest." +
+                "fileBrowserScreen_createFolderDialog.png",
+        ) {
+            VirgaTheme {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    FileBrowserScreen(onBack = {}, pickMode = true, viewModel = vm)
+                }
+            }
+        }
+    }
+
+    @Test
     fun fileBrowserScreen_empty() {
         val vm = viewModel(emptyList())
         vm.selectRemote("gdrive")

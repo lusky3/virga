@@ -33,6 +33,15 @@
     <string name="explorer_create_task_from_selection">Create sync task</string>
     <string name="explorer_select_folder">Select this folder</string>
 
+    <!-- Create destination folder (pick mode) -->
+    <string name="explorer_cd_new_folder">Create new folder</string>
+    <string name="explorer_new_folder_title">New folder</string>
+    <string name="explorer_new_folder_hint">Folder name</string>
+    <string name="explorer_new_folder_create">Create</string>
+    <string name="explorer_new_folder_invalid_name">Enter a valid folder name (no slashes or control characters).</string>
+    <string name="explorer_new_folder_exists">A folder with that name already exists here.</string>
+    <string name="explorer_new_folder_failed">Couldn\'t create the folder. Please try again.</string>
+
     <!-- Item a11y content descriptions -->
     <!-- %1$s = folder name -->
     <string name="explorer_a11y_folder">Folder, %1$s</string>

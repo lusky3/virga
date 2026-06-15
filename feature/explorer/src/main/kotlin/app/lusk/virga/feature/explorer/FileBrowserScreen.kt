@@ -3,12 +3,15 @@ package app.lusk.virga.feature.explorer
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
@@ -16,17 +19,21 @@ import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -36,6 +43,9 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -47,6 +57,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -130,11 +141,23 @@ fun FileBrowserScreen(
                     }
                     pickMode -> {
                         val pickLabel = stringResource(R.string.explorer_select_folder)
-                        ExtendedFloatingActionButton(
-                            onClick = { viewModel.pickFolder(remote, state.path); onBack() },
-                            icon = { Icon(Icons.Filled.CheckCircle, contentDescription = null) },
-                            text = { Text(pickLabel) },
-                        )
+                        val newFolderDesc = stringResource(R.string.explorer_cd_new_folder)
+                        Column(
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
+                        ) {
+                            FloatingActionButton(
+                                onClick = viewModel::openCreateFolderDialog,
+                                modifier = Modifier.semantics { contentDescription = newFolderDesc },
+                            ) {
+                                Icon(Icons.Filled.CreateNewFolder, contentDescription = null)
+                            }
+                            ExtendedFloatingActionButton(
+                                onClick = { viewModel.pickFolder(remote, state.path); onBack() },
+                                icon = { Icon(Icons.Filled.CheckCircle, contentDescription = null) },
+                                text = { Text(pickLabel) },
+                            )
+                        }
                     }
                     else -> {
                         val syncLabel = stringResource(R.string.explorer_sync_folder)
@@ -191,6 +214,59 @@ fun FileBrowserScreen(
             }
         }
     }
+
+    if (pickMode && state.showCreateFolderDialog) {
+        CreateFolderDialog(
+            errorRes = state.createFolderError,
+            creating = state.creatingFolder,
+            onDismiss = viewModel::dismissCreateFolderDialog,
+            onConfirm = viewModel::createFolder,
+        )
+    }
+}
+
+@Composable
+private fun CreateFolderDialog(
+    errorRes: Int?,
+    creating: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var name by rememberSaveable { mutableStateOf("") }
+    val confirmEnabled = name.isNotBlank() && !creating
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.explorer_new_folder_title)) },
+        text = {
+            // Error goes in the field's supportingText slot (not a sibling Text) so
+            // it's announced with the field by TalkBack and styled via isError.
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                singleLine = true,
+                enabled = !creating,
+                isError = errorRes != null,
+                label = { Text(stringResource(R.string.explorer_new_folder_hint)) },
+                supportingText = if (errorRes != null) {
+                    { Text(stringResource(errorRes)) }
+                } else {
+                    null
+                },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { if (confirmEnabled) onConfirm(name) }),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(name) }, enabled = confirmEnabled) {
+                Text(stringResource(R.string.explorer_new_folder_create))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !creating) {
+                Text(stringResource(android.R.string.cancel))
+            }
+        },
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -106,6 +106,13 @@ interface RcloneEngine {
     suspend fun moveFile(source: String, dest: String)
 
     /**
+     * Creates the directory [path] within [remote] (e.g. remote `"gdrive:"`, path
+     * `"backups/photos"`) via `operations/mkdir`. Idempotent — rclone no-ops if the
+     * directory already exists. Throws [VirgaError] on failure.
+     */
+    suspend fun mkdir(remote: String, path: String)
+
+    /**
      * Fetches storage quota for [remoteName] via `operations/about`.
      * Throws [VirgaError] on failure; any field in the result may be null
      * when the backend does not report it.

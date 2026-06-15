@@ -1,5 +1,6 @@
 package app.lusk.virga.feature.explorer
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.lusk.virga.core.common.dispatchers.DispatcherProvider
@@ -55,6 +56,12 @@ data class FileBrowserUiState(
     val searchActive: Boolean = false,
     val selectedPaths: Set<String> = emptySet(),
     val selectionMode: Boolean = false,
+    /** True while the "create folder" dialog is shown (pick mode). */
+    val showCreateFolderDialog: Boolean = false,
+    /** String resource for the current create-folder error, or null if none. */
+    @param:StringRes val createFolderError: Int? = null,
+    /** True while a folder-creation RC call is in flight. */
+    val creatingFolder: Boolean = false,
 ) {
     val atRoot: Boolean get() = path.isEmpty()
     val breadcrumb: List<String> get() = path.split('/').filter { it.isNotBlank() }
@@ -70,6 +77,77 @@ class FileBrowserViewModel @Inject constructor(
 
     /** Records the current folder as the chosen destination (pick mode). */
     fun pickFolder(remoteName: String, path: String) = folderPickStore.pick(remoteName, path)
+
+    /** Shows the create-folder dialog (pick mode), clearing any prior error. */
+    fun openCreateFolderDialog() {
+        _state.update { it.copy(showCreateFolderDialog = true, createFolderError = null) }
+    }
+
+    /** Dismisses the create-folder dialog and clears its error/in-flight state. */
+    fun dismissCreateFolderDialog() {
+        // Cancel any in-flight mkdir so dismissing can't later navigate into a folder
+        // the user backed out of.
+        createFolderJob?.cancel()
+        _state.update {
+            it.copy(showCreateFolderDialog = false, createFolderError = null, creatingFolder = false)
+        }
+    }
+
+    /**
+     * Validates a proposed folder [name] against the current directory's entries.
+     * Returns a string resource for the failure reason, or null when valid.
+     */
+    @StringRes
+    private fun validateFolderName(name: String): Int? {
+        val trimmed = name.trim()
+        if (!isStructurallyValidFolderName(trimmed)) return R.string.explorer_new_folder_invalid_name
+        val exists = _state.value.rawEntries.any { it.name.equals(trimmed, ignoreCase = true) }
+        return if (exists) R.string.explorer_new_folder_exists else null
+    }
+
+    /** Name is non-empty, not `.`/`..`, within length, and free of separators/control chars. */
+    private fun isStructurallyValidFolderName(trimmed: String): Boolean {
+        if (trimmed.isEmpty() || trimmed == "." || trimmed == "..") return false
+        if (trimmed.length > MAX_FOLDER_NAME_LENGTH) return false
+        return trimmed.none { it == '/' || it == '\\' || it.isISOControl() }
+    }
+
+    /** L3: the in-flight folder creation, cancelled on dismiss/relaunch. */
+    private var createFolderJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * Validates [name], creates it under the current path, then navigates into the
+     * new folder so the "Select folder" FAB picks it. Surfaces validation/RC errors
+     * via [FileBrowserUiState.createFolderError].
+     */
+    fun createFolder(name: String) {
+        val remote = _state.value.remoteName ?: return
+        val validationError = validateFolderName(name)
+        if (validationError != null) {
+            _state.update { it.copy(createFolderError = validationError) }
+            return
+        }
+        val trimmed = name.trim()
+        val basePath = _state.value.path
+        val childPath = if (basePath.isEmpty()) trimmed else "$basePath/$trimmed"
+
+        createFolderJob?.cancel()
+        createFolderJob = viewModelScope.launch {
+            _state.update { it.copy(creatingFolder = true, createFolderError = null) }
+            try {
+                withContext(dispatchers.io) { fileBrowser.mkdir(remote, childPath) }
+                _state.update {
+                    it.copy(showCreateFolderDialog = false, creatingFolder = false, createFolderError = null)
+                }
+                load(remote, childPath)
+            } catch (e: VirgaError) {
+                _state.update { it.copy(creatingFolder = false, createFolderError = R.string.explorer_new_folder_failed) }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                _state.update { it.copy(creatingFolder = false, createFolderError = R.string.explorer_new_folder_failed) }
+            }
+        }
+    }
 
     private val _state = MutableStateFlow(FileBrowserUiState())
     val state: StateFlow<FileBrowserUiState> = _state.asStateFlow()
@@ -194,5 +272,6 @@ class FileBrowserViewModel @Inject constructor(
 
     private companion object {
         const val MAX_ENTRIES = 2_000
+        const val MAX_FOLDER_NAME_LENGTH = 255
     }
 }
