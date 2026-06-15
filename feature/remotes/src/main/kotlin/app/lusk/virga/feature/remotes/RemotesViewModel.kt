@@ -326,17 +326,16 @@ class RemotesViewModel @Inject constructor(
             // Any non-cancellation throw maps to FAILURE so the `testing` flag is always
             // cleared below — otherwise a thrown repository call would leave the remote
             // stuck "testing" forever and the guard would block every later re-test.
-            val outcome = try {
+            val outcome = runCatching {
                 val result = withTimeoutOrNull(CONNECTIVITY_TIMEOUT_MS) {
                     repository.testConnectivity(remoteName)
                 }
                 if (result?.isSuccess == true) ConnectivityResult.SUCCESS
                 else ConnectivityResult.FAILURE
-            } catch (e: CancellationException) {
-                // Scope cancelled (VM cleared) — the VM is going away, so don't record
-                // an outcome; just propagate.
-                throw e
-            } catch (e: Exception) {
+            }.getOrElse { e ->
+                // Scope cancelled (VM cleared) → propagate; the VM is going away and
+                // shouldn't record an outcome. Anything else is just a failed test.
+                if (e is CancellationException) throw e
                 ConnectivityResult.FAILURE
             }
             _connectivityState.update { s ->
