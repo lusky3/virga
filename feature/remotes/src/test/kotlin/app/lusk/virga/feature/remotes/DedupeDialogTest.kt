@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import app.lusk.virga.core.common.model.Remote
+import com.google.common.truth.Truth.assertThat
 import app.lusk.virga.core.rclone.oauth.OAuthProviders
 import io.mockk.every
 import io.mockk.mockk
@@ -184,7 +185,7 @@ class DedupeDialogTest {
         val cancelLabel = composeRule.activity.getString(R.string.remotes_dedupe_cancel)
         composeRule.onNodeWithText(cancelLabel).performClick()
 
-        assert(dismissed) { "onDismiss should have been called" }
+        assertThat(dismissed).isTrue()
     }
 
     @Test
@@ -206,7 +207,7 @@ class DedupeDialogTest {
         val confirmLabel = composeRule.activity.getString(R.string.remotes_dedupe_confirm_action)
         composeRule.onNodeWithText(confirmLabel).performClick()
 
-        assert(confirmed) { "onConfirm should have been called" }
+        assertThat(confirmed).isTrue()
     }
 
     // -------------------------------------------------------------------------
