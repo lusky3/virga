@@ -37,6 +37,7 @@ class PreferencesRepository @Inject constructor(
     suspend fun setWatchdogEnabled(enabled: Boolean) = edit { it[Keys.WATCHDOG] = enabled }
     suspend fun setLastSeenChangelogVersionCode(code: Int) = edit { it[Keys.LAST_SEEN_CHANGELOG] = code }
     suspend fun setCrashReportingEnabled(enabled: Boolean) = edit { it[Keys.CRASH_REPORTING] = enabled }
+    suspend fun setAppLockEnabled(enabled: Boolean) = edit { it[Keys.APP_LOCK] = enabled }
 
     suspend fun setDefaultBwLimits(wifi: String?, metered: String?) = edit { prefs ->
         if (wifi.isNullOrBlank()) prefs.remove(Keys.BW_WIFI) else prefs[Keys.BW_WIFI] = wifi
@@ -60,6 +61,7 @@ class PreferencesRepository @Inject constructor(
         watchdogEnabled = this[Keys.WATCHDOG] ?: false,
         lastSeenChangelogVersionCode = this[Keys.LAST_SEEN_CHANGELOG] ?: 0,
         crashReportingEnabled = this[Keys.CRASH_REPORTING] ?: false,
+        appLockEnabled = this[Keys.APP_LOCK] ?: false,
     )
 
     private object Keys {
@@ -74,5 +76,6 @@ class PreferencesRepository @Inject constructor(
         val WATCHDOG = booleanPreferencesKey("watchdog_enabled")
         val LAST_SEEN_CHANGELOG = intPreferencesKey("last_seen_changelog_version_code")
         val CRASH_REPORTING = booleanPreferencesKey("crash_reporting_enabled")
+        val APP_LOCK = booleanPreferencesKey("app_lock_enabled")
     }
 }

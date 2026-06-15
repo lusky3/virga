@@ -278,6 +278,8 @@ dependencies {
     implementation(libs.androidx.splashscreen)
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.lifecycle.viewmodel.compose)
+    // lifecycle-process: ProcessLifecycleOwner for AppLockViewModel grace-period re-lock.
+    implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.navigation3.runtime)
     implementation(libs.androidx.navigation3.ui)
     implementation(libs.androidx.lifecycle.viewmodel.navigation3)

@@ -187,6 +187,27 @@ class PreferencesRepositoryTest {
         }
     }
 
+    // --- setAppLockEnabled ---
+
+    @Test fun `appLockEnabled defaults to false`() = testScope.runTest {
+        val repo = createRepo()
+        repo.preferences.test {
+            assertThat(awaitItem().appLockEnabled).isFalse()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `setAppLockEnabled true is persisted`() = testScope.runTest {
+        val repo = createRepo()
+
+        repo.setAppLockEnabled(true)
+
+        repo.preferences.test {
+            assertThat(awaitItem().appLockEnabled).isTrue()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
     // --- invalid ThemeMode name stored externally ---
 
     @Test fun `unknown theme mode string stored externally falls back to SYSTEM`() = testScope.runTest {

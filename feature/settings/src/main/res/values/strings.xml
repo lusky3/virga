@@ -54,6 +54,9 @@
     <string name="settings_btn_grant_storage">Grant storage access</string>
     <string name="settings_snack_no_storage_settings">Couldn\'t open storage settings on this device</string>
     <string name="settings_snack_no_battery_settings">Couldn\'t open battery settings on this device</string>
+    <string name="settings_section_security">Security</string>
+    <string name="settings_toggle_app_lock">App lock</string>
+    <string name="settings_app_lock_hint">Locks the app\'s screen with your device biometric or PIN. It does not add encryption — your sync data is already encrypted at rest by rclone. Background syncs and the sync service keep running while the app is locked.</string>
 
     <!-- AboutScreen -->
     <string name="about_title">About</string>

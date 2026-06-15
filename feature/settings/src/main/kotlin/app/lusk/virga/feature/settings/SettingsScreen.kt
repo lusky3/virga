@@ -214,6 +214,12 @@ fun SettingsScreen(
                 )
             }
 
+            // Security — opt-in biometric/PIN app lock. See SettingsSecuritySection.
+            SecuritySection(
+                appLockEnabled = prefs.appLockEnabled,
+                onAppLockChange = viewModel::setAppLock,
+            )
+
             HorizontalDivider()
             SectionTitle(stringResource(R.string.settings_section_help_about))
             SettingsLinkRow(
