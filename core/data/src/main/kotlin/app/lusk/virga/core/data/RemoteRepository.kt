@@ -123,8 +123,12 @@ class RemoteRepository @Inject constructor(
     suspend fun renameRemote(oldName: String, newName: String): Result<Unit> =
         runCatching { engine.renameRemote(oldName, newName) }
             .mapCatching {
-                syncTaskDao.repointRemoteName(oldName, newName)
-                conflictDao.repointRemoteName(oldName, newName)
+                // Repoint both tables atomically: a failure between them would leave
+                // conflicts dangling at the old name while sync_tasks already moved.
+                db.withTransaction {
+                    syncTaskDao.repointRemoteName(oldName, newName)
+                    conflictDao.repointRemoteName(oldName, newName)
+                }
                 refresh().getOrThrow()
             }
 
