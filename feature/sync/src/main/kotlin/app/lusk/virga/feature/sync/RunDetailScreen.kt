@@ -31,7 +31,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -225,18 +224,20 @@ private fun FailedFilesSection(entries: List<Pair<String, String>>) {
             color = MaterialTheme.colorScheme.error,
         )
         entries.forEach { (path, error) ->
-            Column(modifier = Modifier.fillMaxWidth()) {
-                SelectionContainer {
+            // Wrap the whole entry so both the path AND the error are selectable —
+            // users copy error text to search/report it.
+            SelectionContainer {
+                Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = path,
                         style = MaterialTheme.typography.bodySmall,
                     )
+                    Text(
+                        text = stringResource(R.string.run_detail_failed_files_error, error),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
-                Text(
-                    text = stringResource(R.string.run_detail_failed_files_error_prefix) + error,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
             }
         }
     }
