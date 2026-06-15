@@ -380,6 +380,60 @@ class SyncWorkerTest {
         assertThat(moveSlot.captured).isFalse()
     }
 
+    @Test
+    fun deleteSource_true_contentSource_normalizesAllowMoveFalse() = runBlocking {
+        // Execution-time invariant: a SAF (content://) source can't be moved — rclone
+        // would only delete the staged copy, not the originals. A malformed persisted
+        // task with deleteSource=true on a content:// source must NOT route to move.
+        val moveSlot = slot<Boolean>()
+        val safMoveTask = SyncTask(
+            id = TASK_ID,
+            name = "test",
+            sourcePath = "content://tree/source",
+            remoteName = "gdrive",
+            remotePath = "/Backup",
+            direction = SyncDirection.UPLOAD,
+            intervalMinutes = null,
+            deleteSource = true,
+        )
+        coEvery { taskRepository.getTask(TASK_ID) } returns safMoveTask
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = safMoveTask.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), capture(moveSlot), any()) } returns
+            flow { emit(progress(transferred = 1)) }
+
+        buildWorker().doWork()
+
+        assertThat(moveSlot.captured).isFalse()
+    }
+
+    @Test
+    fun deleteSource_true_bisync_normalizesAllowMoveFalse() = runBlocking {
+        // Execution-time invariant: BISYNC reconciles deletions through its own two-way
+        // logic; move-mode is forbidden. A non-content:// source avoids the SAF-bisync
+        // early-out so the run reaches executor.run and we can capture allowMove.
+        val moveSlot = slot<Boolean>()
+        val bisyncMoveTask = SyncTask(
+            id = TASK_ID,
+            name = "test",
+            sourcePath = "/sdcard/DCIM",
+            remoteName = "gdrive",
+            remotePath = "/Backup",
+            direction = SyncDirection.BISYNC,
+            intervalMinutes = null,
+            deleteSource = true,
+        )
+        coEvery { taskRepository.getTask(TASK_ID) } returns bisyncMoveTask
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = bisyncMoveTask.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), capture(moveSlot), any()) } returns
+            flow { emit(progress(transferred = 1)) }
+
+        buildWorker().doWork()
+
+        assertThat(moveSlot.captured).isFalse()
+    }
+
     private fun task(direction: SyncDirection) = SyncTask(
         id = TASK_ID,
         name = "test",

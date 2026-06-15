@@ -518,6 +518,25 @@ class RcloneEngineImplTest {
         coVerify { apiClient.call(any(), any(), any(), "sync/move", any()) }
     }
 
+    @Test fun `sync rejects both deleteSource and deleteExtraneous (mutually exclusive)`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+
+        engine.startDaemon()
+        engine.sync(
+            "local:/x",
+            "gdrive:x",
+            SyncOptions(SyncDirection.UPLOAD, deleteSource = true, deleteExtraneous = true),
+        ).test {
+            awaitError().also { assertThat(it).isInstanceOf(VirgaError.Rclone::class.java) }
+        }
+
+        // Fail-fast: no destructive command is dispatched when the flags conflict.
+        coVerify(exactly = 0) { apiClient.call(any(), any(), any(), "sync/move", any()) }
+        coVerify(exactly = 0) { apiClient.call(any(), any(), any(), "sync/sync", any()) }
+    }
+
     @Test fun `sync uses sync_copy (additive) by default and sync_sync only when deleteExtraneous`() = runTest(testDispatcher) {
         coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
         coEvery { daemonManager.start(any()) } returns fakeDaemon

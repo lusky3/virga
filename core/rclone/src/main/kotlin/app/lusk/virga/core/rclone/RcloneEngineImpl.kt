@@ -338,6 +338,15 @@ class RcloneEngineImpl @Inject constructor(
         // could delete their cloud counterparts; a move that proceeds despite errors would
         // delete the source after only a partial transfer, risking data loss.
         runJobWithProgress(tolerateFileErrors = !options.deleteExtraneous && !options.deleteSource) { d ->
+            // Fail-fast on the one flag combination that has no coherent rclone command:
+            // move (delete source) AND mirror (delete extraneous on dest) are mutually
+            // exclusive. The editor normalizes this away, but a malformed persisted task
+            // or a non-UI entry point must not silently fall through to sync/move.
+            if (options.deleteSource && options.deleteExtraneous) {
+                throw VirgaError.Rclone(
+                    message = "deleteSource and deleteExtraneous are mutually exclusive.",
+                )
+            }
             val (srcFs, dstFs) = when (options.direction) {
                 SyncDirection.DOWNLOAD -> dest to source
                 else -> source to dest

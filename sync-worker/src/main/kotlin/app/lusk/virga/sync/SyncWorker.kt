@@ -138,8 +138,15 @@ open class SyncWorker @AssistedInject constructor(
         // Move mode (rclone `sync/move`, delete-source) deletes the source after a
         // successful transfer; also an explicit opt-in gated behind an acknowledgement.
         // (BISYNC reconciles deletions through its own two-way logic, ignoring both.)
-        val allowDeletes = task.deleteExtraneous
-        val allowMove = task.deleteSource
+        // Normalize the destructive flags at EXECUTION time, not just in the editor:
+        // a malformed persisted task (a content:// source, BISYNC, or both delete
+        // flags set) must never reach destructive routing. Move is forbidden for SAF
+        // sources (rclone can't delete from a staged copy) and for BISYNC (two-way
+        // reconciliation owns deletions), and it takes precedence over mirror-delete.
+        val allowMove = task.deleteSource &&
+            task.direction != SyncDirection.BISYNC &&
+            !task.sourcePath.startsWith("content://")
+        val allowDeletes = task.deleteExtraneous && !allowMove
 
         try {
             // Lease the shared daemon for the lifetime of this sync (released in finally).
