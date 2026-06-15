@@ -72,6 +72,8 @@ class SyncExecutorTest {
             error("unused")
         override suspend fun transferredFiles(group: String): List<app.lusk.virga.core.rclone.TransferredFile> =
             emptyList()
+        override suspend fun updateRemote(name: String, params: Map<String, String>, sensitiveKeys: Set<String>) = Unit
+        override suspend fun getRemoteParams(name: String): Map<String, String> = emptyMap()
     }
 
     private fun task(

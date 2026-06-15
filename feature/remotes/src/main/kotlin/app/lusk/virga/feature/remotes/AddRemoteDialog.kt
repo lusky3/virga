@@ -88,8 +88,12 @@ internal fun AddRemoteDialog(
     oauthInProgress: Boolean = false,
     /** rclone's paste-token instructions while the daemon OAuth flow awaits a token; null otherwise. */
     daemonOAuthTokenPrompt: String? = null,
+    /** Non-null when the dialog is opened in edit mode for an existing remote. */
+    editMode: EditModeState? = null,
     onDismiss: () -> Unit,
     onManualConfirm: (name: String, type: String, params: String) -> Unit,
+    /** Called with the submitted key→value map when confirming an edit. Only used when [editMode] != null. */
+    onEditConfirm: (values: Map<String, String>) -> Unit = {},
     onCryptConfirm: (name: String, baseRemote: String, basePath: String, password: String, salt: String) -> Unit = { _, _, _, _, _ -> },
     onWrapperConfirm: (name: String, type: String, params: String) -> Unit = { _, _, _ -> },
     onOAuth: (provider: OAuthProvider, name: String) -> Unit,
@@ -172,20 +176,100 @@ internal fun AddRemoteDialog(
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
+    // Edit mode typed values — pre-filled from loadedParams minus password keys and "type".
+    val editTypedValues = remember { mutableStateMapOf<String, String>() }
+    var editShowAdvanced by remember { mutableStateOf(false) }
+
+    // Reactive schema for the edited remote type. Recomputes when providers arrive.
+    val editSchemaOptions: List<RemoteOption>? = remember(editMode, providersLoaded) {
+        editMode?.let { allOptionsForBackend(it.remoteType) }
+    }
+
+    // Seed editTypedValues only once the schema is resolved — the password-key exclusion
+    // set is derived REACTIVELY from editSchemaOptions (not from the frozen
+    // EditModeState.passwordKeys) to prevent obscured secrets from leaking into the
+    // field if the schema hadn't loaded when beginEditRemote ran.
+    // Key on editSchemaOptions: fires when both editMode and the schema are available.
+    LaunchedEffect(editSchemaOptions) {
+        if (editMode != null && editSchemaOptions != null) {
+            val reactivePasswordKeys = editSchemaOptions
+                .filter { it.isPassword }
+                .map { it.name }
+                .toSet()
+            editTypedValues.clear()
+            editMode.loadedParams
+                .filterKeys { k -> k != "type" && k !in reactivePasswordKeys }
+                .forEach { (k, v) -> editTypedValues[k] = v }
+        }
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = VirgaSpacing.lg, vertical = VirgaSpacing.sm)
-                .padding(bottom = VirgaSpacing.lg),
-            verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
-        ) {
-            Text(
-                stringResource(R.string.remotes_add_dialog_title),
+        // Edit mode: bypass the normal step machine, show a focused edit form.
+        if (editMode != null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = VirgaSpacing.lg, vertical = VirgaSpacing.sm)
+                    .padding(bottom = VirgaSpacing.lg),
+                verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
+            ) {
+                Text(
+                    stringResource(R.string.remotes_edit_dialog_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(bottom = VirgaSpacing.sm),
+                )
+                OutlinedTextField(
+                    value = editMode.remoteName,
+                    onValueChange = {},
+                    label = { Text(stringResource(R.string.remotes_edit_field_name_readonly)) },
+                    enabled = false,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (editSchemaOptions != null) {
+                    TypedOptionFields(
+                        options = editSchemaOptions,
+                        values = editTypedValues,
+                        showAdvanced = editShowAdvanced,
+                        onToggleAdvanced = { editShowAdvanced = !editShowAdvanced },
+                    )
+                    // Show hint for password fields — they are blank by default
+                    val passwordOpts = editSchemaOptions.filter { it.isPassword }
+                    if (passwordOpts.isNotEmpty()) {
+                        Text(
+                            stringResource(R.string.remotes_edit_password_keep_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                if (error != null) {
+                    Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
+                        Text(stringResource(R.string.remotes_back))
+                    }
+                    TextButton(onClick = { onEditConfirm(editTypedValues.toMap()) }) {
+                        Text(stringResource(R.string.remotes_edit_save))
+                    }
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = VirgaSpacing.lg, vertical = VirgaSpacing.sm)
+                    .padding(bottom = VirgaSpacing.lg),
+                verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
+            ) {
+                Text(
+                    stringResource(R.string.remotes_add_dialog_title),
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(bottom = VirgaSpacing.sm),
             )
@@ -376,6 +460,7 @@ internal fun AddRemoteDialog(
                     )
                 }
             }
+        }
         }
     }
 }

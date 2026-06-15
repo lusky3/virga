@@ -217,4 +217,55 @@ class RemoteRepositoryTest {
 
         assertThat(repo.exportConfig()).isEmpty()
     }
+
+    // --- updateRemote ---
+
+    @Test fun `updateRemote delegates to engine and refreshes on success`() = runTest {
+        coEvery { engine.updateRemote("gdrive", mapOf("client_id" to "new"), emptySet()) } returns Unit
+        coEvery { engine.listRemotes() } returns listOf(Remote("gdrive", "drive"))
+
+        val result = repo.updateRemote("gdrive", mapOf("client_id" to "new"))
+
+        assertThat(result.isSuccess).isTrue()
+        coVerify { engine.updateRemote("gdrive", mapOf("client_id" to "new"), emptySet()) }
+    }
+
+    @Test fun `updateRemote returns failure when engine fails`() = runTest {
+        coEvery { engine.updateRemote(any(), any(), any()) } throws
+            VirgaError.Rclone(message = "not found")
+
+        val result = repo.updateRemote("ghost", mapOf("x" to "y"))
+
+        assertThat(result.isFailure).isTrue()
+    }
+
+    @Test fun `updateRemote forwards sensitiveKeys to engine`() = runTest {
+        coEvery { engine.updateRemote("sftp1", mapOf("pass" to "p"), setOf("pass")) } returns Unit
+        coEvery { engine.listRemotes() } returns listOf(Remote("sftp1", "sftp"))
+
+        val result = repo.updateRemote("sftp1", mapOf("pass" to "p"), setOf("pass"))
+
+        assertThat(result.isSuccess).isTrue()
+        coVerify { engine.updateRemote("sftp1", mapOf("pass" to "p"), setOf("pass")) }
+    }
+
+    // --- getRemoteParams ---
+
+    @Test fun `getRemoteParams delegates to engine and returns success`() = runTest {
+        coEvery { engine.getRemoteParams("gdrive") } returns mapOf("type" to "drive", "client_id" to "abc")
+
+        val result = repo.getRemoteParams("gdrive")
+
+        assertThat(result.isSuccess).isTrue()
+        assertThat(result.getOrNull()).containsEntry("type", "drive")
+        coVerify { engine.getRemoteParams("gdrive") }
+    }
+
+    @Test fun `getRemoteParams returns failure when engine throws`() = runTest {
+        coEvery { engine.getRemoteParams(any()) } throws VirgaError.Rclone(message = "not found")
+
+        val result = repo.getRemoteParams("ghost")
+
+        assertThat(result.isFailure).isTrue()
+    }
 }

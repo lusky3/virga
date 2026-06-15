@@ -146,6 +146,16 @@
     <string name="remotes_msg_connectivity_warning">Remote \"%1$s\" was saved, but could not verify connectivity. Check your credentials.</string>
     <string name="remotes_msg_freeform_no_obscure">Heads up: the provider schema wasn\'t available, so any password values were stored without obscuring. Re-create this remote once the schema loads if it contains secrets.</string>
     <string name="remotes_msg_oauth_timed_out">Authorization timed out. Please try again.</string>
+    <!-- Edit remote -->
+    <string name="remotes_edit_dialog_title">Edit remote</string>
+    <string name="remotes_edit_field_name_readonly">Name (read-only)</string>
+    <string name="remotes_edit_password_keep_hint">Leave blank to keep current</string>
+    <string name="remotes_card_menu_edit">Edit</string>
+    <string name="remotes_edit_save">Save</string>
+    <string name="remotes_msg_remote_updated">Remote \"%1$s\" updated.</string>
+    <string name="remotes_msg_no_changes">No changes to save.</string>
+    <string name="remotes_edit_schema_unavailable">Couldn\'t load this remote\'s settings. Check your connection and try again.</string>
+
     <!-- Dedupe (B2) -->
     <string name="remotes_card_menu_dedupe">Find duplicates</string>
     <string name="remotes_dedupe_confirm_title">Find duplicates on \"%1$s\"?</string>

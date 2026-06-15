@@ -91,6 +91,37 @@ interface RcloneEngine {
     )
 
     suspend fun deleteRemote(name: String)
+
+    /**
+     * Updates an existing remote's config by sending only [params] (the changed keys)
+     * to rclone's `config/update` RC endpoint. Routes through [mutatingConfig] which
+     * wraps [withExclusiveDaemon] — refuses while syncs hold leases, and
+     * persists/discards the plaintext config on success/failure. [sensitiveKeys]
+     * is the subset of [params] keys that contain plaintext secrets; when non-empty,
+     * `opt.obscure=true` is sent so rclone obscures them before writing to config.
+     * Only the passed keys are merged into the existing remote's config.
+     */
+    suspend fun updateRemote(
+        name: String,
+        params: Map<String, String>,
+        sensitiveKeys: Set<String> = emptySet(),
+    )
+
+    /**
+     * Returns the current config params for [name] from rclone's `config/get`
+     * RC endpoint. Uses a read lease (same as [about]/[listDir]).
+     *
+     * RC shape: `config/get` with `{"name": remoteName}` returns a flat JSON object
+     * of all config keys including "type", e.g.
+     * `{"type":"drive","client_id":"abc","token":"{...}"}`.
+     * The returned map contains ALL keys including "type". Values are stringified
+     * via jsonPrimitive.contentOrNull; non-primitive values are skipped defensively.
+     *
+     * CALLERS MUST NOT surface password/obscured values in the UI — rclone returns
+     * obscured (not plaintext) secrets which cannot be reversed by callers.
+     */
+    suspend fun getRemoteParams(name: String): Map<String, String>
+
     suspend fun getConfig(): RcloneConfig
     suspend fun importConfig(confContent: String)
 

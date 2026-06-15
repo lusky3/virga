@@ -75,6 +75,27 @@ class RemoteRepository @Inject constructor(
         runCatching { engine.createCryptRemote(name, baseRemoteSpec, password, salt) }
             .mapCatching { refresh().getOrThrow() }
 
+    /**
+     * Updates an existing remote's config — only the changed [params] are sent.
+     * [sensitiveKeys] is the subset that rclone should obscure before writing.
+     * Refreshes the cache on success.
+     */
+    suspend fun updateRemote(
+        name: String,
+        params: Map<String, String>,
+        sensitiveKeys: Set<String> = emptySet(),
+    ): Result<Unit> =
+        runCatching { engine.updateRemote(name, params, sensitiveKeys) }
+            .mapCatching { refresh().getOrThrow() }
+
+    /**
+     * Fetches the current raw config params for [name] from rclone.
+     * Returns [Result.failure] when the remote is not found or the engine fails.
+     * Callers must not surface password values in the UI.
+     */
+    suspend fun getRemoteParams(name: String): Result<Map<String, String>> =
+        runCatching { engine.getRemoteParams(name) }
+
     suspend fun deleteRemote(name: String): Result<Unit> =
         runCatching {
             // Network I/O stays OUTSIDE the transaction. The two cache deletes go in one

@@ -183,6 +183,46 @@ class RemotesScreenshotTest {
     }
 
     @Test
+    fun addRemoteDialog_editMode() {
+        val editMode = EditModeState(
+            remoteName = "mysftp",
+            remoteType = "sftp",
+            loadedParams = mapOf("type" to "sftp", "host" to "example.com", "user" to "alice", "pass" to "XXXX"),
+            passwordKeys = setOf("pass"),
+        )
+        composeRule.setContent {
+            MaterialTheme {
+                Surface(Modifier.fillMaxSize()) {
+                    Box(Modifier.fillMaxSize()) {
+                        AddRemoteDialog(
+                            editMode = editMode,
+                            oauthProviders = emptyList(),
+                            error = null,
+                            customClientIds = emptyMap(),
+                            onEnsureProviders = {},
+                            allOptionsForBackend = { type ->
+                                if (type == "sftp") listOf(
+                                    RemoteOption("host", "Host", "string", false, false, null, emptyList(), false),
+                                    RemoteOption("user", "Username", "string", false, false, null, emptyList(), false),
+                                    RemoteOption("pass", "Password", "string", false, true, null, emptyList(), false),
+                                ) else null
+                            },
+                            providersLoaded = listOf(),
+                            onDismiss = {},
+                            onEditConfirm = {},
+                            onManualConfirm = { _, _, _ -> },
+                            onOAuth = { _, _ -> },
+                            onSaveClientId = { _, _ -> },
+                            onClearClientId = {},
+                        )
+                    }
+                }
+            }
+        }
+        composeRule.onRoot().captureRoboImage()
+    }
+
+    @Test
     fun credentialForm_typedFields() {
         val options = listOf(
             RemoteOption(
