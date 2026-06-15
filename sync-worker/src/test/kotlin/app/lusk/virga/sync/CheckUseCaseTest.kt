@@ -99,4 +99,52 @@ class CheckUseCaseTest {
         val useCase = CheckUseCase(mockk(), mockk())
         assertThat(useCase.isAvailableFor(task.copy(sourcePath = "/storage/emulated/0/DCIM"))).isTrue()
     }
+
+    // --- acquireDaemon failure before the flow starts ----------------------
+    // This exercises the outer catch(e: Throwable) block that wraps acquireDaemon.
+    // The flow .catch only fires for errors inside the flow; a daemon-launch
+    // failure throws synchronously before the flow is collected.
+
+    @Test
+    fun verify_acquireDaemonThrows_surfacesErrorWithoutThrowing() = runBlocking {
+        val engine = mockk<RcloneEngine>(relaxed = true)
+        val executor = mockk<SyncExecutor>()
+        // Simulate acquireDaemon failing (e.g. daemon cannot start).
+        io.mockk.coEvery { engine.acquireDaemon() } throws IllegalStateException("daemon launch failed")
+        // executor.runCheck should never be reached; no stub needed.
+
+        val result = CheckUseCase(executor, engine).verify(task)
+
+        // Should NOT rethrow; maps to an error result.
+        assertThat(result.error).isEqualTo("daemon launch failed")
+        // leased=false so releaseDaemon must NOT be called.
+        coVerify(exactly = 0) { engine.releaseDaemon() }
+    }
+
+    @Test
+    fun verify_acquireDaemonThrowsWithNullMessage_usesGenericMessage() = runBlocking {
+        val engine = mockk<RcloneEngine>(relaxed = true)
+        val executor = mockk<SyncExecutor>()
+        // A Throwable whose message is null (e.g. NullPointerException()).
+        io.mockk.coEvery { engine.acquireDaemon() } throws NullPointerException()
+
+        val result = CheckUseCase(executor, engine).verify(task)
+
+        assertThat(result.error).isEqualTo("Verify failed")
+    }
+
+    @Test
+    fun verify_flowCatchWithNullMessage_usesGenericMessage() = runBlocking {
+        val engine = mockk<RcloneEngine>(relaxed = true)
+        val executor = mockk<SyncExecutor>()
+        every { executor.runCheck(any()) } returns flow {
+            // A Throwable whose message is null propagates to .catch.
+            throw NullPointerException()
+        }
+
+        val result = CheckUseCase(executor, engine).verify(task)
+
+        assertThat(result.error).isEqualTo("Verify failed")
+        coVerify { engine.releaseDaemon() }
+    }
 }
