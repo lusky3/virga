@@ -52,6 +52,10 @@ class MappersTest {
             maxDelete = 50,
             extraConfig = "TrackRenames=true",
             maxTransfer = "20G",
+            maxRetries = 5,
+            retryOnRclone = true,
+            backoffSeconds = 60L,
+            backoffExponential = false,
         )
 
         val domain = entity.toDomain()
@@ -89,8 +93,55 @@ class MappersTest {
                 maxDelete = 50,
                 extraConfig = "TrackRenames=true",
                 maxTransfer = "20G",
+                maxRetries = 5,
+                retryOnRclone = true,
+                backoffSeconds = 60L,
+                backoffExponential = false,
             ),
         )
+    }
+
+    @Test fun `B8 retry fields survive SyncTask round-trip through toEntity and back`() {
+        val original = SyncTask(
+            id = 40L,
+            name = "RetryTest",
+            sourcePath = "/sdcard/DCIM",
+            remoteName = "gdrive",
+            remotePath = "Archive",
+            direction = SyncDirection.UPLOAD,
+            intervalMinutes = null,
+            createdAtEpochMs = 1234L,
+            maxRetries = 5,
+            retryOnRclone = true,
+            backoffSeconds = 120L,
+            backoffExponential = false,
+        )
+
+        val roundTripped = original.toEntity().toDomain()
+
+        assertThat(roundTripped.maxRetries).isEqualTo(5)
+        assertThat(roundTripped.retryOnRclone).isTrue()
+        assertThat(roundTripped.backoffSeconds).isEqualTo(120L)
+        assertThat(roundTripped.backoffExponential).isFalse()
+    }
+
+    @Test fun `B8 retry defaults are behavior-preserving for a plain new entity`() {
+        val entity = SyncTaskEntity(
+            id = 41L,
+            name = "Default",
+            sourcePath = "/sdcard/DCIM",
+            remoteName = "gdrive",
+            remotePath = "Archive",
+            direction = SyncDirection.UPLOAD,
+            intervalMinutes = null,
+        )
+
+        val domain = entity.toDomain()
+
+        assertThat(domain.maxRetries).isEqualTo(3)
+        assertThat(domain.retryOnRclone).isFalse()
+        assertThat(domain.backoffSeconds).isEqualTo(30L)
+        assertThat(domain.backoffExponential).isTrue()
     }
 
     @Test fun `maxTransfer survives SyncTask round-trip through toEntity and back`() {

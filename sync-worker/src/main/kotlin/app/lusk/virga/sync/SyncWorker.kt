@@ -352,8 +352,7 @@ open class SyncWorker @AssistedInject constructor(
                 runCatching { remoteRepository.setNeedsReauth(task.remoteName, true) }
                     .onFailure { Log.w(TAG, "Failed to set needsReauth flag for ${task.remoteName}", it) }
             }
-            // Transient transport problems are worth retrying; everything else fails.
-            if (failure is VirgaError.Network) Result.retry() else Result.failure()
+            retryDecision(failure, runAttemptCount, task)
         }
 
         // LAST statement: a calendar schedule runs as a one-shot, so queue the NEXT
@@ -382,6 +381,22 @@ open class SyncWorker @AssistedInject constructor(
         // again — log it so the drop is at least diagnosable.
         runCatching { scheduler.schedule(task) }
             .onFailure { Log.w(TAG, "Failed to re-enqueue calendar schedule for task ${task.id}", it) }
+    }
+
+    /**
+     * Decides whether to retry or fail based on the error type, attempt count, and
+     * per-task retry config. Auth failures are never retried (caller must handle
+     * needsReauth before calling this). runAttemptCount is 0-based: attempt 0 is the
+     * first try. With maxRetries=3: attempts 0 and 1 retry (runAttemptCount < 2),
+     * attempt 2 fails — yielding exactly 3 total tries.
+     */
+    private fun retryDecision(failure: Throwable, attempt: Int, task: SyncTask): Result {
+        val isAuth = isAuthError(failure.message ?: "")
+        if (isAuth) return Result.failure()
+        val retryable = failure is VirgaError.Network ||
+            (task.retryOnRclone && failure is VirgaError.Rclone)
+        if (retryable && attempt < task.maxRetries - 1) return Result.retry()
+        return Result.failure()
     }
 
     /**

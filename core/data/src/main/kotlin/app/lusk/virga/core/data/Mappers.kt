@@ -46,6 +46,10 @@ internal fun SyncTaskEntity.toDomain() = SyncTask(
     maxDelete = maxDelete,
     extraConfig = extraConfig,
     maxTransfer = maxTransfer,
+    maxRetries = maxRetries,
+    retryOnRclone = retryOnRclone,
+    backoffSeconds = backoffSeconds,
+    backoffExponential = backoffExponential,
 )
 
 internal fun SyncTask.toEntity() = SyncTaskEntity(
@@ -82,6 +86,10 @@ internal fun SyncTask.toEntity() = SyncTaskEntity(
     maxDelete = maxDelete,
     extraConfig = extraConfig,
     maxTransfer = maxTransfer,
+    maxRetries = maxRetries,
+    retryOnRclone = retryOnRclone,
+    backoffSeconds = backoffSeconds,
+    backoffExponential = backoffExponential,
 )
 
 internal fun SyncRunEntity.toDomain() = SyncRun(

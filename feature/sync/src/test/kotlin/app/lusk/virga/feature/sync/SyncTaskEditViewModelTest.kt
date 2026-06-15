@@ -890,6 +890,84 @@ class SyncTaskEditViewModelTest {
         assertThat(vm.form.value.maxAge).isEqualTo("90d")
     }
 
+    // --- B8: retry config ---------------------------------------------------
+
+    @Test
+    fun save_persistsRetryConfig() = runTest(mainDispatcher.dispatcher) {
+        coEvery { taskRepository.save(any()) } returns 1L
+        val vm = viewModel()
+        vm.update {
+            it.copy(
+                name = "Retry",
+                sourcePath = "/sdcard",
+                remoteName = "gdrive",
+                remotePath = "Backups",
+                maxRetries = 5,
+                retryOnRclone = true,
+                backoffSeconds = 60L,
+                backoffExponential = false,
+            )
+        }
+        vm.save {}
+        advanceUntilIdle()
+
+        coVerify {
+            taskRepository.save(
+                match<SyncTask> {
+                    it.maxRetries == 5 &&
+                        it.retryOnRclone &&
+                        it.backoffSeconds == 60L &&
+                        !it.backoffExponential
+                },
+            )
+        }
+    }
+
+    @Test
+    fun load_existingTask_hydratesRetryConfig() = runTest(mainDispatcher.dispatcher) {
+        val entity = SyncTask(
+            id = 50,
+            name = "WithRetry",
+            sourcePath = "/sdcard",
+            remoteName = "gdrive",
+            remotePath = "/dst",
+            direction = SyncDirection.UPLOAD,
+            intervalMinutes = null,
+            maxRetries = 7,
+            retryOnRclone = true,
+            backoffSeconds = 90L,
+            backoffExponential = false,
+        )
+        coEvery { taskRepository.getTask(50) } returns entity
+        val vm = viewModel()
+        vm.load(taskId = 50)
+        advanceUntilIdle()
+
+        assertThat(vm.form.value.maxRetries).isEqualTo(7)
+        assertThat(vm.form.value.retryOnRclone).isTrue()
+        assertThat(vm.form.value.backoffSeconds).isEqualTo(90L)
+        assertThat(vm.form.value.backoffExponential).isFalse()
+    }
+
+    @Test
+    fun save_maxRetries_clampedToAtLeastOne() = runTest(mainDispatcher.dispatcher) {
+        coEvery { taskRepository.save(any()) } returns 1L
+        val vm = viewModel()
+        vm.update {
+            it.copy(
+                name = "T",
+                sourcePath = "/s",
+                remoteName = "r",
+                remotePath = "dst",
+                maxRetries = 0,
+            )
+        }
+        vm.save {}
+        advanceUntilIdle()
+
+        coVerify { taskRepository.save(match<SyncTask> { it.maxRetries >= 1 }) }
+    }
+
     // --- helpers ------------------------------------------------------------
 
     private fun task(

@@ -139,11 +139,36 @@ class SyncSchedulerTest {
         assertThat(workManager.getWorkInfosForUniqueWork("sync_task_2").get()).hasSize(1)
     }
 
+    @Test
+    fun schedule_periodicWork_enqueuesWithoutError_usingLinearBackoff() {
+        // B8: verify that a task with backoffExponential=false schedules without throwing.
+        // WorkInfo does not expose backoffPolicy, but enqueuing with LINEAR policy must
+        // not fail and must produce exactly one WorkInfo entry.
+        val task = task(id = 30, intervalMinutes = 60, backoffExponential = false, backoffSeconds = 45L)
+
+        scheduler.schedule(task)
+
+        val infos = workManager.getWorkInfosForUniqueWork("sync_task_30").get()
+        assertThat(infos).hasSize(1)
+    }
+
+    @Test
+    fun syncNow_enqueuesWithCustomBackoffSeconds_withoutError() {
+        // B8: syncAllEnabled uses the internal overload; verify a custom backoffSeconds
+        // task enqueues correctly (WorkInfo is present, no exception).
+        scheduler.syncNow(taskId = 50L, backoffSeconds = 60L, backoffExponential = false)
+
+        val infos = workManager.getWorkInfosForUniqueWork("sync_task_50_now").get()
+        assertThat(infos).hasSize(1)
+    }
+
     private fun task(
         id: Long,
         intervalMinutes: Int?,
         wifiOnly: Boolean = true,
         enabled: Boolean = true,
+        backoffSeconds: Long = 30L,
+        backoffExponential: Boolean = true,
     ) = SyncTask(
         id = id,
         name = "task-$id",
@@ -154,6 +179,8 @@ class SyncSchedulerTest {
         intervalMinutes = intervalMinutes,
         wifiOnly = wifiOnly,
         enabled = enabled,
+        backoffSeconds = backoffSeconds,
+        backoffExponential = backoffExponential,
     )
 
     /** Minimal entity for stubbing observeAll(); enabled flag is explicit. */
