@@ -262,8 +262,27 @@ class RemotesViewModel @Inject constructor(
     /** Imports an existing rclone.conf selected via the storage picker. */
     fun importConfigFromUri(uri: Uri) = configTransfer.importFromUri(uri)
 
-    /** Exports the decrypted rclone.conf to a document created via the storage picker. */
+    /**
+     * Imports with an explicit [passphrase] for an encrypted container. The crypto
+     * layer zeroes [passphrase] before returning.
+     */
+    fun importConfigFromUri(uri: Uri, passphrase: CharArray?) =
+        configTransfer.importFromUri(uri, passphrase)
+
+    /** Clears the passphrase prompt without importing (user dismissed the dialog). */
+    fun dismissImportPassphrase() {
+        transient.value = transient.value.copy(pendingEncryptedImport = null)
+    }
+
+    /** Exports the raw (unencrypted) rclone.conf to a document created via the storage picker. */
     fun exportConfigToUri(uri: Uri) = configTransfer.exportToUri(uri)
+
+    /**
+     * Exports with an optional [passphrase]. Non-null → encrypted container;
+     * null → existing raw-plaintext path unchanged.
+     */
+    fun exportConfigToUri(uri: Uri, passphrase: CharArray?) =
+        configTransfer.exportToUri(uri, passphrase)
 
     /**
      * Creates a `crypt:` remote.
@@ -394,6 +413,7 @@ class RemotesViewModel @Inject constructor(
                 daemonOAuthTokenPrompt = t.daemonOAuthTokenPrompt,
                 connectivityResults = connectivity.results,
                 connectivityTesting = connectivity.testing,
+                pendingEncryptedImport = t.pendingEncryptedImport,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RemotesUiState())
 

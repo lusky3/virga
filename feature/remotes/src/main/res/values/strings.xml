@@ -5,9 +5,16 @@
     <string name="remotes_action_browse">Browse</string>
     <string name="remotes_action_import">Import</string>
     <string name="remotes_action_export">Export config</string>
-    <!-- Export-config confirmation dialog -->
-    <string name="remotes_export_dialog_title">Export config?</string>
+    <!-- Export-config dialog (method picker: encrypted vs raw) -->
+    <string name="remotes_export_dialog_title">Export config</string>
     <string name="remotes_export_dialog_body">The exported file contains your credentials and tokens in plain text. Anyone with this file can access your remotes — store it somewhere safe.</string>
+    <string name="remotes_export_encrypted_label">Encrypted (passphrase)</string>
+    <string name="remotes_export_raw_label">Raw (unencrypted) — plaintext</string>
+    <string name="remotes_export_raw_warning">The exported file contains your credentials and tokens in plain text. Anyone with this file can access your remotes — store it somewhere safe.</string>
+    <string name="remotes_export_passphrase_label">Passphrase</string>
+    <string name="remotes_export_passphrase_confirm_label">Confirm passphrase</string>
+    <string name="remotes_export_passphrase_mismatch">Passphrases do not match.</string>
+    <string name="remotes_export_passphrase_empty">Passphrase must not be empty.</string>
     <string name="remotes_export_dialog_confirm">Export</string>
     <!-- Import-config confirmation dialog -->
     <string name="remotes_import_dialog_title">Import config?</string>
@@ -128,7 +135,14 @@
     <string name="remotes_msg_import_failed">Could not open the selected file.</string>
     <string name="remotes_msg_export_nothing">No remotes configured yet, so there\'s nothing to export.</string>
     <string name="remotes_msg_config_exported">Config exported.</string>
+    <string name="remotes_msg_config_exported_encrypted">Encrypted config exported.</string>
     <string name="remotes_msg_export_failed">Could not write the config file.</string>
+    <!-- Import passphrase dialog (shown when an encrypted container is detected) -->
+    <string name="remotes_import_passphrase_dialog_title">Encrypted config</string>
+    <string name="remotes_import_passphrase_dialog_body">This config file is encrypted. Enter the passphrase to decrypt and import it.</string>
+    <string name="remotes_import_passphrase_label">Passphrase</string>
+    <string name="remotes_import_passphrase_confirm">Decrypt and import</string>
+    <string name="remotes_msg_import_wrong_passphrase">Wrong passphrase — the file could not be decrypted. Please try again.</string>
     <string name="remotes_msg_connectivity_warning">Remote \"%1$s\" was saved, but could not verify connectivity. Check your credentials.</string>
     <string name="remotes_msg_freeform_no_obscure">Heads up: the provider schema wasn\'t available, so any password values were stored without obscuring. Re-create this remote once the schema loads if it contains secrets.</string>
     <string name="remotes_msg_oauth_timed_out">Authorization timed out. Please try again.</string>
