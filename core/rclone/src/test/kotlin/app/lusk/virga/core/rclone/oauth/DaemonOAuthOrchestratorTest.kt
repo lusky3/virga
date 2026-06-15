@@ -17,6 +17,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
@@ -447,5 +448,40 @@ class DaemonOAuthOrchestratorTest {
             .isEqualTo(DaemonOAuthOrchestrator.State.Complete("mys3"))
         assertThat(orchestrator.state.value)
             .isNotInstanceOf(DaemonOAuthOrchestrator.State.AwaitingFieldInput::class.java)
+    }
+
+    @Test
+    fun `required question with a malformed Examples entry surfaces AwaitingFieldInput without crashing`() = runTest(testDispatcher) {
+        // Robustness: a non-object entry in Examples must be skipped, not crash
+        // the flow on the `.jsonObject` accessor.
+        enqueueResponses(
+            buildJsonObject {
+                put("State", "*opt-field,0")
+                put("Error", "")
+                put("Result", "")
+                putJsonObject("Option") {
+                    put("Name", "access_key_id")
+                    put("Type", "string")
+                    put("Required", true)
+                    put("Help", "Access key")
+                    put("Default", JsonNull)
+                    putJsonArray("Examples") {
+                        add(JsonPrimitive("not-an-object"))
+                        add(buildJsonObject { put("Value", "AKIA") })
+                    }
+                }
+            },
+        )
+
+        val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
+        orchestrator.start("mys3", "s3", null, null, daemon, this)
+        // runCurrent (not advanceUntilIdle) so virtual time doesn't advance past the
+        // orchestrator's timeout while it suspends awaiting the (never-supplied) answer.
+        runCurrent()
+
+        val state = orchestrator.state.value
+        assertThat(state).isInstanceOf(DaemonOAuthOrchestrator.State.AwaitingFieldInput::class.java)
+        assertThat((state as DaemonOAuthOrchestrator.State.AwaitingFieldInput).examples)
+            .containsExactly("AKIA")
     }
 }

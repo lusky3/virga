@@ -20,8 +20,6 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
@@ -267,7 +265,7 @@ class DaemonOAuthOrchestrator(
         val help = option["Help"]?.jsonPrimitive?.contentOrNull.orEmpty()
         val isPassword = option["IsPassword"]?.jsonPrimitive?.booleanOrNull ?: false
         val examples = (option["Examples"] as? JsonArray)
-            ?.mapNotNull { it.jsonObject["Value"]?.jsonPrimitive?.contentOrNull }
+            ?.mapNotNull { (it as? JsonObject)?.get("Value")?.jsonPrimitive?.contentOrNull }
             ?: emptyList()
         val deferred = CompletableDeferred<String>()
         pendingFieldAnswer = deferred
