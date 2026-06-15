@@ -54,6 +54,21 @@ class RunLogWriterTest {
     }
 
     @Test
+    fun `only run_ log files are swept - foreign files are left alone`(@TempDir filesDir: File) {
+        val cutoff = 30_000L
+        val ourLog = logFile(filesDir, 9L, lastModified = cutoff - 5_000)
+        // A co-located, non-run file, also aged well past the cutoff.
+        val foreign = File(File(filesDir, "run_logs"), "index.db")
+        foreign.writeText("not ours")
+        assertThat(foreign.setLastModified(cutoff - 5_000)).isTrue()
+
+        RunLogWriter.pruneOlderThan(filesDir, cutoff)
+
+        assertThat(ourLog.exists()).isFalse()
+        assertThat(foreign.exists()).isTrue()
+    }
+
+    @Test
     fun `missing run_logs dir is a silent no-op`(@TempDir filesDir: File) {
         // Nothing has created run_logs/ yet — listFiles() is null, so prune returns.
         assertThat(File(filesDir, "run_logs").exists()).isFalse()
