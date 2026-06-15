@@ -270,6 +270,11 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.android.material)
     implementation(libs.androidx.activity.compose)
+    // appcompat: AppCompatActivity base (locale override) + AppCompat-compatible host
+    // for BiometricPrompt. biometric: app-lock (D1). Wired up by later 0.3.0 items;
+    // added here (F2) so the base-class/dependency churn lands once.
+    implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.biometric)
     implementation(libs.androidx.splashscreen)
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.lifecycle.viewmodel.compose)

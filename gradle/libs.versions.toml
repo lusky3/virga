@@ -9,6 +9,8 @@ composeBom = "2026.05.01"
 # still depends on stable Compose 1.11.x, so the BOM governs the rest of the stack.
 composeMaterial3 = "1.5.0-alpha18"
 activityCompose = "1.13.0"
+appcompat = "1.7.0"
+biometric = "1.1.0"
 lifecycle = "2.10.0"
 nav3Core = "1.1.2"
 lifecycleViewmodelNav3 = "2.10.0"
@@ -55,6 +57,8 @@ sonarqube = "7.3.1.8318"
 # Core
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 androidx-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "splashscreen" }
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
 play-appupdate-ktx = { group = "com.google.android.play", name = "app-update-ktx", version.ref = "play-appupdate" }
