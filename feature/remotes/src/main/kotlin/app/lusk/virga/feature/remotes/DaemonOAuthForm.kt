@@ -218,7 +218,10 @@ private fun DaemonOAuthFieldInput(
                 Text(stringResource(R.string.remotes_daemon_oauth_cancel))
             }
             Button(
-                onClick = { onSubmit(fieldValue.trim()); fieldValue = "" },
+                // Submit the raw value: isNotBlank() already blocks empty input, and
+                // trimming would corrupt credentials where leading/trailing whitespace
+                // is meaningful (tokens, secrets).
+                onClick = { onSubmit(fieldValue); fieldValue = "" },
                 enabled = fieldValue.isNotBlank(),
             ) {
                 Text(stringResource(R.string.remotes_daemon_oauth_field_submit))
