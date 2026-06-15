@@ -150,11 +150,15 @@
     <string name="sync_edit_field_wifi_only">Wi-Fi only</string>
     <string name="sync_edit_field_require_charging">Only while charging</string>
     <string name="sync_edit_field_bw_wifi">Upload limit (Wi-Fi)</string>
-    <string name="sync_edit_field_bw_wifi_placeholder">e.g. 10M or 10M:1M</string>
-    <string name="sync_edit_field_bw_wifi_hint">Optional. Leave blank for no limit. Uses rclone --bwlimit format.</string>
+    <string name="sync_edit_field_bw_wifi_placeholder">e.g. 10M, 10M:1M, or 08:00,1M 22:00,off</string>
+    <string name="sync_edit_field_bw_wifi_hint">Optional. Leave blank for no limit. Supports a single rate (1M, 10M:1M) or a timetable (08:00,1M 22:00,off).</string>
     <string name="sync_edit_field_bw_metered">Upload limit (metered data)</string>
-    <string name="sync_edit_field_bw_metered_placeholder">e.g. 1M</string>
-    <string name="sync_edit_field_bw_metered_hint">Optional. Leave blank for no limit on metered connections.</string>
+    <string name="sync_edit_field_bw_metered_placeholder">e.g. 1M or 08:00,512k 22:00,off</string>
+    <string name="sync_edit_field_bw_metered_hint">Optional. Leave blank for no limit on metered connections. Supports timetables.</string>
+    <!-- MaxTransfer data cap (B6) -->
+    <string name="sync_edit_field_max_transfer">Data cap per run</string>
+    <string name="sync_edit_field_max_transfer_placeholder">e.g. 10G</string>
+    <string name="sync_edit_field_max_transfer_hint">Stop the sync once this many bytes have transferred. Leave blank for no cap. Rclone config key: MaxTransfer.</string>
     <string name="sync_edit_field_buffer">Transfer buffer size</string>
     <string name="sync_edit_field_buffer_placeholder">16M</string>
     <string name="sync_edit_field_buffer_hint">Memory per transfer stream. Use 16M unless you have a reason to change it.</string>

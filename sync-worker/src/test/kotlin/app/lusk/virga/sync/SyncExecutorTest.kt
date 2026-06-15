@@ -196,4 +196,40 @@ class SyncExecutorTest {
         assertThat(opts.minAge).isNull()
         assertThat(opts.maxAge).isNull()
     }
+
+    // --- B6: MaxTransfer threading -----------------------------------------
+
+    @Test
+    fun `maxTransfer is threaded into SyncOptions for one-way sync`() = runTest {
+        val engine = RecordingEngine()
+        SyncExecutor(engine).run(
+            task(SyncDirection.UPLOAD).copy(maxTransfer = "10G"),
+            metered = false,
+        ).collect {}
+        assertThat(engine.syncArgs!!.third.maxTransfer).isEqualTo("10G")
+    }
+
+    @Test
+    fun `blank maxTransfer becomes null in SyncOptions`() = runTest {
+        val engine = RecordingEngine()
+        SyncExecutor(engine).run(task(SyncDirection.UPLOAD), metered = false).collect {}
+        assertThat(engine.syncArgs!!.third.maxTransfer).isNull()
+    }
+
+    @Test
+    fun `maxTransfer is threaded into BisyncOptions`() = runTest {
+        val engine = RecordingEngine()
+        SyncExecutor(engine).run(
+            task(SyncDirection.BISYNC).copy(maxTransfer = "5G"),
+            metered = false,
+        ).collect {}
+        assertThat(engine.bisyncArgs!!.third.maxTransfer).isEqualTo("5G")
+    }
+
+    @Test
+    fun `blank maxTransfer becomes null in BisyncOptions`() = runTest {
+        val engine = RecordingEngine()
+        SyncExecutor(engine).run(task(SyncDirection.BISYNC), metered = false).collect {}
+        assertThat(engine.bisyncArgs!!.third.maxTransfer).isNull()
+    }
 }

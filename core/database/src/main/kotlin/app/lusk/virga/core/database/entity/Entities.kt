@@ -83,10 +83,15 @@ data class SyncTaskEntity(
      * time as a defence-in-depth measure.
      *
      * DEFERRED dedicated typed toggles (reachable via this field using their
-     * allowlisted keys): TrackRenames, SizeOnly, ConflictResolve, MaxTransfer,
-     * OrderBy.
+     * allowlisted keys): TrackRenames, SizeOnly, ConflictResolve, OrderBy.
      */
     val extraConfig: String = "",
+    /**
+     * Rclone _config key "MaxTransfer" (SizeSuffix, e.g. "10G"). When set, rclone
+     * stops the run once this many bytes have been transferred. CutoffMode is set
+     * to CAUTIOUS so the cap is never exceeded. Blank = unset.
+     */
+    val maxTransfer: String = "",
 )
 
 /**

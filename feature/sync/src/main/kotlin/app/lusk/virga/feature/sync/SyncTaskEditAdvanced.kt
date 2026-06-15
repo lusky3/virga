@@ -97,6 +97,17 @@ internal fun AdvancedSection(form: SyncTaskForm, viewModel: SyncTaskEditViewMode
                     ),
                     error = form.bufferSizeError,
                 )
+                // B6: data cap per run (MaxTransfer + CutoffMode=CAUTIOUS)
+                ValidatedAsciiField(
+                    value = form.maxTransfer,
+                    onValueChange = { viewModel.update { f -> f.copy(maxTransfer = it) } },
+                    text = FieldText(
+                        R.string.sync_edit_field_max_transfer,
+                        R.string.sync_edit_field_max_transfer_placeholder,
+                        R.string.sync_edit_field_max_transfer_hint,
+                    ),
+                    error = form.maxTransferError,
+                )
                 // ---- WS3.1 Tier-2 options ------------------------------------
                 ListItem(
                     headlineContent = { Text(stringResource(R.string.sync_edit_field_checksum)) },

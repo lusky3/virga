@@ -381,6 +381,178 @@ class SyncTaskEditViewModelTest {
         assertThat(vm.form.value.bwLimitWifiError).isNull()
     }
 
+    // --- bwlimit timetable validator (B6, Part 1) ---------------------------
+
+    @Test
+    fun bwLimitWifiError_isNullForSingleTokenTimetable() {
+        val vm = viewModel()
+        vm.update { it.copy(bwLimitWifi = "08:00,512k") }
+        assertThat(vm.form.value.bwLimitWifiError).isNull()
+    }
+
+    @Test
+    fun bwLimitWifiError_isNullForMultiTokenTimetable() {
+        val vm = viewModel()
+        vm.update { it.copy(bwLimitWifi = "08:00,512k 12:00,10M 22:00,off") }
+        assertThat(vm.form.value.bwLimitWifiError).isNull()
+    }
+
+    @Test
+    fun bwLimitWifiError_isNullForOffToken() {
+        val vm = viewModel()
+        vm.update { it.copy(bwLimitWifi = "08:00,off") }
+        assertThat(vm.form.value.bwLimitWifiError).isNull()
+    }
+
+    @Test
+    fun bwLimitWifiError_isNullForTimetableWithUpDownRate() {
+        val vm = viewModel()
+        vm.update { it.copy(bwLimitWifi = "08:00,10M:1M 22:00,off") }
+        assertThat(vm.form.value.bwLimitWifiError).isNull()
+    }
+
+    @Test
+    fun bwLimitWifiError_isSetForInvalidHour_25() {
+        val vm = viewModel()
+        vm.update { it.copy(bwLimitWifi = "25:00,1M") }
+        assertThat(vm.form.value.bwLimitWifiError).isNotNull()
+    }
+
+    @Test
+    fun bwLimitWifiError_isSetForInvalidMinute_60() {
+        val vm = viewModel()
+        vm.update { it.copy(bwLimitWifi = "08:60,1M") }
+        assertThat(vm.form.value.bwLimitWifiError).isNotNull()
+    }
+
+    @Test
+    fun bwLimitWifiError_isSetForGarbageRate() {
+        val vm = viewModel()
+        vm.update { it.copy(bwLimitWifi = "08:00,nonsense") }
+        assertThat(vm.form.value.bwLimitWifiError).isNotNull()
+    }
+
+    @Test
+    fun bwLimitWifiError_isSetForPartiallyInvalidTimetable() {
+        val vm = viewModel()
+        // First token valid, second invalid
+        vm.update { it.copy(bwLimitWifi = "08:00,1M 99:00,off") }
+        assertThat(vm.form.value.bwLimitWifiError).isNotNull()
+    }
+
+    // --- MaxTransfer validator (B6, Part 2) ---------------------------------
+
+    @Test
+    fun maxTransferError_isNullForBlankValue() {
+        val vm = viewModel()
+        vm.update { it.copy(maxTransfer = "") }
+        assertThat(vm.form.value.maxTransferError).isNull()
+    }
+
+    @Test
+    fun maxTransferError_isNullForValidSizeSuffix() {
+        val vm = viewModel()
+        listOf("10G", "500M", "1T", "2.5G").forEach { cap ->
+            vm.update { it.copy(maxTransfer = cap) }
+            assertThat("$cap: ${vm.form.value.maxTransferError}").isEqualTo("$cap: null")
+        }
+    }
+
+    @Test
+    fun maxTransferError_isSetForInvalidSizeSuffix() {
+        val vm = viewModel()
+        vm.update { it.copy(maxTransfer = "notasize!!") }
+        assertThat(vm.form.value.maxTransferError).isNotNull()
+    }
+
+    @Test
+    fun isValid_isFalseWhenMaxTransferInvalid() {
+        val vm = viewModel()
+        vm.update {
+            it.copy(
+                name = "T",
+                sourcePath = "/s",
+                remoteName = "r",
+                remotePath = "dst",
+                maxTransfer = "bad!",
+            )
+        }
+        assertThat(vm.form.value.isValid).isFalse()
+    }
+
+    @Test
+    fun isValid_isTrueWhenMaxTransferBlank() {
+        val vm = viewModel()
+        vm.update {
+            it.copy(
+                name = "T",
+                sourcePath = "/s",
+                remoteName = "r",
+                remotePath = "dst",
+                maxTransfer = "",
+            )
+        }
+        assertThat(vm.form.value.isValid).isTrue()
+    }
+
+    @Test
+    fun save_persistsMaxTransfer() = runTest(mainDispatcher.dispatcher) {
+        coEvery { taskRepository.save(any()) } returns 1L
+        val vm = viewModel()
+        vm.update {
+            it.copy(
+                name = "Capped",
+                sourcePath = "/sdcard",
+                remoteName = "gdrive",
+                remotePath = "Backups",
+                maxTransfer = "10G",
+            )
+        }
+        vm.save {}
+        advanceUntilIdle()
+
+        coVerify { taskRepository.save(match<SyncTask> { it.maxTransfer == "10G" }) }
+    }
+
+    @Test
+    fun save_persistsBlankMaxTransferWhenUnset() = runTest(mainDispatcher.dispatcher) {
+        coEvery { taskRepository.save(any()) } returns 1L
+        val vm = viewModel()
+        vm.update {
+            it.copy(
+                name = "NoCap",
+                sourcePath = "/sdcard",
+                remoteName = "gdrive",
+                remotePath = "Backups",
+                maxTransfer = "",
+            )
+        }
+        vm.save {}
+        advanceUntilIdle()
+
+        coVerify { taskRepository.save(match<SyncTask> { it.maxTransfer.isBlank() }) }
+    }
+
+    @Test
+    fun load_existingTask_hydratesMaxTransfer() = runTest(mainDispatcher.dispatcher) {
+        val entity = SyncTask(
+            id = 20,
+            name = "Capped",
+            sourcePath = "/sdcard",
+            remoteName = "gdrive",
+            remotePath = "/dst",
+            direction = SyncDirection.UPLOAD,
+            intervalMinutes = null,
+            maxTransfer = "5G",
+        )
+        coEvery { taskRepository.getTask(20) } returns entity
+        val vm = viewModel()
+        vm.load(taskId = 20)
+        advanceUntilIdle()
+
+        assertThat(vm.form.value.maxTransfer).isEqualTo("5G")
+    }
+
     // --- customIntervalError blocks isValid when custom < 15 ----------------
 
     @Test

@@ -45,6 +45,7 @@ internal fun SyncTaskEntity.toDomain() = SyncTask(
     backupDir = backupDir,
     maxDelete = maxDelete,
     extraConfig = extraConfig,
+    maxTransfer = maxTransfer,
 )
 
 internal fun SyncTask.toEntity() = SyncTaskEntity(
@@ -80,6 +81,7 @@ internal fun SyncTask.toEntity() = SyncTaskEntity(
     backupDir = backupDir,
     maxDelete = maxDelete,
     extraConfig = extraConfig,
+    maxTransfer = maxTransfer,
 )
 
 internal fun SyncRunEntity.toDomain() = SyncRun(

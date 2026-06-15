@@ -51,6 +51,7 @@ class MappersTest {
             backupDir = "/backup",
             maxDelete = 50,
             extraConfig = "TrackRenames=true",
+            maxTransfer = "20G",
         )
 
         val domain = entity.toDomain()
@@ -87,8 +88,43 @@ class MappersTest {
                 backupDir = "/backup",
                 maxDelete = 50,
                 extraConfig = "TrackRenames=true",
+                maxTransfer = "20G",
             ),
         )
+    }
+
+    @Test fun `maxTransfer survives SyncTask round-trip through toEntity and back`() {
+        val original = SyncTask(
+            id = 30L,
+            name = "Capped",
+            sourcePath = "/sdcard/DCIM",
+            remoteName = "gdrive",
+            remotePath = "Archive",
+            direction = SyncDirection.UPLOAD,
+            intervalMinutes = null,
+            createdAtEpochMs = 999L,
+            maxTransfer = "10G",
+        )
+
+        val roundTripped = original.toEntity().toDomain()
+
+        assertThat(roundTripped.maxTransfer).isEqualTo("10G")
+    }
+
+    @Test fun `blank maxTransfer is preserved through round-trip`() {
+        val original = SyncTask(
+            id = 31L,
+            name = "NoCap",
+            sourcePath = "/sdcard/DCIM",
+            remoteName = "gdrive",
+            remotePath = "Archive",
+            direction = SyncDirection.UPLOAD,
+            intervalMinutes = null,
+            createdAtEpochMs = 1000L,
+            maxTransfer = "",
+        )
+
+        assertThat(original.toEntity().toDomain().maxTransfer).isEmpty()
     }
 
     @Test fun `size and age fields survive SyncTask round-trip through toEntity and back`() {

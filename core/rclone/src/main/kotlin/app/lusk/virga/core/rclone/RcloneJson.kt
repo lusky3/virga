@@ -100,33 +100,28 @@ internal fun splitFs(spec: String): Pair<String, String> {
     return spec.substring(0, idx + 1) to spec.substring(idx + 1)
 }
 
-internal fun JsonObjectBuilder.putConfig(
-    bwLimit: String?,
-    transfers: Int,
-    checkers: Int,
-    bufferSize: String,
-    dryRun: Boolean,
-    checksum: Boolean = false,
-    backupDir: String? = null,
-    maxDelete: Int? = null,
-    extraConfig: Map<String, Any> = emptyMap(),
-) {
+internal fun JsonObjectBuilder.putConfig(config: RcloneRunConfig) {
     putJsonObject("_config") {
-        put("Transfers", transfers)
-        put("Checkers", checkers)
-        put("BufferSize", bufferSize)
-        if (dryRun) put("DryRun", true)
-        if (!bwLimit.isNullOrBlank()) put("BwLimit", bwLimit)
+        put("Transfers", config.transfers)
+        put("Checkers", config.checkers)
+        put("BufferSize", config.bufferSize)
+        if (config.dryRun) put("DryRun", true)
+        if (!config.bwLimit.isNullOrBlank()) put("BwLimit", config.bwLimit)
         // WS3.1 Tier-2 options
-        if (checksum) put("CheckSum", true)
-        if (!backupDir.isNullOrBlank()) put("BackupDir", backupDir)
-        if (maxDelete != null) put("MaxDelete", maxDelete)
+        if (config.checksum) put("CheckSum", true)
+        if (!config.backupDir.isNullOrBlank()) put("BackupDir", config.backupDir)
+        config.maxDelete?.let { put("MaxDelete", it) }
+        // B6: data cap — stop before exceeding the cap (CAUTIOUS mode).
+        if (!config.maxTransfer.isNullOrBlank()) {
+            put("MaxTransfer", config.maxTransfer)
+            put("CutoffMode", "CAUTIOUS")
+        }
         // Merge power-user extra config entries. The Map<String, Any> contract
         // guarantees values are Boolean, Number, or String (enforced by
         // ExtraConfigParser before this point). Applied LAST, so an explicit
         // extraConfig entry (e.g. "CheckSum=false") intentionally overrides the
         // matching typed toggle above — the raw box is the power-user escape hatch.
-        extraConfig.forEach { (key, value) ->
+        config.extraConfig.forEach { (key, value) ->
             when (value) {
                 is Boolean -> put(key, JsonPrimitive(value))
                 is Number -> put(key, JsonPrimitive(value))
