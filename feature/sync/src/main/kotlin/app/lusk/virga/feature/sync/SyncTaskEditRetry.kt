@@ -55,7 +55,9 @@ internal fun RetryConfigSection(form: SyncTaskForm, viewModel: SyncTaskEditViewM
             onValueChange = { raw ->
                 val n = raw.filter { it.isDigit() }
                 viewModel.update { f ->
-                    f.copy(backoffSecondsText = n, backoffSeconds = n.toLongOrNull()?.coerceAtLeast(1L) ?: f.backoffSeconds)
+                    // 10s is WorkManager's MIN_BACKOFF_MILLIS floor; lower values get
+                    // silently raised, so clamp here to keep the displayed value honest.
+                    f.copy(backoffSecondsText = n, backoffSeconds = n.toLongOrNull()?.coerceAtLeast(10L) ?: f.backoffSeconds)
                 }
             },
             label = { Text(stringResource(R.string.sync_edit_field_backoff_seconds)) },

@@ -311,7 +311,7 @@
     <string name="sync_edit_field_retry_on_rclone_hint">Also retry non-auth rclone errors, not just network failures.</string>
     <string name="sync_edit_field_backoff_seconds">Initial backoff delay (seconds)</string>
     <string name="sync_edit_field_backoff_seconds_placeholder">e.g. 30</string>
-    <string name="sync_edit_field_backoff_seconds_hint">Delay before the first retry. WorkManager doubles it each attempt (exponential) or repeats it (linear).</string>
+    <string name="sync_edit_field_backoff_seconds_hint">Delay before the first retry (minimum 10s). WorkManager doubles it each attempt (exponential) or repeats it (linear).</string>
     <string name="sync_edit_field_backoff_exponential">Exponential backoff</string>
     <string name="sync_edit_field_backoff_exponential_hint">Doubles the delay on each retry. Disable for a fixed-delay (linear) backoff.</string>
     <!-- Dry-run preview (WS2.3) -->

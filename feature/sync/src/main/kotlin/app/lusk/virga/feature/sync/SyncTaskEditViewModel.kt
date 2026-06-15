@@ -399,7 +399,7 @@ class SyncTaskEditViewModel @Inject constructor(
                 createdAtEpochMs = if (form.id == 0L) System.currentTimeMillis() else form.createdAtEpochMs,
                 maxRetries = form.maxRetries.coerceAtLeast(1),
                 retryOnRclone = form.retryOnRclone,
-                backoffSeconds = form.backoffSeconds.coerceAtLeast(1L),
+                backoffSeconds = form.backoffSeconds.coerceAtLeast(10L),
                 backoffExponential = form.backoffExponential,
             )
             val id = taskRepository.save(task)
