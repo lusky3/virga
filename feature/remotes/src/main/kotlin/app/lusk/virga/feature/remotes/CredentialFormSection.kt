@@ -68,6 +68,7 @@ internal fun CredentialFormSection(
     error: String?,
     oauthInProgress: Boolean,
     daemonOAuthTokenPrompt: String?,
+    daemonOAuthFieldPrompt: DaemonOAuthFieldPrompt?,
     cryptBaseRemote: String,
     onCryptBaseRemoteSelected: (String) -> Unit,
     cryptBasePath: String,
@@ -84,6 +85,7 @@ internal fun CredentialFormSection(
     onCryptConfirm: (name: String, baseRemote: String, basePath: String, password: String, salt: String) -> Unit,
     onDaemonOAuth: (type: String, name: String, clientId: String?, clientSecret: String?) -> Unit,
     onSubmitDaemonOAuthToken: (String) -> Unit,
+    onSubmitDaemonOAuthFieldAnswer: (String) -> Unit,
     onCancelDaemonOAuth: () -> Unit,
     onSaveClientId: (providerId: String, clientId: String) -> Unit,
     onClearClientId: (providerId: String) -> Unit,
@@ -197,6 +199,7 @@ internal fun CredentialFormSection(
                 nameUsable = nameUsable,
                 oauthInProgress = oauthInProgress,
                 tokenPrompt = daemonOAuthTokenPrompt,
+                fieldPrompt = daemonOAuthFieldPrompt,
                 onConnect = { clientId, clientSecret ->
                     onDaemonOAuth(
                         type.trim(),
@@ -206,6 +209,7 @@ internal fun CredentialFormSection(
                     )
                 },
                 onSubmitToken = onSubmitDaemonOAuthToken,
+                onSubmitFieldAnswer = onSubmitDaemonOAuthFieldAnswer,
                 onCancel = onCancelDaemonOAuth,
                 modifier = Modifier.fillMaxWidth(),
             )

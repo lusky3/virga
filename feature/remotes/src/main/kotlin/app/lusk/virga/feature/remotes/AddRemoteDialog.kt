@@ -88,6 +88,8 @@ internal fun AddRemoteDialog(
     oauthInProgress: Boolean = false,
     /** rclone's paste-token instructions while the daemon OAuth flow awaits a token; null otherwise. */
     daemonOAuthTokenPrompt: String? = null,
+    /** Non-null while the daemon OAuth flow awaits a required field value with no default. */
+    daemonOAuthFieldPrompt: DaemonOAuthFieldPrompt? = null,
     /** Non-null when the dialog is opened in edit mode for an existing remote. */
     editMode: EditModeState? = null,
     onDismiss: () -> Unit,
@@ -99,6 +101,7 @@ internal fun AddRemoteDialog(
     onOAuth: (provider: OAuthProvider, name: String) -> Unit,
     onDaemonOAuth: (type: String, name: String, clientId: String?, clientSecret: String?) -> Unit = { _, _, _, _ -> },
     onSubmitDaemonOAuthToken: (String) -> Unit = {},
+    onSubmitDaemonOAuthFieldAnswer: (String) -> Unit = {},
     onCancelDaemonOAuth: () -> Unit = {},
     onSaveClientId: (providerId: String, clientId: String) -> Unit,
     onClearClientId: (providerId: String) -> Unit,
@@ -438,6 +441,7 @@ internal fun AddRemoteDialog(
                         error = error,
                         oauthInProgress = oauthInProgress,
                         daemonOAuthTokenPrompt = daemonOAuthTokenPrompt,
+                        daemonOAuthFieldPrompt = daemonOAuthFieldPrompt,
                         cryptBaseRemote = cryptBaseRemote,
                         onCryptBaseRemoteSelected = { cryptBaseRemote = it },
                         cryptBasePath = cryptBasePath,
@@ -454,6 +458,7 @@ internal fun AddRemoteDialog(
                         onCryptConfirm = onCryptConfirm,
                         onDaemonOAuth = onDaemonOAuth,
                         onSubmitDaemonOAuthToken = onSubmitDaemonOAuthToken,
+                        onSubmitDaemonOAuthFieldAnswer = onSubmitDaemonOAuthFieldAnswer,
                         onCancelDaemonOAuth = onCancelDaemonOAuth,
                         onSaveClientId = onSaveClientId,
                         onClearClientId = onClearClientId,
