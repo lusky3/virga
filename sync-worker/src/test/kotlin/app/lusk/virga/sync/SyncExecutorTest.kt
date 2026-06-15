@@ -22,6 +22,7 @@ class SyncExecutorTest {
     private class RecordingEngine : RcloneEngine {
         var syncArgs: Triple<String, String, SyncOptions>? = null
         var bisyncArgs: Triple<String, String, BisyncOptions>? = null
+        var checkArgs: Triple<String, String, SyncOptions>? = null
 
         override fun sync(source: String, dest: String, options: SyncOptions): Flow<SyncProgress> {
             syncArgs = Triple(source, dest, options)
@@ -63,8 +64,10 @@ class SyncExecutorTest {
         ) = Unit
         override suspend fun <T> withDaemonForOAuth(block: suspend (app.lusk.virga.core.rclone.RcloneDaemon) -> T): T =
             error("unused")
-        override fun check(source: String, dest: String, options: SyncOptions): kotlinx.coroutines.flow.Flow<SyncProgress> =
-            error("unused")
+        override fun check(source: String, dest: String, options: SyncOptions): Flow<SyncProgress> {
+            checkArgs = Triple(source, dest, options)
+            return flowOf(SyncProgress(0, 0, 0.0, 0, 0, null, 0))
+        }
         override suspend fun dedupe(remoteName: String, dedupeMode: String): Result<Unit> =
             error("unused")
     }
@@ -235,5 +238,25 @@ class SyncExecutorTest {
         val engine = RecordingEngine()
         SyncExecutor(engine).run(task(SyncDirection.BISYNC), metered = false).collect {}
         assertThat(engine.bisyncArgs!!.third.maxTransfer).isNull()
+    }
+
+    @Test
+    fun `runCheck forwards task performance settings and wifi bwlimit`() = runTest {
+        val engine = RecordingEngine()
+        val perfTask = task(SyncDirection.UPLOAD).copy(
+            bwLimitWifi = "5M",
+            bwLimitMetered = "1M",
+            transfers = 7,
+            checkers = 16,
+            bufferSize = "64M",
+        )
+        SyncExecutor(engine).runCheck(perfTask).collect {}
+
+        val opts = engine.checkArgs!!.third
+        // Verify mirrors the run's knobs; uses the Wi-Fi limit (not the metered cap).
+        assertThat(opts.bwLimit).isEqualTo("5M")
+        assertThat(opts.transfers).isEqualTo(7)
+        assertThat(opts.checkers).isEqualTo(16)
+        assertThat(opts.bufferSize).isEqualTo("64M")
     }
 }

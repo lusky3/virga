@@ -116,6 +116,14 @@ class SyncExecutor @Inject constructor(
             dest = remote,
             options = SyncOptions(
                 direction = task.direction,
+                // Forward the task's performance knobs so a verify behaves like the
+                // real run it previews (checkers especially matter — check is
+                // checker-bound). A verify is user-initiated with no metered signal,
+                // so it uses the Wi-Fi bandwidth limit rather than the metered cap.
+                bwLimit = task.bwLimitWifi,
+                transfers = task.transfers,
+                checkers = task.checkers,
+                bufferSize = task.bufferSize,
                 filters = filters,
                 minSize = task.minSize.ifBlank { null },
                 maxSize = task.maxSize.ifBlank { null },
