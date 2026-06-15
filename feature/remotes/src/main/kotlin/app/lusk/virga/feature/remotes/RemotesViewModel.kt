@@ -24,6 +24,7 @@ import app.lusk.virga.core.rclone.oauth.OAuthStore
 import app.lusk.virga.core.rclone.oauth.OAuthTokenExchanger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -322,11 +323,22 @@ class RemotesViewModel @Inject constructor(
         if (remoteName in _connectivityState.value.testing) return
         _connectivityState.update { it.copy(testing = it.testing + remoteName) }
         viewModelScope.launch {
-            val result = withTimeoutOrNull(CONNECTIVITY_TIMEOUT_MS) {
-                repository.testConnectivity(remoteName)
+            // Any non-cancellation throw maps to FAILURE so the `testing` flag is always
+            // cleared below — otherwise a thrown repository call would leave the remote
+            // stuck "testing" forever and the guard would block every later re-test.
+            val outcome = try {
+                val result = withTimeoutOrNull(CONNECTIVITY_TIMEOUT_MS) {
+                    repository.testConnectivity(remoteName)
+                }
+                if (result?.isSuccess == true) ConnectivityResult.SUCCESS
+                else ConnectivityResult.FAILURE
+            } catch (e: CancellationException) {
+                // Scope cancelled (VM cleared) — the VM is going away, so don't record
+                // an outcome; just propagate.
+                throw e
+            } catch (e: Exception) {
+                ConnectivityResult.FAILURE
             }
-            val outcome = if (result?.isSuccess == true) ConnectivityResult.SUCCESS
-                          else ConnectivityResult.FAILURE
             _connectivityState.update { s ->
                 s.copy(
                     results = s.results + (remoteName to outcome),

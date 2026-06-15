@@ -7,8 +7,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import app.lusk.virga.core.designsystem.component.VirgaCard
@@ -240,7 +240,9 @@ private fun ConnectivityStatusRow(icon: ImageVector, label: String, color: Color
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(top = VirgaSpacing.xs),
+            .padding(top = VirgaSpacing.xs)
+            // Announce the finished outcome to screen readers, like the testing state.
+            .semantics { liveRegion = LiveRegionMode.Polite },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, contentDescription = null, tint = color)

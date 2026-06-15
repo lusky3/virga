@@ -914,6 +914,31 @@ class RemotesViewModelTest {
         }
 
     @Test
+    fun `testConnectivity maps a thrown repository call to FAILURE and clears testing`() =
+        runTest(mainDispatcher.dispatcher) {
+            // A throwing (not Result.failure) call must still clear `testing`, else the
+            // remote would be stuck and the in-flight guard would block every re-test.
+            coEvery { repository.testConnectivity("g") } throws RuntimeException("boom")
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            vm.testConnectivity("g")
+            advanceUntilIdle()
+
+            assertThat(vm.uiState.value.connectivityTesting).doesNotContain("g")
+            assertThat(vm.uiState.value.connectivityResults["g"]).isEqualTo(ConnectivityResult.FAILURE)
+
+            // Re-testable: a second tap actually re-invokes the repository.
+            coEvery { repository.testConnectivity("g") } returns Result.success(Unit)
+            vm.testConnectivity("g")
+            advanceUntilIdle()
+            assertThat(vm.uiState.value.connectivityResults["g"]).isEqualTo(ConnectivityResult.SUCCESS)
+            coVerify(exactly = 2) { repository.testConnectivity("g") }
+            collector.cancel()
+        }
+
+    @Test
     fun `testConnectivity concurrent tap is deduped but re-runnable after completion`() =
         runTest(mainDispatcher.dispatcher) {
             val gate = CompletableDeferred<Result<Unit>>()
