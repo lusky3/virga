@@ -260,6 +260,7 @@
     <string name="sync_summary_mirror">Mirror</string>
     <string name="sync_summary_mirror_on">On - deletes extra files at the destination</string>
     <!-- Size / age filters (B5) -->
+    <string name="sync_edit_size_age_label">Size &amp; age limits</string>
     <string name="sync_edit_min_size">Min file size</string>
     <string name="sync_edit_max_size">Max file size</string>
     <string name="sync_edit_min_age">Min file age</string>

@@ -45,7 +45,7 @@ internal fun SizeAgeFilterEditor(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
         Text(
-            text = stringResource(R.string.sync_edit_filters_label),
+            text = stringResource(R.string.sync_edit_size_age_label),
             style = MaterialTheme.typography.labelLarge,
         )
         SizeField(
