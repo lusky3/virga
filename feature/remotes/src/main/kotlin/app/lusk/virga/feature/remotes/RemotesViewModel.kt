@@ -542,6 +542,9 @@ class RemotesViewModel @Inject constructor(
         newName: String,
         onValidationError: (String) -> Unit,
     ) {
+        // Guard against a double-tap firing two non-idempotent renameRemote calls
+        // (the second would fail after the first already deleted the old remote).
+        if (transient.value.renameInFlight) return
         val trimmed = newName.trim()
         val existingNames = uiState.value.remotes.map { it.name }
         val validationError = when {
