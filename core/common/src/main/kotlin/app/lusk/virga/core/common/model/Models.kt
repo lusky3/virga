@@ -10,6 +10,8 @@ enum class SyncStatus { IDLE, QUEUED, RUNNING, SUCCESS, FAILED, CANCELLED }
 data class Remote(
     val name: String,
     val type: String,
+    /** True when the stored OAuth token has expired or been revoked; the user must re-authenticate. */
+    val needsReauth: Boolean = false,
 )
 
 /** A single entry returned by `operations/list` on a remote path. */

@@ -16,6 +16,8 @@ import app.lusk.virga.core.common.model.SyncStatus
 data class RemoteEntity(
     @PrimaryKey val name: String,
     val type: String,
+    /** True when the stored OAuth token has expired or been revoked; the user must re-authenticate. */
+    val needsReauth: Boolean = false,
 )
 
 /** A user-defined sync job. rclone owns per-file state; this owns the config. */

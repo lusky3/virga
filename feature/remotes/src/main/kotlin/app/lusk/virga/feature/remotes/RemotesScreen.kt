@@ -220,6 +220,8 @@ fun RemotesScreen(
                                 onDedupe = { remoteToDedupe = remote },
                                 onEdit = { viewModel.beginEditRemote(remote.name) },
                                 onRename = { viewModel.beginRenameRemote(remote.name) },
+                                onReauth = { viewModel.reauthRemote(remote.name) },
+                                onSignOut = { viewModel.signOutRemote(remote.name) },
                                 quota = state.quotas[remote.name],
                                 quotaLoading = remote.name in state.quotaLoading,
                                 connectivity = state.connectivityResults[remote.name],

@@ -32,7 +32,7 @@ class RemoteRepository @Inject constructor(
 ) {
     /** Configured remotes as domain models (the Room entity stays in this layer). */
     val remotes: Flow<List<Remote>> = remoteDao.observeAll().map { rows ->
-        rows.map { Remote(name = it.name, type = it.type) }
+        rows.map { Remote(name = it.name, type = it.type, needsReauth = it.needsReauth) }
     }
 
     /**
@@ -52,6 +52,14 @@ class RemoteRepository @Inject constructor(
         remoteDao.replaceAll(
             live.map { RemoteEntity(name = it.name, type = it.type) },
         )
+    }
+
+    /**
+     * Sets (or clears) the re-auth flag for [name]. Used by [SyncWorker] on auth failure
+     * and by the VM after a successful re-authentication clears the flag.
+     */
+    suspend fun setNeedsReauth(name: String, flag: Boolean) {
+        remoteDao.setNeedsReauth(name, flag)
     }
 
     suspend fun addRemote(

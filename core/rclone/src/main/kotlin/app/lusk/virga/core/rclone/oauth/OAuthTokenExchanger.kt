@@ -45,6 +45,12 @@ class OAuthTokenExchanger @Inject constructor(
          * recreation while the browser is open.
          */
         val remoteName: String = "",
+        /**
+         * True when this OAuth round-trip is a re-authentication for an
+         * existing remote (needsReauth was set). On success the flow must
+         * clear needsReauth; on failure it must leave it set.
+         */
+        val isReauth: Boolean = false,
     )
 
     /** Builds the full authorize URL the user is sent to in Custom Tabs. */

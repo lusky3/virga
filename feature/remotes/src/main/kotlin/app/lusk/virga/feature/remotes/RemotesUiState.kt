@@ -55,6 +55,8 @@ data class RemotesUiState(
     val renameTarget: String? = null,
     /** True while a rename is in flight (blocks further submits). */
     val renameInFlight: Boolean = false,
+    /** Remotes currently running a re-auth OAuth flow. */
+    val reauthInProgress: Set<String> = emptySet(),
 )
 
 /**
@@ -79,4 +81,6 @@ internal data class RemotesTransientState(
     val renameTarget: String? = null,
     /** True while a rename is in flight (blocks further submits). */
     val renameInFlight: Boolean = false,
+    /** Remotes currently running a re-auth OAuth flow. */
+    val reauthInProgress: Set<String> = emptySet(),
 )

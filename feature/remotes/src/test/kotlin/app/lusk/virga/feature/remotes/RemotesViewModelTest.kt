@@ -2044,4 +2044,178 @@ class RemotesViewModelTest {
             assertThat(vm.uiState.value.message).contains("rename failed")
             collector.cancel()
         }
+
+    // --- reauthRemote / signOutRemote (A4) ----------------------------------------
+
+    @Test
+    fun `reauthRemote for unknown remote name is a no-op`() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        // "ghost" isn't in the remotes list — the call must be a no-op, no message.
+        vm.reauthRemote("ghost")
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.message).isNull()
+        assertThat(vm.uiState.value.reauthInProgress).isEmpty()
+        collector.cancel()
+    }
+
+    @Test
+    fun `reauthRemote for non-OAuth type surfaces reauth-failed message`() = runTest(mainDispatcher.dispatcher) {
+        // S3 has no matching OAuthProvider — reauthRemote must report an error.
+        remotesFlow.value = listOf(Remote(name = "mybucket", type = "s3"))
+        every { context.getString(R.string.remotes_msg_reauth_failed, "mybucket") } returns
+            "Re-authentication failed: mybucket"
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.reauthRemote("mybucket")
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.message).contains("Re-authentication failed")
+        collector.cancel()
+    }
+
+    @Test
+    fun `reauthRemote for drive type sets reauthInProgress and starts OAuth`() = runTest(mainDispatcher.dispatcher) {
+        remotesFlow.value = listOf(Remote(name = "gdrive", type = "drive"))
+        every { tokenExchanger.authorizeUrl(any()) } returns "https://accounts.google.example/auth?state=x"
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.reauthRemote("gdrive")
+        advanceUntilIdle()
+
+        // reauthInProgress should contain the remote name after initiating.
+        assertThat(vm.uiState.value.reauthInProgress).contains("gdrive")
+        // And the OAuth URL should have been published (SystemOAuthFlow was invoked).
+        assertThat(vm.launchUrl.value).isNotNull()
+        collector.cancel()
+    }
+
+    @Test
+    fun `reauthRemote ignores a second tap while already in progress`() = runTest(mainDispatcher.dispatcher) {
+        remotesFlow.value = listOf(Remote(name = "gdrive", type = "drive"))
+        every { tokenExchanger.authorizeUrl(any()) } returns "https://accounts.google.example/auth?state=x"
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.reauthRemote("gdrive")
+        advanceUntilIdle()
+        // Second tap before the redirect arrives must short-circuit — no second OAuth launch.
+        vm.reauthRemote("gdrive")
+        advanceUntilIdle()
+
+        verify(exactly = 1) { tokenExchanger.authorizeUrl(any()) }
+        assertThat(vm.uiState.value.reauthInProgress).contains("gdrive")
+        collector.cancel()
+    }
+
+    @Test
+    fun `signOutRemote calls updateRemote with empty token then setNeedsReauth true`() =
+        runTest(mainDispatcher.dispatcher) {
+            coEvery { repository.updateRemote("gdrive", mapOf("token" to ""), emptySet()) } returns
+                Result.success(Unit)
+            every { context.getString(R.string.remotes_msg_sign_out_done, "gdrive") } returns
+                "Signed out of \"gdrive\"."
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            vm.signOutRemote("gdrive")
+            advanceUntilIdle()
+
+            coVerifyOrder {
+                repository.updateRemote("gdrive", mapOf("token" to ""), emptySet())
+                repository.setNeedsReauth("gdrive", true)
+            }
+            assertThat(vm.uiState.value.message).contains("Signed out")
+            collector.cancel()
+        }
+
+    @Test
+    fun `signOutRemote failure surfaces error message and does not call setNeedsReauth`() =
+        runTest(mainDispatcher.dispatcher) {
+            coEvery { repository.updateRemote("gdrive", any(), any()) } returns
+                Result.failure(RuntimeException("engine unavailable"))
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            vm.signOutRemote("gdrive")
+            advanceUntilIdle()
+
+            coVerify(exactly = 0) { repository.setNeedsReauth(any(), any()) }
+            assertThat(vm.uiState.value.message).contains("engine unavailable")
+            collector.cancel()
+        }
+
+    // --- C1: re-auth success/failure needsReauth flag lifecycle ------------------
+
+    @Test
+    fun `reauthRemote success clears needsReauth flag and reauthInProgress`() =
+        runTest(mainDispatcher.dispatcher) {
+            // Drive the full re-auth round-trip: reauthRemote → OAuth flow → redirect result.
+            remotesFlow.value = listOf(Remote(name = "gdrive", type = "drive", needsReauth = true))
+            every { tokenExchanger.authorizeUrl(any()) } returns "https://accounts.google.example/auth?state=x"
+            coEvery { tokenExchanger.exchange(any(), any()) } returns Result.success("""{"access_token":"new"}""")
+            coEvery { tokenExchanger.providerConfigExtras(any(), any()) } returns Result.success(emptyMap())
+            coEvery { repository.addRemote(any(), any(), any()) } returns Result.success(Unit)
+            coEvery { repository.testConnectivity("gdrive") } returns Result.success(Unit)
+            every { context.getString(R.string.remotes_msg_reauth_success, "gdrive") } returns
+                "Re-authenticated \"gdrive\" successfully."
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            vm.reauthRemote("gdrive")
+            advanceUntilIdle()
+
+            // Capture the pending state that was registered so we can emit a matching result.
+            val pendingSlot = slot<OAuthTokenExchanger.PendingAuth>()
+            coVerify { tokenExchanger.authorizeUrl(capture(pendingSlot)) }
+            val pending = pendingSlot.captured
+
+            // Emit a matching success redirect result.
+            store.emit(OAuthResult.Success(state = pending.state, code = "auth-code"))
+            advanceUntilIdle()
+
+            // On success: setNeedsReauth(false) must be called and the flag cleared.
+            coVerify { repository.setNeedsReauth("gdrive", false) }
+            // reauthInProgress must be cleared after completion.
+            assertThat(vm.uiState.value.reauthInProgress).doesNotContain("gdrive")
+            assertThat(vm.uiState.value.message).contains("Re-authenticated")
+            collector.cancel()
+        }
+
+    @Test
+    fun `reauthRemote failure leaves needsReauth set and clears reauthInProgress`() =
+        runTest(mainDispatcher.dispatcher) {
+            remotesFlow.value = listOf(Remote(name = "gdrive", type = "drive", needsReauth = true))
+            every { tokenExchanger.authorizeUrl(any()) } returns "https://accounts.google.example/auth?state=x"
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            vm.reauthRemote("gdrive")
+            advanceUntilIdle()
+
+            val pendingSlot = slot<OAuthTokenExchanger.PendingAuth>()
+            coVerify { tokenExchanger.authorizeUrl(capture(pendingSlot)) }
+
+            // Emit a matching error redirect result (e.g. user denied).
+            store.emit(OAuthResult.Error(state = pendingSlot.captured.state, message = "access_denied"))
+            advanceUntilIdle()
+
+            // setNeedsReauth must NOT be called — flag stays true, badge persists.
+            coVerify(exactly = 0) { repository.setNeedsReauth("gdrive", false) }
+            // reauthInProgress must still be cleared (so the spinner is gone).
+            assertThat(vm.uiState.value.reauthInProgress).doesNotContain("gdrive")
+            collector.cancel()
+        }
 }

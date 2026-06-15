@@ -514,6 +514,72 @@ class RemotesViewModel @Inject constructor(
         }
     }
 
+    // --- Re-auth / sign-out -------------------------------------------------------
+
+    /**
+     * Re-authenticates [remoteName] by running the full OAuth flow for its type. On
+     * success the flow calls `addRemote` (rclone's `config/create` is idempotent —
+     * it updates the stored token for an existing remote) and then clears the
+     * [Remote.needsReauth] flag via [SystemOAuthFlow.onReauthComplete]. On failure
+     * the flag is left set so the badge stays visible.
+     *
+     * Delegates to [SystemOAuthFlow] with [isReauth]=true; `reauthInProgress` is
+     * cleared by [clearReauthInProgress] once the redirect result arrives (success
+     * or failure).
+     *
+     * Only OAuth-type remotes reach this path — the badge is only shown when
+     * needsReauth is set by the sync worker on an auth-shaped failure. Non-OAuth
+     * remotes surface a generic error and abort.
+     */
+    fun reauthRemote(remoteName: String) {
+        // Re-entry guard: a second tap before the redirect arrives would call
+        // systemOAuth.start() again, opening another browser tab and orphaning the
+        // first pending OAuth state. Mirrors submitRename's renameInFlight guard.
+        if (remoteName in transient.value.reauthInProgress) return
+        val remote = uiState.value.remotes.firstOrNull { it.name == remoteName } ?: return
+        val provider = OAuthProviders.All.firstOrNull {
+            it.type.equals(remote.type, ignoreCase = true)
+        }
+        if (provider == null) {
+            transient.update {
+                it.copy(message = context.getString(R.string.remotes_msg_reauth_failed, remoteName))
+            }
+            return
+        }
+        transient.update { it.copy(reauthInProgress = it.reauthInProgress + remoteName) }
+        viewModelScope.launch { systemOAuth.start(provider, remoteName, isReauth = true) }
+    }
+
+    /**
+     * Signs out of [remoteName] by clearing the stored token via [updateRemote] and
+     * setting [Remote.needsReauth] = true so the user is prompted to re-authenticate
+     * before the next sync. Rclone accepts an empty token via config/update — it stores
+     * the blank and will fail on next use (requiring re-auth, which is exactly the intent).
+     */
+    fun signOutRemote(remoteName: String) {
+        viewModelScope.launch {
+            val updateResult = repository.updateRemote(remoteName, mapOf("token" to ""))
+            val setResult = if (updateResult.isSuccess) {
+                runCatching { repository.setNeedsReauth(remoteName, true) }
+            } else {
+                val cause = updateResult.exceptionOrNull()
+                    ?: RuntimeException("Sign-out failed for $remoteName")
+                Result.failure(cause)
+            }
+            val msg = if (setResult.isSuccess) {
+                context.getString(R.string.remotes_msg_sign_out_done, remoteName)
+            } else {
+                setResult.exceptionOrNull()?.toUserMessage()
+            }
+            transient.update { it.copy(message = msg) }
+        }
+    }
+
+    /** Called after a re-auth OAuth flow completes (success or failure) to clear the in-progress flag. */
+    internal fun clearReauthInProgress(remoteName: String) {
+        transient.update { it.copy(reauthInProgress = it.reauthInProgress - remoteName) }
+    }
+
     // --- Rename remote -----------------------------------------------------------
 
     /** Opens the rename dialog for [name]. Mutually exclusive with edit/add. */
@@ -601,6 +667,7 @@ class RemotesViewModel @Inject constructor(
                 editLoading = t.editLoading,
                 renameTarget = t.renameTarget,
                 renameInFlight = t.renameInFlight,
+                reauthInProgress = t.reauthInProgress,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RemotesUiState())
 
@@ -649,6 +716,7 @@ class RemotesViewModel @Inject constructor(
         pendingRemoteResult = pendingRemoteResult,
         transient = transient,
         onLaunchUrl = { _launchUrl.value = it },
+        onReauthComplete = { name, _ -> clearReauthInProgress(name) },
     )
 
     /** Test seam — see [DaemonOAuthFlow.orchestratorFactory]. */

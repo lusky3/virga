@@ -271,6 +271,20 @@ class RemoteRepositoryTest {
         assertThat(result.isFailure).isTrue()
     }
 
+    // --- setNeedsReauth ---
+
+    @Test fun `setNeedsReauth delegates to remoteDao`() = runTest {
+        repo.setNeedsReauth("gdrive", true)
+
+        coVerify { remoteDao.setNeedsReauth("gdrive", true) }
+    }
+
+    @Test fun `setNeedsReauth can clear the flag`() = runTest {
+        repo.setNeedsReauth("gdrive", false)
+
+        coVerify { remoteDao.setNeedsReauth("gdrive", false) }
+    }
+
     // --- renameRemote ---
 
     @Test fun `renameRemote calls engine then repoints tasks, conflicts, and refreshes`() = runTest {

@@ -37,10 +37,16 @@ internal class SystemOAuthFlow(
     private val pendingRemoteResult: PendingRemoteResult,
     private val transient: MutableStateFlow<RemotesTransientState>,
     private val onLaunchUrl: (String) -> Unit,
+    /** Called when a re-auth flow completes. [success] is true on token exchange OK. */
+    private val onReauthComplete: (remoteName: String, success: Boolean) -> Unit = { _, _ -> },
 ) {
 
-    /** Starts the OAuth flow for [provider]; the authorize URL surfaces via [onLaunchUrl]. */
-    suspend fun start(provider: OAuthProvider, remoteName: String) {
+    /**
+     * Starts the OAuth flow for [provider]; the authorize URL surfaces via [onLaunchUrl].
+     * Set [isReauth] = true when re-authenticating an existing remote so the result
+     * handler clears needsReauth on success instead of reporting it as a new addition.
+     */
+    suspend fun start(provider: OAuthProvider, remoteName: String, isReauth: Boolean = false) {
         // UI-M2 belt-and-suspenders: a blank remote name would make this round-trip
         // dead-end at the post-sign-in `pending.remoteName.isBlank()` check with a
         // misleading "state mismatch" message. Bail before launching the browser.
@@ -59,27 +65,10 @@ internal class SystemOAuthFlow(
             )
             return
         }
-        // Google derives its redirect from the client ID, so a BYO Google client
-        // needs its redirect recomputed from the user's ID (not the built-in).
-        val redirectUri = if (provider.id == OAuthProviders.GoogleDrive.id && override != null) {
-            OAuthConfig.googleAndroidRedirect(clientId, oauthConfig.redirectUri(provider.id))
-        } else {
-            oauthConfig.redirectUri(provider.id)
-        }
-        // UI-M1: a BYO Google client derives a reverse-domain redirect scheme from
-        // the user's client ID, but the manifest intent-filter only advertises the
-        // scheme baked from the BUILT-IN client ID — so the OS routes the redirect
-        // to no activity and the flow dead-ends after sign-in. The manifest scheme
-        // cannot be registered at runtime, so refuse to launch when the BYO Google
-        // redirect differs from the built-in one.
-        if (provider.id == OAuthProviders.GoogleDrive.id && override != null &&
-            redirectUri != oauthConfig.redirectUri(provider.id)
-        ) {
-            transient.value = transient.value.copy(
-                message = context.getString(R.string.remotes_msg_byo_google_unsupported),
-            )
-            return
-        }
+        // Resolve the redirect URI (recomputed for a BYO Google client) and reject the
+        // runtime-unregisterable BYO-Google scheme; a null result means the flow was
+        // refused and the user-facing message is already set.
+        val redirectUri = resolveRedirectUri(provider, clientId, override) ?: return
         val pending = OAuthTokenExchanger.PendingAuth(
             provider = provider,
             state = UUID.randomUUID().toString(),
@@ -87,10 +76,40 @@ internal class SystemOAuthFlow(
             clientId = clientId,
             redirectUri = redirectUri,
             remoteName = remoteName,
+            isReauth = isReauth,
         )
         oauthStore.startPending(pending)
         transient.value = transient.value.copy(oauthInProgress = true, message = null)
         onLaunchUrl(tokenExchanger.authorizeUrl(pending))
+    }
+
+    /**
+     * Resolves the redirect URI for [provider] given the resolved [clientId] and whether
+     * a BYO [override] client is in use. Google derives its redirect from the client ID,
+     * so a BYO Google client needs its redirect recomputed from the user's ID.
+     *
+     * UI-M1: a BYO Google client derives a reverse-domain redirect scheme from the user's
+     * client ID, but the manifest intent-filter only advertises the scheme baked from the
+     * BUILT-IN client ID — so the OS routes the redirect to no activity and the flow
+     * dead-ends after sign-in. The manifest scheme cannot be registered at runtime, so
+     * returns null (and sets the user-facing message) when the BYO Google redirect differs
+     * from the built-in one.
+     */
+    private fun resolveRedirectUri(provider: OAuthProvider, clientId: String, override: String?): String? {
+        val isByoGoogle = provider.id == OAuthProviders.GoogleDrive.id && override != null
+        val builtInRedirect = oauthConfig.redirectUri(provider.id)
+        val redirectUri = if (isByoGoogle) {
+            OAuthConfig.googleAndroidRedirect(clientId, builtInRedirect)
+        } else {
+            builtInRedirect
+        }
+        if (isByoGoogle && redirectUri != builtInRedirect) {
+            transient.value = transient.value.copy(
+                message = context.getString(R.string.remotes_msg_byo_google_unsupported),
+            )
+            return null
+        }
+        return redirectUri
     }
 
     /**
@@ -114,7 +133,11 @@ internal class SystemOAuthFlow(
                 // error redirect injected by another app (missing or non-matching
                 // state) is a no-op against an unrelated pending flow.
                 val state = result.state
-                if (state != null && oauthStore.consume(state) != null) {
+                val consumed = if (state != null) oauthStore.consume(state) else null
+                if (consumed != null) {
+                    // Re-auth failure: clear the in-progress flag but leave needsReauth
+                    // set so the badge stays visible (the user still needs to re-auth).
+                    if (consumed.isReauth) onReauthComplete(consumed.remoteName, false)
                     transient.update {
                         it.copy(
                             oauthInProgress = false,
@@ -144,6 +167,7 @@ internal class SystemOAuthFlow(
                 val remoteName = pending.remoteName
                 val tokenResult = tokenExchanger.exchange(pending, result.code)
                 val tokenJson = tokenResult.getOrElse { error ->
+                    if (pending.isReauth) onReauthComplete(remoteName, false)
                     transient.value = transient.value.copy(
                         oauthInProgress = false,
                         message = error.toUserMessage(),
@@ -153,6 +177,7 @@ internal class SystemOAuthFlow(
                 // Some backends (OneDrive) need extra config derived from the
                 // token (drive_id/drive_type) before the remote can list.
                 val extras = tokenExchanger.providerConfigExtras(pending.provider, tokenJson).getOrElse { error ->
+                    if (pending.isReauth) onReauthComplete(remoteName, false)
                     transient.value = transient.value.copy(
                         oauthInProgress = false,
                         message = error.toUserMessage(),
@@ -167,7 +192,17 @@ internal class SystemOAuthFlow(
                         "client_id" to pending.clientId,
                     ) + extras,
                 )
-                if (createResult.isSuccess) pendingRemoteResult.created(remoteName)
+                if (createResult.isSuccess) {
+                    if (pending.isReauth) {
+                        // Token refreshed: clear the re-auth flag so the badge goes away.
+                        runCatching { repository.setNeedsReauth(remoteName, false) }
+                        onReauthComplete(remoteName, true)
+                    } else {
+                        pendingRemoteResult.created(remoteName)
+                    }
+                } else {
+                    if (pending.isReauth) onReauthComplete(remoteName, false)
+                }
                 val connectivityWarning = if (createResult.isSuccess) {
                     val connResult = repository.testConnectivity(remoteName)
                     connResult.isFailure
@@ -175,7 +210,9 @@ internal class SystemOAuthFlow(
                 transient.value = transient.value.copy(
                     oauthInProgress = false,
                     message = if (createResult.isSuccess) {
-                        if (connectivityWarning) {
+                        if (pending.isReauth) {
+                            context.getString(R.string.remotes_msg_reauth_success, remoteName)
+                        } else if (connectivityWarning) {
                             context.getString(R.string.remotes_msg_connectivity_warning, remoteName)
                         } else {
                             context.getString(

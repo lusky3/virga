@@ -3,7 +3,9 @@ package app.lusk.virga.feature.remotes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.common.model.RemoteOption
 import org.junit.Rule
@@ -188,5 +190,33 @@ class RemoteFormsCoverageTest {
                 onCryptSaltChange = {},
             )
         }
+    }
+
+    // --- ReauthBadgeRow render (A4) -----------------------------------------------
+
+    @Test
+    fun remoteCard_needsReauth_true_showsBadge() {
+        render {
+            RemoteCard(
+                remote = Remote(name = "gdrive", type = "drive", needsReauth = true),
+                onOpenBrowser = {},
+                onCreateTask = {},
+                onDelete = {},
+            )
+        }
+        composeRule.onNodeWithText("Sign-in expired").assertIsDisplayed()
+    }
+
+    @Test
+    fun remoteCard_needsReauth_false_doesNotShowBadge() {
+        render {
+            RemoteCard(
+                remote = Remote(name = "gdrive", type = "drive", needsReauth = false),
+                onOpenBrowser = {},
+                onCreateTask = {},
+                onDelete = {},
+            )
+        }
+        composeRule.onNodeWithText("Sign-in expired").assertDoesNotExist()
     }
 }

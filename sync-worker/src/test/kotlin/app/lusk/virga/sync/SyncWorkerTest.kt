@@ -11,6 +11,7 @@ import app.lusk.virga.core.common.model.SyncProgress
 import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.data.ConflictRepository
+import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.data.StatsRepository
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
@@ -56,6 +57,7 @@ class SyncWorkerTest {
     private val statsRepository: StatsRepository = mockk(relaxed = true)
     private val staging: LocalStaging = mockk(relaxed = true)
     private val scheduler: SyncScheduler = mockk(relaxed = true)
+    private val remoteRepository: RemoteRepository = mockk(relaxed = true)
 
     @Before
     fun setUp() {
@@ -95,11 +97,13 @@ class SyncWorkerTest {
                         SyncWorker(
                             appContext, workerParameters, executor, engine, taskRepository,
                             historyRepository, conflictRepository, statsRepository, staging, scheduler,
+                            remoteRepository,
                         )
                     } else {
                         object : SyncWorker(
                             appContext, workerParameters, executor, engine, taskRepository,
                             historyRepository, conflictRepository, statsRepository, staging, scheduler,
+                            remoteRepository,
                         ) {
                             override fun anotherRunInFlight(taskId: Long): Boolean = inFlightOverride
                         }
@@ -514,6 +518,55 @@ class SyncWorkerTest {
         buildWorker().doWork()
 
         assertThat(moveSlot.captured).isFalse()
+    }
+
+    @Test
+    fun authFailure_setsNeedsReauthAndRecordsFailed_doesNotRetry() = runBlocking {
+        // An auth-shaped error must (a) set needsReauth for the remote, (b) record FAILED,
+        // (c) NOT retry (only VirgaError.Network retries).
+        val task = task(direction = SyncDirection.UPLOAD)
+        coEvery { taskRepository.getTask(TASK_ID) } returns task
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = task.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), any(), any()) } returns
+            flow { throw VirgaError.Rclone(message = "oauth2: cannot fetch token: 401 Unauthorized") }
+
+        val result = buildWorker().doWork()
+
+        assertThat(result).isEqualTo(ListenableWorker.Result.failure())
+        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any()) }
+        coVerify { remoteRepository.setNeedsReauth("gdrive", true) }
+    }
+
+    @Test
+    fun nonAuthFailure_doesNotSetNeedsReauth() = runBlocking {
+        val task = task(direction = SyncDirection.UPLOAD)
+        coEvery { taskRepository.getTask(TASK_ID) } returns task
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = task.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), any(), any()) } returns
+            flow { throw VirgaError.Rclone(message = "directory not found") }
+
+        buildWorker().doWork()
+
+        coVerify(exactly = 0) { remoteRepository.setNeedsReauth(any(), true) }
+    }
+
+    @Test
+    fun successfulSync_clearsNeedsReauthFlag() = runBlocking {
+        // Belt-and-suspenders: a clean run clears any lingering needsReauth flag so an
+        // out-of-band token fix (e.g. rclone config on another machine) auto-recovers.
+        val task = task(direction = SyncDirection.UPLOAD)
+        coEvery { taskRepository.getTask(TASK_ID) } returns task
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = task.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), any(), any()) } returns
+            flow { emit(progress(transferred = 3)) }
+
+        val result = buildWorker().doWork()
+
+        assertThat(result).isEqualTo(ListenableWorker.Result.success())
+        coVerify { remoteRepository.setNeedsReauth("gdrive", false) }
     }
 
     private fun task(direction: SyncDirection) = SyncTask(
