@@ -571,6 +571,144 @@ class SyncTaskEditViewModelTest {
         coVerify { taskRepository.save(match<SyncTask> { it.deleteSource }) }
     }
 
+    // --- B5: size / age validators ------------------------------------------
+
+    @Test
+    fun minSizeError_isNullForBlankValue() {
+        val vm = viewModel()
+        vm.update { it.copy(minSize = "") }
+        assertThat(vm.form.value.minSizeError).isNull()
+    }
+
+    @Test
+    fun minSizeError_isNullForValidSizeSuffix() {
+        val vm = viewModel()
+        listOf("10M", "1.5G", "512", "100k", "2T", "256Mi").forEach { size ->
+            vm.update { it.copy(minSize = size) }
+            assertThat("$size: ${vm.form.value.minSizeError}").isEqualTo("$size: null")
+        }
+    }
+
+    @Test
+    fun minSizeError_isSetForInvalidSizeSuffix() {
+        val vm = viewModel()
+        vm.update { it.copy(minSize = "notasize!!") }
+        assertThat(vm.form.value.minSizeError).isNotNull()
+    }
+
+    @Test
+    fun maxAgeError_isNullForBlankValue() {
+        val vm = viewModel()
+        vm.update { it.copy(maxAge = "") }
+        assertThat(vm.form.value.maxAgeError).isNull()
+    }
+
+    @Test
+    fun maxAgeError_isNullForValidDuration() {
+        val vm = viewModel()
+        listOf("30d", "1h30m", "100ms", "2w", "1y", "24h").forEach { age ->
+            vm.update { it.copy(maxAge = age) }
+            assertThat("$age: ${vm.form.value.maxAgeError}").isEqualTo("$age: null")
+        }
+    }
+
+    @Test
+    fun maxAgeError_isSetForInvalidDuration() {
+        val vm = viewModel()
+        vm.update { it.copy(maxAge = "notaduration!") }
+        assertThat(vm.form.value.maxAgeError).isNotNull()
+    }
+
+    @Test
+    fun isValid_isFalseWhenMinSizeInvalid() {
+        val vm = viewModel()
+        vm.update {
+            it.copy(
+                name = "T",
+                sourcePath = "/s",
+                remoteName = "r",
+                remotePath = "dst",
+                minSize = "bad!",
+            )
+        }
+        assertThat(vm.form.value.isValid).isFalse()
+    }
+
+    @Test
+    fun isValid_isTrueWhenSizeAgeBlank() {
+        val vm = viewModel()
+        vm.update {
+            it.copy(
+                name = "T",
+                sourcePath = "/s",
+                remoteName = "r",
+                remotePath = "dst",
+                minSize = "",
+                maxSize = "",
+                minAge = "",
+                maxAge = "",
+            )
+        }
+        assertThat(vm.form.value.isValid).isTrue()
+    }
+
+    @Test
+    fun save_persistsSizeAndAgeFields() = runTest(mainDispatcher.dispatcher) {
+        coEvery { taskRepository.save(any()) } returns 1L
+        val vm = viewModel()
+        vm.update {
+            it.copy(
+                name = "Backup",
+                sourcePath = "/sdcard",
+                remoteName = "gdrive",
+                remotePath = "Backups",
+                minSize = "10M",
+                maxSize = "2G",
+                minAge = "30d",
+                maxAge = "1y",
+            )
+        }
+        vm.save {}
+        advanceUntilIdle()
+
+        coVerify {
+            taskRepository.save(
+                match<SyncTask> {
+                    it.minSize == "10M" &&
+                        it.maxSize == "2G" &&
+                        it.minAge == "30d" &&
+                        it.maxAge == "1y"
+                },
+            )
+        }
+    }
+
+    @Test
+    fun load_existingTask_hydratesSizeAgeFields() = runTest(mainDispatcher.dispatcher) {
+        val entity = SyncTask(
+            id = 11,
+            name = "Filtered",
+            sourcePath = "/sdcard",
+            remoteName = "gdrive",
+            remotePath = "/dst",
+            direction = SyncDirection.UPLOAD,
+            intervalMinutes = null,
+            minSize = "5M",
+            maxSize = "1G",
+            minAge = "7d",
+            maxAge = "90d",
+        )
+        coEvery { taskRepository.getTask(11) } returns entity
+        val vm = viewModel()
+        vm.load(taskId = 11)
+        advanceUntilIdle()
+
+        assertThat(vm.form.value.minSize).isEqualTo("5M")
+        assertThat(vm.form.value.maxSize).isEqualTo("1G")
+        assertThat(vm.form.value.minAge).isEqualTo("7d")
+        assertThat(vm.form.value.maxAge).isEqualTo("90d")
+    }
+
     // --- helpers ------------------------------------------------------------
 
     private fun task(

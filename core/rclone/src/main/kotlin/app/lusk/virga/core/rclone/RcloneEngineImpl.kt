@@ -371,7 +371,7 @@ class RcloneEngineImpl @Inject constructor(
                     maxDelete = options.maxDelete,
                     extraConfig = options.extraConfig,
                 )
-                putFilters(options.filters)
+                putFilters(options.filters, options.minSize, options.maxSize, options.minAge, options.maxAge)
             })
         }
 
@@ -407,7 +407,7 @@ class RcloneEngineImpl @Inject constructor(
                     maxDelete = options.maxDelete,
                     extraConfig = options.extraConfig,
                 )
-                putFilters(options.filters)
+                putFilters(options.filters, options.minSize, options.maxSize, options.minAge, options.maxAge)
             })
         }
 

@@ -136,11 +136,21 @@ internal fun JsonObjectBuilder.putConfig(
     }
 }
 
-internal fun JsonObjectBuilder.putFilters(filters: List<String>) {
-    if (filters.isEmpty()) return
+internal fun JsonObjectBuilder.putFilters(
+    filters: List<String>,
+    minSize: String? = null,
+    maxSize: String? = null,
+    minAge: String? = null,
+    maxAge: String? = null,
+) {
+    val hasSizeAge = !minSize.isNullOrBlank() || !maxSize.isNullOrBlank() ||
+        !minAge.isNullOrBlank() || !maxAge.isNullOrBlank()
+    if (filters.isEmpty() && !hasSizeAge) return
     putJsonObject("_filter") {
-        putJsonArray("FilterRule") {
-            filters.forEach { add(it) }
-        }
+        if (filters.isNotEmpty()) putJsonArray("FilterRule") { filters.forEach { add(it) } }
+        if (!minSize.isNullOrBlank()) put("MinSize", minSize)
+        if (!maxSize.isNullOrBlank()) put("MaxSize", maxSize)
+        if (!minAge.isNullOrBlank()) put("MinAge", minAge)
+        if (!maxAge.isNullOrBlank()) put("MaxAge", maxAge)
     }
 }

@@ -27,6 +27,14 @@ data class SyncOptions(
     val checkers: Int = 8,
     val bufferSize: String = "16M",
     val filters: List<String> = emptyList(),
+    /** rclone _filter key "MinSize" (SizeSuffix, e.g. "10M"); null = unset. */
+    val minSize: String? = null,
+    /** rclone _filter key "MaxSize" (SizeSuffix, e.g. "1G"); null = unset. */
+    val maxSize: String? = null,
+    /** rclone _filter key "MinAge" (Duration, e.g. "30d", "1h"); null = unset. */
+    val minAge: String? = null,
+    /** rclone _filter key "MaxAge" (Duration, e.g. "7d"); null = unset. */
+    val maxAge: String? = null,
     val dryRun: Boolean = false,
     /**
      * When true, delete files on the destination that are absent from the source
@@ -67,6 +75,14 @@ data class BisyncOptions(
     val checkers: Int = 8,
     val bufferSize: String = "16M",
     val filters: List<String> = emptyList(),
+    /** rclone _filter key "MinSize" (SizeSuffix, e.g. "10M"); null = unset. */
+    val minSize: String? = null,
+    /** rclone _filter key "MaxSize" (SizeSuffix, e.g. "1G"); null = unset. */
+    val maxSize: String? = null,
+    /** rclone _filter key "MinAge" (Duration, e.g. "30d", "1h"); null = unset. */
+    val minAge: String? = null,
+    /** rclone _filter key "MaxAge" (Duration, e.g. "7d"); null = unset. */
+    val maxAge: String? = null,
     val dryRun: Boolean = false,
     /** First-run resync to establish the bisync baseline. */
     val resync: Boolean = false,

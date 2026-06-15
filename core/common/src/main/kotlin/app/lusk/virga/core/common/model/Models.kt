@@ -46,6 +46,12 @@ data class SyncTask(
     val scheduleMinute: Int = 0,
     /** Newline-joined include/exclude glob patterns. */
     val filters: String = "",
+    /** rclone --min-size / --max-size (SizeSuffix, e.g. "10M", "1.5G"); blank = unset. */
+    val minSize: String = "",
+    val maxSize: String = "",
+    /** rclone --min-age / --max-age (Duration, e.g. "30d", "1h"); blank = unset. */
+    val minAge: String = "",
+    val maxAge: String = "",
     /** rclone --bwlimit on WiFi/metered; null/blank = no limit. e.g. "1M". */
     val bwLimitWifi: String? = null,
     val bwLimitMetered: String? = null,
