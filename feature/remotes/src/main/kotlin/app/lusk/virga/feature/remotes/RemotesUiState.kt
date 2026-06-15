@@ -7,6 +7,21 @@ import app.lusk.virga.core.common.model.RemoteQuota
 /** Per-remote connectivity test outcome — set only after an explicit user trigger. */
 enum class ConnectivityResult { SUCCESS, FAILURE }
 
+/**
+ * Snapshot of a remote's loaded config, kept in the ViewModel during an edit session.
+ * [loadedParams] contains all params as returned by config/get (including obscured secrets).
+ * It is never exposed to the UI — the dialog receives only the non-password values for
+ * pre-filling, and [passwordKeys] is used to blank those fields.
+ */
+data class EditModeState(
+    val remoteName: String,
+    val remoteType: String,
+    /** Full params snapshot from config/get, including obscured secrets. Never surfaces to UI. */
+    val loadedParams: Map<String, String>,
+    /** Keys whose RemoteOption.isPassword == true. These are blanked in the edit dialog. */
+    val passwordKeys: Set<String>,
+)
+
 data class RemotesUiState(
     val remotes: List<Remote> = emptyList(),
     val refreshing: Boolean = false,
@@ -32,6 +47,10 @@ data class RemotesUiState(
     /** Non-null while the UI is waiting for the user to supply a passphrase to
      *  decrypt the encrypted config at this [Uri]. Cleared on success or dismiss. */
     val pendingEncryptedImport: Uri? = null,
+    /** Non-null while the user is editing an existing remote. */
+    val editMode: EditModeState? = null,
+    /** True while [editMode] is being loaded via getRemoteParams. */
+    val editLoading: Boolean = false,
 )
 
 /**
@@ -48,4 +67,8 @@ internal data class RemotesTransientState(
     /** Non-null while awaiting a passphrase to decrypt an encrypted import. Cleared
      *  on successful decrypt, dismiss, or when a non-encrypted file is imported. */
     val pendingEncryptedImport: Uri? = null,
+    /** Non-null while the user is editing an existing remote. */
+    val editMode: EditModeState? = null,
+    /** True while [editMode] is being loaded via getRemoteParams. */
+    val editLoading: Boolean = false,
 )

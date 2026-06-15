@@ -263,6 +263,32 @@ class RcloneEngineImpl @Inject constructor(
         }
     }
 
+    override suspend fun updateRemote(
+        name: String,
+        params: Map<String, String>,
+        sensitiveKeys: Set<String>,
+    ) {
+        mutatingConfig { d ->
+            rc(d, "config/update", buildJsonObject {
+                put("name", name)
+                putJsonObject("parameters") { params.forEach { (k, v) -> put(k, v) } }
+                putJsonObject("opt") {
+                    put("nonInteractive", true)
+                    if (sensitiveKeys.isNotEmpty()) put("obscure", true)
+                }
+            })
+        }
+    }
+
+    override suspend fun getRemoteParams(name: String): Map<String, String> =
+        withLease { d ->
+            val result = rc(d, "config/get", buildJsonObject { put("name", name) })
+            result.entries.mapNotNull { (k, v) ->
+                val str = runCatching { v.jsonPrimitive.contentOrNull }.getOrNull()
+                if (str != null) k to str else null
+            }.toMap()
+        }
+
     override suspend fun importConfig(confContent: String) = lock.withLock {
         // Atomic under [lock]: stop the daemon and replace the config without a gap
         // where a concurrent ensureDaemon could start with the OLD config and then

@@ -65,6 +65,7 @@ internal fun RemoteCard(
     onDelete: () -> Unit,
     onTestConnectivity: () -> Unit = {},
     onDedupe: () -> Unit = {},
+    onEdit: () -> Unit = {},
     quota: RemoteQuota? = null,
     quotaLoading: Boolean = false,
     connectivity: ConnectivityResult? = null,
@@ -121,6 +122,10 @@ internal fun RemoteCard(
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.remotes_card_menu_dedupe)) },
                     onClick = { menuExpanded = false; onDedupe() },
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.remotes_card_menu_edit)) },
+                    onClick = { menuExpanded = false; onEdit() },
                 )
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.remotes_card_menu_delete)) },

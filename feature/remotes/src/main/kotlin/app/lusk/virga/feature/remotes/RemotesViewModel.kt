@@ -207,6 +207,93 @@ class RemotesViewModel @Inject constructor(
     }
 
     /**
+     * Begins editing [name]: ensures the provider schema is loaded BEFORE opening the
+     * dialog, then loads the remote's current params.
+     *
+     * Schema load is a precondition — not a race: [passwordKeys] is derived from the
+     * resolved [RemoteProvider] list so it is never empty because the dialog opened before
+     * the schema arrived. The dialog is only opened (editMode set) once both the schema
+     * and the remote params are available.
+     */
+    fun beginEditRemote(name: String) {
+        viewModelScope.launch {
+            transient.update { it.copy(editLoading = true) }
+            val typeResult = runCatching {
+                // Await schema: if not yet loaded, fetch it now and wait for the result.
+                // We call repository.providers() directly so this coroutine suspends until
+                // the schema is available, regardless of whether ensureProvidersLoaded()
+                // was called from the UI. If it was already fetched (_providers.value != null)
+                // we use the cached value via allOptionsForBackend immediately.
+                if (_providers.value == null) {
+                    val loaded = repository.providers()
+                    _providers.value = loaded
+                    _catalog = if (loaded.isEmpty()) null else ProviderCatalog(loaded)
+                    providersLoading = false
+                }
+                val config = repository.getRemoteParams(name).getOrThrow()
+                val type = config["type"].orEmpty()
+                // allOptionsForBackend now has the schema: returns the full option list.
+                val options = allOptionsForBackend(type) ?: emptyList()
+                val passwordKeys = options.filter { it.isPassword }.map { it.name }.toSet()
+                EditModeState(
+                    remoteName = name,
+                    remoteType = type,
+                    loadedParams = config,
+                    passwordKeys = passwordKeys,
+                )
+            }
+            val editMode = typeResult.getOrNull()
+            val error = typeResult.exceptionOrNull()?.toUserMessage()
+            transient.update { it.copy(editLoading = false, editMode = editMode, message = error) }
+        }
+    }
+
+    fun dismissEditRemote() {
+        transient.update { it.copy(editMode = null) }
+    }
+
+    /**
+     * Submits an edit: diffs [submittedValues] against the loaded snapshot, sends only
+     * changed keys to updateRemote. Password keys that the user left blank are skipped
+     * (keep current); password keys with a new value are sent and flagged as sensitive.
+     */
+    fun submitEdit(
+        name: String,
+        submittedValues: Map<String, String>,
+        onResult: (success: Boolean, error: String?) -> Unit,
+    ) {
+        val snapshot = transient.value.editMode ?: run {
+            onResult(false, "No edit session active.")
+            return
+        }
+        viewModelScope.launch {
+            val passwordKeys = snapshot.passwordKeys
+            val loaded = snapshot.loadedParams
+            // Diff: include a key if the submitted value differs from loaded OR it's a new key.
+            // Password fields left blank by the user are skipped entirely (keep current).
+            val changed = submittedValues.entries.mapNotNull { (k, v) ->
+                when {
+                    passwordKeys.contains(k) && v.isBlank() -> null  // keep current
+                    passwordKeys.contains(k) -> k to v               // new password value
+                    v != loaded[k] -> k to v                         // non-password changed
+                    else -> null                                      // unchanged
+                }
+            }.toMap()
+            val sensitiveAmongChanged = changed.keys.intersect(passwordKeys)
+            val result = repository.updateRemote(name, changed, sensitiveAmongChanged)
+            if (result.isSuccess) {
+                transient.update {
+                    it.copy(
+                        editMode = null,
+                        message = context.getString(R.string.remotes_msg_remote_updated, name),
+                    )
+                }
+            }
+            onResult(result.isSuccess, result.exceptionOrNull()?.toUserMessage())
+        }
+    }
+
+    /**
      * Creates a remote from a manual config. [paramsText] is "key=value" per line.
      * Reports the outcome via [onResult] so the dialog can show the error inline —
      * a screen-level snackbar would be hidden behind the still-open Add dialog.
@@ -434,6 +521,8 @@ class RemotesViewModel @Inject constructor(
                 connectivityResults = connectivity.results,
                 connectivityTesting = connectivity.testing,
                 pendingEncryptedImport = t.pendingEncryptedImport,
+                editMode = t.editMode,
+                editLoading = t.editLoading,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RemotesUiState())
 

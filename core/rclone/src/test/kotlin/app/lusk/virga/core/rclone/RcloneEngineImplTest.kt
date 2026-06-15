@@ -353,6 +353,96 @@ class RcloneEngineImplTest {
         assertThat(opt?.get("nonInteractive")?.jsonPrimitive?.booleanOrNull).isTrue()
     }
 
+    // --- updateRemote ---
+
+    @Test fun `updateRemote dispatches config_update through mutatingConfig`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.persistAndCleanup() } returns Unit
+
+        val capturedParams = mutableListOf<kotlinx.serialization.json.JsonObject>()
+        coEvery { apiClient.call(any(), any(), any(), "config/update", capture(capturedParams)) } returns buildJsonObject {}
+
+        engine.updateRemote("gdrive", mapOf("client_id" to "new-id"))
+
+        val req = capturedParams.first()
+        assertThat(req["name"]?.jsonPrimitive?.contentOrNull).isEqualTo("gdrive")
+        val parameters = req["parameters"]?.jsonObject
+        assertThat(parameters?.get("client_id")?.jsonPrimitive?.contentOrNull).isEqualTo("new-id")
+        val opt = req["opt"]?.jsonObject
+        assertThat(opt?.get("nonInteractive")?.jsonPrimitive?.booleanOrNull).isTrue()
+        assertThat(opt?.containsKey("obscure")).isFalse()
+        coVerify { daemonManager.stop(fakeDaemon) }
+        coVerify { configManager.persistAndCleanup() }
+    }
+
+    @Test fun `updateRemote sets opt obscure when sensitiveKeys present`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.persistAndCleanup() } returns Unit
+
+        val capturedParams = mutableListOf<kotlinx.serialization.json.JsonObject>()
+        coEvery { apiClient.call(any(), any(), any(), "config/update", capture(capturedParams)) } returns buildJsonObject {}
+
+        engine.updateRemote("sftp1", mapOf("pass" to "newpass"), sensitiveKeys = setOf("pass"))
+
+        val opt = capturedParams.first()["opt"]?.jsonObject
+        assertThat(opt?.get("obscure")?.jsonPrimitive?.booleanOrNull).isTrue()
+    }
+
+    @Test fun `updateRemote rejects when syncs hold leases`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+
+        engine.acquireDaemon()
+
+        val error = assertThrows<VirgaError.Rclone> {
+            engine.updateRemote("gdrive", mapOf("client_id" to "x"))
+        }
+        assertThat(error.message).contains("Stop running syncs")
+    }
+
+    // --- getRemoteParams ---
+
+    @Test fun `getRemoteParams parses config_get response into map`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "config/get", any()) } returns buildJsonObject {
+            put("type", "drive")
+            put("client_id", "abc123")
+            put("token", "{\"access_token\":\"x\"}")
+        }
+
+        engine.startDaemon()
+        val params = engine.getRemoteParams("gdrive")
+
+        assertThat(params["type"]).isEqualTo("drive")
+        assertThat(params["client_id"]).isEqualTo("abc123")
+        assertThat(params["token"]).isEqualTo("{\"access_token\":\"x\"}")
+    }
+
+    @Test fun `getRemoteParams skips non-primitive values defensively`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "config/get", any()) } returns buildJsonObject {
+            put("type", "drive")
+            put("nested", buildJsonObject { put("x", "y") })
+        }
+
+        engine.startDaemon()
+        val params = engine.getRemoteParams("gdrive")
+
+        assertThat(params).containsKey("type")
+        assertThat(params).doesNotContainKey("nested")
+    }
+
     // --- listDir ---
 
     @Test fun `listDir maps operations_list response to FileItem list`() = runTest(testDispatcher) {

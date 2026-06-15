@@ -218,6 +218,7 @@ fun RemotesScreen(
                                 onDelete = { remoteToDelete = remote },
                                 onTestConnectivity = { viewModel.testConnectivity(remote.name) },
                                 onDedupe = { remoteToDedupe = remote },
+                                onEdit = { viewModel.beginEditRemote(remote.name) },
                                 quota = state.quotas[remote.name],
                                 quotaLoading = remote.name in state.quotaLoading,
                                 connectivity = state.connectivityResults[remote.name],
@@ -300,6 +301,29 @@ fun RemotesScreen(
         ImportPassphraseDialog(
             onConfirm = { passphrase -> viewModel.importConfigFromUri(uri, passphrase) },
             onDismiss = { viewModel.dismissImportPassphrase() },
+        )
+    }
+
+    state.editMode?.let { editMode ->
+        AddRemoteDialog(
+            editMode = editMode,
+            oauthProviders = emptyList(),
+            error = manualError,
+            customClientIds = state.customClientIds,
+            onEnsureProviders = { viewModel.ensureProvidersLoaded() },
+            allOptionsForBackend = { viewModel.allOptionsForBackend(it) },
+            providersLoaded = providersLoaded,
+            existingRemotes = state.remotes,
+            onDismiss = { viewModel.dismissEditRemote(); manualError = null },
+            onEditConfirm = { values ->
+                viewModel.submitEdit(editMode.remoteName, values) { success, error ->
+                    if (success) manualError = null else manualError = error
+                }
+            },
+            onManualConfirm = { _, _, _ -> },
+            onOAuth = { _, _ -> },
+            onSaveClientId = { _, _ -> },
+            onClearClientId = { },
         )
     }
 

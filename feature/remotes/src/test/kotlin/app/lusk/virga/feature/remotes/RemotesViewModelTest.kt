@@ -93,6 +93,8 @@ class RemotesViewModelTest {
                     "Added ${args[0]} remote \"${args[1]}\""
                 R.string.remotes_msg_connectivity_warning ->
                     "Remote \"${args[0]}\" was saved, but could not verify connectivity. Check your credentials."
+                R.string.remotes_msg_remote_updated ->
+                    "Remote \"${args[0]}\" updated."
                 else -> "string#$id(${args.joinToString()})"
             }
         }
@@ -988,6 +990,189 @@ class RemotesViewModelTest {
         }
 
     private fun OAuthProvider.unused() = Unit  // silence unused-import warning for OAuthProvider import
+
+    // --- edit flow ---
+
+    @Test fun `beginEditRemote loads params and sets editMode`() = runTest(mainDispatcher.dispatcher) {
+        val params = mapOf("type" to "drive", "client_id" to "abc", "token" to "tok")
+        coEvery { repository.getRemoteParams("gdrive") } returns Result.success(params)
+        coEvery { repository.providers() } returns emptyList()
+
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        vm.beginEditRemote("gdrive")
+        advanceUntilIdle()
+
+        val editMode = vm.uiState.value.editMode
+        assertThat(editMode).isNotNull()
+        assertThat(editMode!!.remoteName).isEqualTo("gdrive")
+        assertThat(editMode.remoteType).isEqualTo("drive")
+        assertThat(editMode.loadedParams).containsEntry("client_id", "abc")
+        collector.cancel()
+    }
+
+    @Test fun `beginEditRemote sets message on failure`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { repository.providers() } returns emptyList()
+        coEvery { repository.getRemoteParams("ghost") } returns Result.failure(
+            app.lusk.virga.core.common.error.VirgaError.Rclone(message = "not found")
+        )
+
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        vm.beginEditRemote("ghost")
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.editMode).isNull()
+        assertThat(vm.uiState.value.message).isNotNull()
+        collector.cancel()
+    }
+
+    @Test fun `submitEdit sends only changed keys to updateRemote`() = runTest(mainDispatcher.dispatcher) {
+        val loaded = mapOf("type" to "sftp", "host" to "example.com", "user" to "alice")
+        coEvery { repository.providers() } returns emptyList()
+        coEvery { repository.getRemoteParams("sftp1") } returns Result.success(loaded)
+        coEvery { repository.updateRemote(any(), any(), any()) } returns Result.success(Unit)
+        coEvery { repository.refresh() } returns Result.success(Unit)
+
+        val vm = viewModel()
+        vm.beginEditRemote("sftp1")
+        advanceUntilIdle()
+
+        var resultSuccess = false
+        vm.submitEdit("sftp1", mapOf("host" to "example.com", "user" to "bob")) { success, _ ->
+            resultSuccess = success
+        }
+        advanceUntilIdle()
+
+        assertThat(resultSuccess).isTrue()
+        // Only "user" changed ("host" is unchanged).
+        coVerify { repository.updateRemote("sftp1", mapOf("user" to "bob"), emptySet()) }
+    }
+
+    @Test fun `submitEdit skips blank password fields and sends new password value`() = runTest(mainDispatcher.dispatcher) {
+        val loaded = mapOf("type" to "sftp", "host" to "h", "pass" to "obscured_value")
+        val options = listOf(
+            RemoteOption("host", "Host", "string", false, false, null, emptyList(), false),
+            RemoteOption("pass", "Password", "string", false, true, null, emptyList(), false),
+        )
+        coEvery { repository.getRemoteParams("sftp1") } returns Result.success(loaded)
+        coEvery { repository.providers() } returns listOf(
+            RemoteProvider("sftp", "SFTP", options)
+        )
+        coEvery { repository.updateRemote(any(), any(), any()) } returns Result.success(Unit)
+        coEvery { repository.refresh() } returns Result.success(Unit)
+
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        vm.ensureProvidersLoaded()
+        advanceUntilIdle()
+        vm.beginEditRemote("sftp1")
+        advanceUntilIdle()
+
+        // host unchanged, pass blank (keep current)
+        vm.submitEdit("sftp1", mapOf("host" to "h", "pass" to "")) { _, _ -> }
+        advanceUntilIdle()
+        coVerify { repository.updateRemote("sftp1", emptyMap(), emptySet()) }
+
+        // First submitEdit cleared editMode — re-enter edit session before second submit.
+        vm.beginEditRemote("sftp1")
+        advanceUntilIdle()
+
+        // Now set a new password
+        vm.submitEdit("sftp1", mapOf("host" to "h", "pass" to "newpass")) { _, _ -> }
+        advanceUntilIdle()
+        coVerify { repository.updateRemote("sftp1", mapOf("pass" to "newpass"), setOf("pass")) }
+        collector.cancel()
+    }
+
+    @Test fun `dismissEditRemote clears editMode`() = runTest(mainDispatcher.dispatcher) {
+        val params = mapOf("type" to "drive")
+        coEvery { repository.providers() } returns emptyList()
+        coEvery { repository.getRemoteParams("gdrive") } returns Result.success(params)
+
+        val vm = viewModel()
+        vm.beginEditRemote("gdrive")
+        advanceUntilIdle()
+
+        vm.dismissEditRemote()
+        runCurrent()
+
+        assertThat(vm.uiState.value.editMode).isNull()
+    }
+
+    // C1 regression: schema must be awaited before editMode is exposed so that
+    // passwordKeys is always correct and obscured secrets never leak into the form.
+    @Test fun `beginEditRemote awaits schema before exposing editMode - obscured pass not in passwordKeys`() =
+        runTest(mainDispatcher.dispatcher) {
+            val passOption = RemoteOption(
+                name = "pass", help = "Password", type = "string",
+                required = false, isPassword = true, default = null,
+                examples = emptyList(), advanced = false,
+            )
+            val hostOption = RemoteOption(
+                name = "host", help = "Host", type = "string",
+                required = false, isPassword = false, default = null,
+                examples = emptyList(), advanced = false,
+            )
+            // Remote params include an obscured password value from config/get.
+            val loaded = mapOf("type" to "sftp", "host" to "example.com", "pass" to "OBSCURED_RCLONE_VALUE")
+            // beginEditRemote will call repository.providers() directly since schema is unloaded.
+            coEvery { repository.providers() } returns listOf(
+                RemoteProvider("sftp", "SFTP", listOf(hostOption, passOption))
+            )
+            coEvery { repository.getRemoteParams("sftp1") } returns Result.success(loaded)
+
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+
+            // Do NOT call ensureProvidersLoaded() first — this simulates the user tapping
+            // Edit before the dialog has mounted and triggered a schema load.
+            vm.beginEditRemote("sftp1")
+            advanceUntilIdle()
+
+            val editMode = vm.uiState.value.editMode
+            assertThat(editMode).isNotNull()
+            // The schema was awaited inside beginEditRemote: passwordKeys must include "pass".
+            assertThat(editMode!!.passwordKeys).contains("pass")
+            // The obscured value is in loadedParams (for diffing) but is listed as a password key,
+            // so the dialog seeding will exclude it from editTypedValues — it never surfaces in UI.
+            assertThat(editMode.loadedParams).containsEntry("pass", "OBSCURED_RCLONE_VALUE")
+            // Verify repository.providers() was called (schema was fetched inside beginEditRemote).
+            coVerify { repository.providers() }
+            collector.cancel()
+        }
+
+    @Test fun `beginEditRemote with schema already loaded reuses cache and does not re-fetch providers`() =
+        runTest(mainDispatcher.dispatcher) {
+            val passOption = RemoteOption(
+                name = "token", help = "Token", type = "string",
+                required = false, isPassword = true, default = null,
+                examples = emptyList(), advanced = false,
+            )
+            coEvery { repository.providers() } returns listOf(
+                RemoteProvider("drive", "Google Drive", listOf(passOption))
+            )
+            coEvery { repository.getRemoteParams("gdrive") } returns Result.success(
+                mapOf("type" to "drive", "token" to "OBSCURED")
+            )
+
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            // Pre-load the schema once.
+            vm.ensureProvidersLoaded()
+            advanceUntilIdle()
+
+            // Now tap Edit — schema is cached, beginEditRemote must NOT re-fetch.
+            vm.beginEditRemote("gdrive")
+            advanceUntilIdle()
+
+            val editMode = vm.uiState.value.editMode
+            assertThat(editMode).isNotNull()
+            assertThat(editMode!!.passwordKeys).contains("token")
+            // providers() called exactly once (from ensureProvidersLoaded), not again.
+            coVerify(exactly = 1) { repository.providers() }
+            collector.cancel()
+        }
 
     // --- ProviderCatalog exposure -----------------------------------------------
 
