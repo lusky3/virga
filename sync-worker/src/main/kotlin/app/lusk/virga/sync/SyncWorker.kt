@@ -114,7 +114,7 @@ open class SyncWorker @AssistedInject constructor(
         // Per-run log (WS2.5): built from observed events, written on finish.
         val log = RunLogWriter(applicationContext.filesDir, runId)
         log.line("Sync started: ${task.name}")
-        log.line("Direction: ${task.direction} · Mirror: ${task.deleteExtraneous}")
+        log.line("Direction: ${task.direction} · Mirror: ${task.deleteExtraneous} · Move: ${task.deleteSource}")
         log.line("Source: ${task.sourcePath}")
         log.line("Destination: ${task.remoteName}:${task.remotePath}")
 
@@ -135,8 +135,11 @@ open class SyncWorker @AssistedInject constructor(
         // (uploading a couple of local files to a remote folder of hundreds would
         // delete the rest). It is therefore an explicit per-task opt-in
         // (Mirror toggle, WS2.2) that the editor gates behind an acknowledgement.
-        // (BISYNC reconciles deletions through its own two-way logic, ignoring this.)
+        // Move mode (rclone `sync/move`, delete-source) deletes the source after a
+        // successful transfer; also an explicit opt-in gated behind an acknowledgement.
+        // (BISYNC reconciles deletions through its own two-way logic, ignoring both.)
         val allowDeletes = task.deleteExtraneous
+        val allowMove = task.deleteSource
 
         try {
             // Lease the shared daemon for the lifetime of this sync (released in finally).
@@ -176,7 +179,7 @@ open class SyncWorker @AssistedInject constructor(
                 // RUNNING here, so it doesn't count itself.
                 val resync = task.direction == SyncDirection.BISYNC &&
                     !historyRepository.hasSucceeded(taskId)
-                executor.run(effectiveTask, metered, allowDeletes, resync = resync)
+                executor.run(effectiveTask, metered, allowDeletes, allowMove, resync = resync)
                     .catch { failure = it }
                     .collect { progress ->
                         // Record EVERY emit + publish to the UI: the terminal emit carries

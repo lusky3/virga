@@ -58,6 +58,7 @@ data class SyncTaskForm(
     /** rclone FilterRule lines (newline-joined): "+ pattern" / "- pattern". */
     val filters: String = "",
     val deleteExtraneous: Boolean = false,
+    val deleteSource: Boolean = false,
     // WS3.1 Tier-2 options -------------------------------------------------------
     /** Checksum toggle: compare by hash rather than size+modtime. */
     val checksum: Boolean = false,
@@ -211,6 +212,7 @@ class SyncTaskEditViewModel @Inject constructor(
                         checkers = task.checkers,
                         filters = task.filters,
                         deleteExtraneous = task.deleteExtraneous,
+                        deleteSource = task.deleteSource,
                         checksum = task.checksum,
                         backupDir = task.backupDir.orEmpty(),
                         maxDelete = task.maxDelete,
@@ -259,7 +261,14 @@ class SyncTaskEditViewModel @Inject constructor(
     fun touchRemoteName() = _form.update { it.copy(remoteNameTouched = true) }
 
     fun update(transform: (SyncTaskForm) -> SyncTaskForm) = _form.update { current ->
-        val next = transform(current)
+        val raw = transform(current)
+        // Mutual exclusion: mirror (deleteExtraneous) and move (deleteSource) are
+        // semantically incompatible — enabling one forces the other off.
+        val next = when {
+            raw.deleteSource && !current.deleteSource -> raw.copy(deleteExtraneous = false)
+            raw.deleteExtraneous && !current.deleteExtraneous -> raw.copy(deleteSource = false)
+            else -> raw
+        }
         val isCustomInterval = next.intervalMinutes == CUSTOM_INTERVAL_SENTINEL
         val isSafSource = next.sourcePath.startsWith("content://")
         next.copy(
@@ -326,6 +335,11 @@ class SyncTaskEditViewModel @Inject constructor(
                 // there. Mirrors the disabled-toggle condition in SyncTaskEditScreen.
                 deleteExtraneous = form.deleteExtraneous &&
                     !(form.direction == SyncDirection.DOWNLOAD && form.sourcePath.startsWith("content://")),
+                // Normalize Move: forbidden for SAF sources and BISYNC (inert conditions
+                // match the moveInert check in SyncTaskEditScreen).
+                deleteSource = form.deleteSource &&
+                    !form.sourcePath.startsWith("content://") &&
+                    form.direction != SyncDirection.BISYNC,
                 checksum = form.checksum,
                 backupDir = form.backupDir.trim().ifBlank { null },
                 maxDelete = form.maxDelete,

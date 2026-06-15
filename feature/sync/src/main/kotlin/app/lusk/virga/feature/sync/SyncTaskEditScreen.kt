@@ -295,6 +295,18 @@ fun SyncTaskEditScreen(
                 onChange = { v -> viewModel.update { f -> f.copy(deleteExtraneous = v) } },
             )
 
+            // Move mode (0.3.0, destructive) — delete-source after transfer.
+            // Forbidden for SAF sources (content://) — staging never has access to
+            // delete the originals — and for BISYNC (two-way sync manages its own
+            // deletions). Mutually exclusive with Mirror (set in VM update logic).
+            val moveInert = form.sourcePath.startsWith("content://") ||
+                form.direction == SyncDirection.BISYNC
+            MoveToggleRow(
+                enabled = form.deleteSource && !moveInert,
+                inert = moveInert,
+                onChange = { v -> viewModel.update { f -> f.copy(deleteSource = v) } },
+            )
+
             // Advanced section (Tier 2/3) — hidden unless the user opts in (WS2.0).
             if (showAdvanced) {
                 AdvancedSection(form = form, viewModel = viewModel)

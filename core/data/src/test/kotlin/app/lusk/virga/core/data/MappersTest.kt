@@ -38,6 +38,7 @@ class MappersTest {
             checkers = 12,
             bufferSize = "32M",
             deleteExtraneous = true,
+            deleteSource = true,
             wifiOnly = false,
             requiresCharging = true,
             enabled = false,
@@ -69,6 +70,7 @@ class MappersTest {
                 checkers = 12,
                 bufferSize = "32M",
                 deleteExtraneous = true,
+                deleteSource = true,
                 wifiOnly = false,
                 requiresCharging = true,
                 enabled = false,
@@ -79,6 +81,22 @@ class MappersTest {
                 extraConfig = "TrackRenames=true",
             ),
         )
+    }
+
+    @Test fun `deleteSource true survives SyncTask round-trip through toEntity and back`() {
+        val original = SyncTask(
+            id = 10L,
+            name = "Move",
+            sourcePath = "/sdcard/DCIM",
+            remoteName = "gdrive",
+            remotePath = "Archive",
+            direction = SyncDirection.UPLOAD,
+            intervalMinutes = null,
+            createdAtEpochMs = 555L,
+            deleteSource = true,
+        )
+
+        assertThat(original.toEntity().toDomain().deleteSource).isTrue()
     }
 
     @Test fun `SyncTask round-trips through toEntity and back for an existing task`() {

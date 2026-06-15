@@ -501,6 +501,23 @@ class RcloneEngineImplTest {
         }
     }
 
+    @Test fun `sync uses sync_move when deleteSource is true`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "core/stats", any()) } returns buildJsonObject {}
+        coEvery { apiClient.call(any(), any(), any(), "job/status", any()) } returns
+            buildJsonObject { put("finished", true); put("success", true) }
+        coEvery { apiClient.call(any(), any(), any(), "sync/move", any()) } returns buildJsonObject { put("jobid", 3) }
+
+        engine.startDaemon()
+        engine.sync("local:/x", "gdrive:x", SyncOptions(SyncDirection.UPLOAD, deleteSource = true)).test {
+            awaitItem(); awaitComplete()
+        }
+
+        coVerify { apiClient.call(any(), any(), any(), "sync/move", any()) }
+    }
+
     @Test fun `sync uses sync_copy (additive) by default and sync_sync only when deleteExtraneous`() = runTest(testDispatcher) {
         coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
         coEvery { daemonManager.start(any()) } returns fakeDaemon

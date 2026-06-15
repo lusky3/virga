@@ -341,6 +341,45 @@ class SyncWorkerTest {
         coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.CANCELLED, any(), any(), any(), any(), any()) }
     }
 
+    @Test
+    fun deleteSource_true_threadsAllowMoveToExecutor() = runBlocking {
+        val moveSlot = slot<Boolean>()
+        val moveTask = SyncTask(
+            id = TASK_ID,
+            name = "test",
+            sourcePath = "/sdcard/DCIM",
+            remoteName = "gdrive",
+            remotePath = "/Backup",
+            direction = SyncDirection.UPLOAD,
+            intervalMinutes = null,
+            deleteSource = true,
+        )
+        coEvery { taskRepository.getTask(TASK_ID) } returns moveTask
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = moveTask.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), capture(moveSlot), any()) } returns
+            flow { emit(progress(transferred = 1)) }
+
+        buildWorker().doWork()
+
+        assertThat(moveSlot.captured).isTrue()
+    }
+
+    @Test
+    fun deleteSource_false_threadsAllowMoveFalseToExecutor() = runBlocking {
+        val moveSlot = slot<Boolean>()
+        val noMoveTask = task(direction = SyncDirection.UPLOAD)
+        coEvery { taskRepository.getTask(TASK_ID) } returns noMoveTask
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = noMoveTask.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), capture(moveSlot), any()) } returns
+            flow { emit(progress(transferred = 1)) }
+
+        buildWorker().doWork()
+
+        assertThat(moveSlot.captured).isFalse()
+    }
+
     private fun task(direction: SyncDirection) = SyncTask(
         id = TASK_ID,
         name = "test",

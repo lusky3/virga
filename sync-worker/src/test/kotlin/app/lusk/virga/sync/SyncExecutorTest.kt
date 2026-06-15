@@ -136,4 +136,18 @@ class SyncExecutorTest {
         SyncExecutor(engine).run(task(SyncDirection.BISYNC).copy(bufferSize = "32M"), metered = false).collect {}
         assertThat(engine.bisyncArgs!!.third.bufferSize).isEqualTo("32M")
     }
+
+    @Test
+    fun `allowMove true sets deleteSource on SyncOptions`() = runTest {
+        val engine = RecordingEngine()
+        SyncExecutor(engine).run(task(SyncDirection.UPLOAD), metered = false, allowMove = true).collect {}
+        assertThat(engine.syncArgs!!.third.deleteSource).isTrue()
+    }
+
+    @Test
+    fun `allowMove defaults to false so deleteSource is false`() = runTest {
+        val engine = RecordingEngine()
+        SyncExecutor(engine).run(task(SyncDirection.UPLOAD), metered = false).collect {}
+        assertThat(engine.syncArgs!!.third.deleteSource).isFalse()
+    }
 }

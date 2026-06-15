@@ -53,6 +53,9 @@ class DryRunUseCase @Inject constructor(
                 task = task,
                 metered = false,
                 allowDeletes = task.deleteExtraneous,
+                // Preview move semantics too, so a dry-run of a move task reports the
+                // source deletions it would make (rclone move honours --dry-run).
+                allowMove = task.deleteSource,
                 dryRun = true,
             )
                 .catch { error = it.message ?: "Preview failed" }

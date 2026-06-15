@@ -334,14 +334,19 @@ class RcloneEngineImpl @Inject constructor(
     override fun sync(source: String, dest: String, options: SyncOptions): Flow<SyncProgress> =
         // A one-way COPY/backup tolerates file-level errors (one unreadable source file
         // mustn't fail the whole run — rclone copies the rest and continues). A delete
-        // MIRROR must NOT: a mirror that proceeded despite unreadable source files could
-        // delete their cloud counterparts, so it keeps failing hard on any error.
-        runJobWithProgress(tolerateFileErrors = !options.deleteExtraneous) { d ->
+        // MIRROR or MOVE must NOT: a mirror that proceeded despite unreadable source files
+        // could delete their cloud counterparts; a move that proceeds despite errors would
+        // delete the source after only a partial transfer, risking data loss.
+        runJobWithProgress(tolerateFileErrors = !options.deleteExtraneous && !options.deleteSource) { d ->
             val (srcFs, dstFs) = when (options.direction) {
                 SyncDirection.DOWNLOAD -> dest to source
                 else -> source to dest
             }
-            val command = if (options.deleteExtraneous) "sync/sync" else "sync/copy"
+            val command = when {
+                options.deleteSource -> "sync/move"
+                options.deleteExtraneous -> "sync/sync"
+                else -> "sync/copy"
+            }
             rc(d, command, buildJsonObject {
                 put("srcFs", srcFs)
                 put("dstFs", dstFs)
