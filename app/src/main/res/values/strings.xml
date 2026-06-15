@@ -64,5 +64,5 @@
     <string name="lock_unlock_button">Unlock</string>
     <string name="lock_screen_icon_desc">Lock icon</string>
     <string name="biometric_prompt_title">Unlock Virga</string>
-    <string name="biometric_prompt_subtitle">Use your biometric or device PIN to unlock</string>
+    <string name="biometric_prompt_subtitle">Use your biometric or device credential to unlock</string>
 </resources>
