@@ -30,7 +30,7 @@ class DryRunUseCaseTest {
         val executor = mockk<SyncExecutor>()
         // Dry-run: rclone transfers nothing (transferred* = 0) but reports the
         // planned change-set in total* — the preview must read the totals.
-        every { executor.run(any(), any(), any(), any(), any()) } returns flowOf(
+        every { executor.run(any(), any(), any(), any(), any(), any()) } returns flowOf(
             SyncProgress(
                 bytesTransferred = 0L,
                 totalBytes = 2048L,
@@ -54,7 +54,7 @@ class DryRunUseCaseTest {
     fun preview_capturesError() = runBlocking {
         val engine = mockk<RcloneEngine>(relaxed = true)
         val executor = mockk<SyncExecutor>()
-        every { executor.run(any(), any(), any(), any(), any()) } returns flow {
+        every { executor.run(any(), any(), any(), any(), any(), any()) } returns flow {
             throw IllegalStateException("remote unreachable")
         }
 
@@ -79,7 +79,7 @@ class DryRunUseCaseTest {
         val engine = mockk<RcloneEngine>(relaxed = true)
         val executor = mockk<SyncExecutor>()
         // Emit two progress snapshots; only the last one should drive the result.
-        every { executor.run(any(), any(), any(), any(), any()) } returns flowOf(
+        every { executor.run(any(), any(), any(), any(), any(), any()) } returns flowOf(
             SyncProgress(
                 bytesTransferred = 0L,
                 totalBytes = 1024L,
@@ -112,7 +112,7 @@ class DryRunUseCaseTest {
     fun preview_mirrors_isTrueWhenTaskDeletesExtraneous() = runBlocking {
         val engine = mockk<RcloneEngine>(relaxed = true)
         val executor = mockk<SyncExecutor>()
-        every { executor.run(any(), any(), any(), any(), any()) } returns flowOf(
+        every { executor.run(any(), any(), any(), any(), any(), any()) } returns flowOf(
             SyncProgress(
                 bytesTransferred = 0L,
                 totalBytes = 512L,
@@ -135,7 +135,7 @@ class DryRunUseCaseTest {
     fun preview_mirrors_isFalseWhenTaskDoesNotDeleteExtraneous() = runBlocking {
         val engine = mockk<RcloneEngine>(relaxed = true)
         val executor = mockk<SyncExecutor>()
-        every { executor.run(any(), any(), any(), any(), any()) } returns flowOf(
+        every { executor.run(any(), any(), any(), any(), any(), any()) } returns flowOf(
             SyncProgress(
                 bytesTransferred = 0L,
                 totalBytes = 512L,

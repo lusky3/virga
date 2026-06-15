@@ -50,6 +50,8 @@ data class SyncTaskEntity(
     val checkers: Int = 8,
     val bufferSize: String = "16M",
     val deleteExtraneous: Boolean = false,
+    /** rclone `sync/move` — deletes source after a successful transfer; one-way only. */
+    val deleteSource: Boolean = false,
     val wifiOnly: Boolean = true,
     val requiresCharging: Boolean = false,
     val enabled: Boolean = true,

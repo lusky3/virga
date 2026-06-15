@@ -39,6 +39,13 @@ data class SyncOptions(
      * destructive, explicit opt-in, not a default.
      */
     val deleteExtraneous: Boolean = false,
+    /**
+     * When true, use rclone `sync/move`: files are transferred then deleted from the
+     * source. One-way only; mutually exclusive with [deleteExtraneous]. A move that
+     * encounters file errors MUST NOT tolerate them — deleting the source after a
+     * partial transfer risks data loss.
+     */
+    val deleteSource: Boolean = false,
     // WS3.1 Tier-2 options -------------------------------------------------------
     /** Rclone _config key "CheckSum": compare by hash rather than size+modtime. */
     val checksum: Boolean = false,

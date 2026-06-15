@@ -29,6 +29,10 @@ class SyncExecutor @Inject constructor(
      * syncs must default to additive — mirroring a few local files onto a
      * populated remote folder would delete everything else there.
      *
+     * @param allowMove when true, use rclone `sync/move`: files are transferred then
+     * deleted from the source. One-way only; mutually exclusive with [allowDeletes].
+     * Never applies to bisync. Forbidden for SAF (`content://`) sources.
+     *
      * @param resync requests rclone's bisync `--resync` to establish the baseline
      * listing. Required on a bisync task's first run — without it rclone aborts
      * with "cannot find prior listing". The worker passes true until the task has
@@ -38,6 +42,7 @@ class SyncExecutor @Inject constructor(
         task: SyncTask,
         metered: Boolean,
         allowDeletes: Boolean = false,
+        allowMove: Boolean = false,
         resync: Boolean = false,
         dryRun: Boolean = false,
     ): Flow<SyncProgress> {
@@ -76,6 +81,7 @@ class SyncExecutor @Inject constructor(
                     bufferSize = task.bufferSize,
                     filters = filters,
                     deleteExtraneous = allowDeletes,
+                    deleteSource = allowMove,
                     dryRun = dryRun,
                     checksum = task.checksum,
                     backupDir = task.backupDir,

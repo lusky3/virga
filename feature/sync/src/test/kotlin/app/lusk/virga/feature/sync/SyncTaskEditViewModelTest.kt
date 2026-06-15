@@ -487,6 +487,90 @@ class SyncTaskEditViewModelTest {
         coVerify(exactly = 1) { scheduler.schedule(match<SyncTask> { it.id == 55L }) }
     }
 
+    // --- move/mirror mutual exclusion (0.3.0) --------------------------------
+
+    @Test
+    fun enableDeleteSource_whenDeleteExtraneousWasTrue_clearsMirror() {
+        val vm = viewModel()
+        vm.update { it.copy(deleteExtraneous = true) }
+        vm.update { it.copy(deleteSource = true) }
+
+        assertThat(vm.form.value.deleteSource).isTrue()
+        assertThat(vm.form.value.deleteExtraneous).isFalse()
+    }
+
+    @Test
+    fun enableDeleteExtraneous_whenDeleteSourceWasTrue_clearsMove() {
+        val vm = viewModel()
+        vm.update { it.copy(deleteSource = true) }
+        vm.update { it.copy(deleteExtraneous = true) }
+
+        assertThat(vm.form.value.deleteExtraneous).isTrue()
+        assertThat(vm.form.value.deleteSource).isFalse()
+    }
+
+    @Test
+    fun save_normalizes_deleteSource_falseForSafSource() = runTest(mainDispatcher.dispatcher) {
+        coEvery { taskRepository.save(any()) } returns 1L
+        val vm = viewModel()
+        vm.update {
+            it.copy(
+                name = "Backup",
+                sourcePath = "content://tree/primary",
+                remoteName = "gdrive",
+                remotePath = "Backups",
+                deleteSource = true,
+            )
+        }
+
+        vm.save {}
+        advanceUntilIdle()
+
+        coVerify { taskRepository.save(match<SyncTask> { !it.deleteSource }) }
+    }
+
+    @Test
+    fun save_normalizes_deleteSource_falseForBisync() = runTest(mainDispatcher.dispatcher) {
+        coEvery { taskRepository.save(any()) } returns 1L
+        val vm = viewModel()
+        vm.update {
+            it.copy(
+                name = "Sync",
+                sourcePath = "/sdcard/DCIM",
+                remoteName = "gdrive",
+                remotePath = "Backups",
+                direction = SyncDirection.BISYNC,
+                deleteSource = true,
+            )
+        }
+
+        vm.save {}
+        advanceUntilIdle()
+
+        coVerify { taskRepository.save(match<SyncTask> { !it.deleteSource }) }
+    }
+
+    @Test
+    fun save_persists_deleteSource_trueForNonSafUpload() = runTest(mainDispatcher.dispatcher) {
+        coEvery { taskRepository.save(any()) } returns 1L
+        val vm = viewModel()
+        vm.update {
+            it.copy(
+                name = "Move",
+                sourcePath = "/sdcard/DCIM",
+                remoteName = "gdrive",
+                remotePath = "Backups",
+                direction = SyncDirection.UPLOAD,
+                deleteSource = true,
+            )
+        }
+
+        vm.save {}
+        advanceUntilIdle()
+
+        coVerify { taskRepository.save(match<SyncTask> { it.deleteSource }) }
+    }
+
     // --- helpers ------------------------------------------------------------
 
     private fun task(

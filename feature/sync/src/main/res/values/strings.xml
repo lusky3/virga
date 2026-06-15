@@ -259,6 +259,14 @@
     <string name="sync_edit_mirror_confirm_cancel">Cancel</string>
     <string name="sync_summary_mirror">Mirror</string>
     <string name="sync_summary_mirror_on">On - deletes extra files at the destination</string>
+    <!-- Move mode toggle (0.3.0, destructive) -->
+    <string name="sync_edit_move_label">Move (delete source after transfer)</string>
+    <string name="sync_edit_move_sub">Deletes each file from the source after it is successfully transferred.</string>
+    <string name="sync_edit_move_inert">Not available for picked folders or two-way sync.</string>
+    <string name="sync_edit_move_confirm_title">Enable Move mode?</string>
+    <string name="sync_edit_move_confirm_body">With Move on, the next sync will DELETE each file from the source folder after it is transferred. The source files will be permanently removed. This cannot be undone. Consider a dry-run first.</string>
+    <string name="sync_edit_move_confirm_enable">Enable Move</string>
+    <string name="sync_edit_move_confirm_cancel">Cancel</string>
     <!-- Log viewer (WS2.5) -->
     <string name="log_viewer_title">Run log</string>
     <string name="log_viewer_search">Search log</string>
