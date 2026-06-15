@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import app.lusk.virga.core.common.model.Remote
+import app.lusk.virga.core.common.validation.isValidRemoteName
 import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import app.lusk.virga.core.common.model.RemoteOption
 import app.lusk.virga.core.common.model.RemoteProvider
@@ -112,7 +113,7 @@ internal fun AddRemoteDialog(
         name.any { it in '\u0000'..'\u001F' } -> stringResource(R.string.remotes_add_name_control_chars)
         else -> null
     }
-    val nameValid = name.isBlank() || (name.length <= 64 && name.none { it in '\u0000'..'\u001F' } && name.trim().none { it == ':' || it == '/' })
+    val nameValid = name.isBlank() || isValidRemoteName(name)
     val nameUsable = name.isNotBlank() && nameValid
     var type by rememberSaveable { mutableStateOf("") }
     var params by remember { mutableStateOf("") }

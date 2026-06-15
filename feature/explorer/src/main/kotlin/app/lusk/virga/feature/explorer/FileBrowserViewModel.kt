@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.common.error.toUserMessage
+import app.lusk.virga.core.common.validation.isValidFolderName
 import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.data.FileBrowserRepository
 import app.lusk.virga.core.data.RemoteFolderPickStore
@@ -106,11 +107,7 @@ class FileBrowserViewModel @Inject constructor(
     }
 
     /** Name is non-empty, not `.`/`..`, within length, and free of separators/control chars. */
-    private fun isStructurallyValidFolderName(trimmed: String): Boolean {
-        if (trimmed.isEmpty() || trimmed == "." || trimmed == "..") return false
-        if (trimmed.length > MAX_FOLDER_NAME_LENGTH) return false
-        return trimmed.none { it == '/' || it == '\\' || it.isISOControl() }
-    }
+    private fun isStructurallyValidFolderName(trimmed: String): Boolean = isValidFolderName(trimmed)
 
     /** L3: the in-flight folder creation, cancelled on dismiss/relaunch. */
     private var createFolderJob: kotlinx.coroutines.Job? = null
@@ -272,6 +269,5 @@ class FileBrowserViewModel @Inject constructor(
 
     private companion object {
         const val MAX_ENTRIES = 2_000
-        const val MAX_FOLDER_NAME_LENGTH = 255
     }
 }

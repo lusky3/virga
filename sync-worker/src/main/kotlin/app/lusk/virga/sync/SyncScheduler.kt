@@ -17,6 +17,7 @@ import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.first
 
 /**
  * Schedules sync tasks with WorkManager. Periodic tasks honour the 15-minute
@@ -43,6 +44,17 @@ class SyncScheduler @Inject constructor(
             ExistingWorkPolicy.KEEP,
             request,
         )
+    }
+
+    /**
+     * Enqueues an immediate one-time sync for every enabled task and returns how
+     * many were enqueued, so a caller can message the user off the same single
+     * read (no second flow collection that could disagree with what ran).
+     */
+    suspend fun syncAllEnabled(): Int {
+        val enabled = taskRepository.tasks.first().filter { it.enabled }
+        enabled.forEach { syncNow(it.id) }
+        return enabled.size
     }
 
     /**

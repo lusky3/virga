@@ -9,7 +9,6 @@ import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -38,11 +37,8 @@ class SyncTileService : TileService() {
                 appContext,
                 VirgaWidgetEntryPoint::class.java,
             )
-            val repo = entryPoint.syncTaskRepository()
             val scheduler = entryPoint.syncScheduler()
-            val enabled = runCatching { repo.tasks.first().filter { it.enabled } }
-                .getOrDefault(emptyList())
-            enabled.forEach { scheduler.syncNow(it.id) }
+            runCatching { scheduler.syncAllEnabled() }
         }
     }
 

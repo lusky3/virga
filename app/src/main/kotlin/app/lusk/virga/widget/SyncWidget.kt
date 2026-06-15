@@ -104,12 +104,8 @@ class SyncAllActionCallback : ActionCallback {
             context.applicationContext,
             VirgaWidgetEntryPoint::class.java,
         )
-        val repo = entryPoint.syncTaskRepository()
         val scheduler = entryPoint.syncScheduler()
-
-        val enabled = runCatching { repo.tasks.first().filter { it.enabled } }
-            .getOrDefault(emptyList())
-        enabled.forEach { scheduler.syncNow(it.id) }
+        runCatching { scheduler.syncAllEnabled() }
     }
 }
 

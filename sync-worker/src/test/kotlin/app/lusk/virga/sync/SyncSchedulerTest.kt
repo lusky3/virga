@@ -102,6 +102,29 @@ class SyncSchedulerTest {
     }
 
     @Test
+    fun syncAllEnabled_enqueuesOnlyEnabledTasks() = runBlocking {
+        // Stub the repository's tasks flow with two enabled tasks and one disabled.
+        coEvery { dao.observeAll() } returns flowOf(
+            listOf(
+                entity(id = 20, enabled = true),
+                entity(id = 21, enabled = true),
+                entity(id = 22, enabled = false),
+            ),
+        )
+        // Rebuild repository and scheduler so they see the new observeAll() stub.
+        val localRepo = SyncTaskRepository(dao)
+        val localScheduler = SyncScheduler(context, localRepo)
+
+        localScheduler.syncAllEnabled()
+
+        // Enabled tasks must have one-time "_now" work enqueued.
+        assertThat(workManager.getWorkInfosForUniqueWork("sync_task_20_now").get()).hasSize(1)
+        assertThat(workManager.getWorkInfosForUniqueWork("sync_task_21_now").get()).hasSize(1)
+        // Disabled task must NOT have been enqueued.
+        assertThat(workManager.getWorkInfosForUniqueWork("sync_task_22_now").get()).isEmpty()
+    }
+
+    @Test
     fun rescheduleAll_registersEveryScheduledTask() = runBlocking {
         // dao.getScheduled() returns Room entities; the repository maps them to
         // domain SyncTask before the scheduler sees them.
@@ -130,6 +153,18 @@ class SyncSchedulerTest {
         direction = SyncDirection.UPLOAD,
         intervalMinutes = intervalMinutes,
         wifiOnly = wifiOnly,
+        enabled = enabled,
+    )
+
+    /** Minimal entity for stubbing observeAll(); enabled flag is explicit. */
+    private fun entity(id: Long, enabled: Boolean) = SyncTaskEntity(
+        id = id,
+        name = "task-$id",
+        sourcePath = "/storage/emulated/0/DCIM",
+        remoteName = "gdrive",
+        remotePath = "/Backup",
+        direction = SyncDirection.UPLOAD,
+        intervalMinutes = 60,
         enabled = enabled,
     )
 
