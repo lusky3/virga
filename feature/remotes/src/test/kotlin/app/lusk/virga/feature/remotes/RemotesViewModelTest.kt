@@ -2098,6 +2098,25 @@ class RemotesViewModelTest {
     }
 
     @Test
+    fun `reauthRemote ignores a second tap while already in progress`() = runTest(mainDispatcher.dispatcher) {
+        remotesFlow.value = listOf(Remote(name = "gdrive", type = "drive"))
+        every { tokenExchanger.authorizeUrl(any()) } returns "https://accounts.google.example/auth?state=x"
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.reauthRemote("gdrive")
+        advanceUntilIdle()
+        // Second tap before the redirect arrives must short-circuit — no second OAuth launch.
+        vm.reauthRemote("gdrive")
+        advanceUntilIdle()
+
+        verify(exactly = 1) { tokenExchanger.authorizeUrl(any()) }
+        assertThat(vm.uiState.value.reauthInProgress).contains("gdrive")
+        collector.cancel()
+    }
+
+    @Test
     fun `signOutRemote calls updateRemote with empty token then setNeedsReauth true`() =
         runTest(mainDispatcher.dispatcher) {
             coEvery { repository.updateRemote("gdrive", mapOf("token" to ""), emptySet()) } returns

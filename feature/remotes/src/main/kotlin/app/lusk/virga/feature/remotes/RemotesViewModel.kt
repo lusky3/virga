@@ -532,6 +532,10 @@ class RemotesViewModel @Inject constructor(
      * remotes surface a generic error and abort.
      */
     fun reauthRemote(remoteName: String) {
+        // Re-entry guard: a second tap before the redirect arrives would call
+        // systemOAuth.start() again, opening another browser tab and orphaning the
+        // first pending OAuth state. Mirrors submitRename's renameInFlight guard.
+        if (remoteName in transient.value.reauthInProgress) return
         val remote = uiState.value.remotes.firstOrNull { it.name == remoteName } ?: return
         val provider = OAuthProviders.All.firstOrNull {
             it.type.equals(remote.type, ignoreCase = true)
