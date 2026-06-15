@@ -70,6 +70,8 @@ class SyncExecutorTest {
         }
         override suspend fun dedupe(remoteName: String, dedupeMode: String): Result<Unit> =
             error("unused")
+        override suspend fun transferredFiles(group: String): List<app.lusk.virga.core.rclone.TransferredFile> =
+            emptyList()
     }
 
     private fun task(

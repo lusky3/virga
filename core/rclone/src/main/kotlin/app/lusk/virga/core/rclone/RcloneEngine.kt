@@ -157,6 +157,23 @@ interface RcloneEngine {
     fun check(source: String, dest: String, options: SyncOptions): Flow<SyncProgress>
 
     /**
+     * Returns the transferred files for the run identified by [group] (the rclone
+     * stats group "job/<id>", carried on the terminal [SyncProgress.statsGroup]).
+     * Each entry reflects one transfer attempt; entries with a non-empty
+     * [TransferredFile.error] are the failures. Scoping by [group] is REQUIRED: the
+     * daemon is shared across concurrent "sync all" runs and accumulates every job's
+     * transfers, so an unscoped query would mis-attribute other runs' failures.
+     * Throws [app.lusk.virga.core.common.error.VirgaError] on failure, consistent with
+     * the throw-on-failure convention of this interface.
+     *
+     * RC endpoint: `core/transferred` with a `group` param (rclone ≥ 1.50). Returns
+     * `{"transferred": [{"name": "...", "error": "...", "bytes": N, ...}, ...]}`.
+     * Entries are returned for ALL transfers (success + failure); callers filter to
+     * non-empty error. Entries with a missing or blank name are skipped defensively.
+     */
+    suspend fun transferredFiles(group: String): List<TransferredFile>
+
+    /**
      * Finds and removes duplicate files on [remoteName] by hash.
      *
      * rclone exposes `dedupe` only as a CLI command — there is no `operations/dedupe`

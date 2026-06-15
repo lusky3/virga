@@ -124,6 +124,10 @@ open class SyncWorker @AssistedInject constructor(
         var last: SyncProgress? = null
         var lastNotifiedPct = -1
         var failure: Throwable? = null
+        // Captured inside the daemon lease (after the sync flow) when errorCount > 0.
+        // Capped at FAILED_FILES_CAP entries (100) to bound storage. Stored as
+        // newline-joined "path\terror" lines for persistence in SyncRunEntity.failedFiles.
+        var failedFiles = ""
         // Reference-counted daemon lease: a concurrent sync ("sync all" / co-scheduled
         // tasks) must not have its daemon torn down by THIS worker's cleanup. Released
         // only if successfully acquired.
@@ -211,6 +215,34 @@ open class SyncWorker @AssistedInject constructor(
                     }
                 }
             }
+            // Capture per-file failures while the daemon lease is still held. Only
+            // attempted on a partial-success run (errorCount > 0, no fatal failure):
+            // a fatal abort has no meaningful per-file list. Cap at FAILED_FILES_CAP
+            // (100) to bound DB storage; log a note if the list was truncated.
+            val errorCount = last?.errors ?: 0
+            val statsGroup = last?.statsGroup
+            if (failure == null && errorCount > 0 && statsGroup != null) {
+                runCatching { engine.transferredFiles(statsGroup) }.getOrNull()
+                    ?.filter { it.error.isNotBlank() }
+                    ?.let { failures ->
+                        val capped = if (failures.size > FAILED_FILES_CAP) {
+                            log.line("Per-file failure list truncated to $FAILED_FILES_CAP entries (${failures.size} total).")
+                            failures.take(FAILED_FILES_CAP)
+                        } else failures
+                        // Sanitise the tab field-separator and newline row-separator out of
+                        // both fields: rclone errors are often multi-line, and a raw newline
+                        // would split one entry across rows (the continuation has no tab and
+                        // is dropped on parse). Keeps exactly one "path\terror" per line.
+                        failedFiles = capped.joinToString("\n") {
+                            "${it.name.sanitiseRow()}\t${it.error.sanitiseRow()}"
+                        }
+                        if (failedFiles.isNotEmpty()) {
+                            log.line("Failed files (${capped.size}):")
+                            capped.forEach { log.line("  ${it.name}: ${it.error}") }
+                        }
+                    }
+            }
+
             // For staged downloads, copy rclone's output back into the SAF tree
             // BEFORE the finally runs staging.cleanup() (which recursively deletes
             // the staged dir). Doing it in the epilogue let cleanup wipe the dir
@@ -261,18 +293,18 @@ open class SyncWorker @AssistedInject constructor(
             // transferred) is a PARTIAL SUCCESS: rclone copied the rest and continued, so
             // the run is recorded SUCCESS with a non-zero errorCount — not FAILED. rclone's
             // RC stats give an error COUNT, not a per-file list, so the summary is
-            // count-based; per-file enumeration would require capturing rclone's log stream
-            // (out of scope). The mirror/bisync paths still fail hard (handled upstream).
-            val errorCount = last?.errors ?: 0
-            if (errorCount > 0) {
+            // count-based; the per-file list is captured above (failedFiles) from
+            // core/transferred. The mirror/bisync paths still fail hard (handled upstream).
+            val finalErrorCount = last?.errors ?: 0
+            if (finalErrorCount > 0) {
                 log.line(
                     "Completed with errors: ${last?.transferredFiles ?: 0} transferred, " +
-                        "$errorCount file(s) could not be read/transferred — see entries above.",
+                        "$finalErrorCount file(s) could not be read/transferred — see entries above.",
                 )
             } else {
                 log.line("Completed: ${last?.transferredFiles ?: 0} file(s) transferred")
             }
-            finishSucceeded(runId, last, log.path.takeIf { log.flush() }, task.direction, runStartMs)
+            finishSucceeded(runId, last, log.path.takeIf { log.flush() }, task.direction, runStartMs, failedFiles)
             // After a bisync, scan the destination for rclone conflict files
             // and queue them for user resolution. detectFor → engine.listDir needs
             // a daemon; the worker's own lease was already released in the finally
@@ -304,10 +336,10 @@ open class SyncWorker @AssistedInject constructor(
             // (errors>0), the error builder instead — it carries the error count and a Retry
             // action, so the user isn't told the backup was clean when some files were skipped.
             runCatching {
-                val notification = if (errorCount > 0) {
+                val notification = if (finalErrorCount > 0) {
                     notifications.error(
                         task.name,
-                        "Completed with $errorCount error(s) — some files couldn't be read or transferred.",
+                        "Completed with $finalErrorCount error(s) — some files couldn't be read or transferred.",
                         taskId,
                     )
                 } else {
@@ -364,6 +396,7 @@ open class SyncWorker @AssistedInject constructor(
         logPath: String? = null,
         direction: SyncDirection,
         runStartMs: Long,
+        failedFiles: String = "",
     ) {
         historyRepository.finishRun(
             runId = runId,
@@ -372,6 +405,7 @@ open class SyncWorker @AssistedInject constructor(
             bytesTransferred = progress?.bytesTransferred ?: 0L,
             errorCount = progress?.errors ?: 0,
             logPath = logPath,
+            failedFiles = failedFiles,
         )
         val finishedAt = System.currentTimeMillis()
         runCatching {
@@ -503,5 +537,12 @@ open class SyncWorker @AssistedInject constructor(
         private const val TAG = "SyncWorker"
         // Retain ~30 days of sync history; older runs are pruned each invocation.
         private const val RUN_RETENTION_MS = 30L * 24 * 60 * 60 * 1000
+        // Maximum number of per-file failure entries stored per run. Bounded to prevent
+        // a pathological run (many thousands of errors) from filling internal storage.
+        internal const val FAILED_FILES_CAP = 100
     }
 }
+
+/** Collapses tab/newline to spaces so a value can't break the "path\terror"-per-line
+ *  encoding of [SyncRunEntity.failedFiles]. */
+private fun String.sanitiseRow(): String = replace('\t', ' ').replace('\n', ' ').replace('\r', ' ')

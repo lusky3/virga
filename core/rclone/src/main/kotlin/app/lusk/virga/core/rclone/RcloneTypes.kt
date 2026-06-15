@@ -129,3 +129,13 @@ data class BisyncOptions(
 data class RcloneConfig(
     val remotes: Map<String, String>,
 )
+
+/**
+ * A single file transfer entry from rclone's `core/transferred` RC endpoint.
+ * [name] is the file path relative to the source/destination root.
+ * [error] is the error string reported by rclone; empty when the transfer succeeded.
+ */
+data class TransferredFile(
+    val name: String,
+    val error: String,
+)

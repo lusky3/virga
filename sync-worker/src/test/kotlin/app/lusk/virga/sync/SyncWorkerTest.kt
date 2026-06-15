@@ -130,7 +130,7 @@ class SyncWorkerTest {
             staging.writeBack(staged)
             staging.cleanup(staged)
         }
-        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.SUCCESS, any(), any(), any(), any(), any()) }
+        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.SUCCESS, any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -151,7 +151,7 @@ class SyncWorkerTest {
         val result = buildWorker().doWork()
 
         assertThat(result).isEqualTo(ListenableWorker.Result.failure())
-        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any()) }
+        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any()) }
         // Cleanup still runs even though write-back failed.
         coVerify { staging.cleanup(staged) }
     }
@@ -206,10 +206,10 @@ class SyncWorkerTest {
         // Recorded SUCCESS (with errorCount=2), not retried, not failed.
         assertThat(result).isEqualTo(ListenableWorker.Result.success())
         coVerify {
-            historyRepository.finishRun(RUN_ID, SyncStatus.SUCCESS, 5, any(), 2, any(), any())
+            historyRepository.finishRun(RUN_ID, SyncStatus.SUCCESS, 5, any(), 2, any(), any(), any())
         }
         coVerify(exactly = 0) {
-            historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any())
+            historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -311,7 +311,7 @@ class SyncWorkerTest {
         val result = buildWorker().doWork()
 
         assertThat(result).isEqualTo(ListenableWorker.Result.retry())
-        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any()) }
+        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -338,7 +338,89 @@ class SyncWorkerTest {
         // Lease released under NonCancellable so it isn't itself cancelled.
         coVerify { engine.releaseDaemon() }
         // Run finalized CANCELLED rather than left stuck RUNNING.
-        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.CANCELLED, any(), any(), any(), any(), any()) }
+        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.CANCELLED, any(), any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun errorfulRun_capturesFailedFiles_andThreadsThemIntoFinishRun() = runBlocking {
+        // B9: when errors>0 and no hard failure, the worker queries transferredFiles(),
+        // filters to non-blank error entries, joins them as "path\terror" and passes
+        // the result into finishRun(failedFiles=...).
+        val task = task(direction = SyncDirection.UPLOAD)
+        coEvery { taskRepository.getTask(TASK_ID) } returns task
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = task.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), any(), any()) } returns
+            flow { emit(progress(transferred = 3, errors = 1)) }
+        coEvery { engine.transferredFiles("job/1") } returns listOf(
+            app.lusk.virga.core.rclone.TransferredFile(name = "docs/a.txt", error = "permission denied"),
+            app.lusk.virga.core.rclone.TransferredFile(name = "docs/b.txt", error = ""),
+        )
+
+        val failedFilesSlot = slot<String>()
+        coEvery {
+            historyRepository.finishRun(
+                any(), any(), any(), any(), any(), any(), any(), capture(failedFilesSlot),
+            )
+        } just Runs
+
+        buildWorker().doWork()
+
+        // Only the entry with a non-blank error is captured.
+        assertThat(failedFilesSlot.captured).isEqualTo("docs/a.txt\tpermission denied")
+    }
+
+    @Test
+    fun errorfulRun_sanitisesTabAndNewlineInFailedFiles() = runBlocking {
+        // B9: rclone errors are often multi-line. A raw newline/tab in a path or error
+        // must be collapsed so each entry stays on exactly one "path\terror" line.
+        val task = task(direction = SyncDirection.UPLOAD)
+        coEvery { taskRepository.getTask(TASK_ID) } returns task
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = task.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), any(), any()) } returns
+            flow { emit(progress(transferred = 1, errors = 1)) }
+        coEvery { engine.transferredFiles("job/1") } returns listOf(
+            app.lusk.virga.core.rclone.TransferredFile(
+                name = "docs/a.txt",
+                error = "Failed to copy:\n  upstream timeout\tretry later",
+            ),
+        )
+        val failedFilesSlot = slot<String>()
+        coEvery {
+            historyRepository.finishRun(any(), any(), any(), any(), any(), any(), any(), capture(failedFilesSlot))
+        } just Runs
+
+        buildWorker().doWork()
+
+        // Exactly one line; no embedded newline/tab beyond the single field separator.
+        val captured = failedFilesSlot.captured
+        assertThat(captured.lines()).hasSize(1)
+        assertThat(captured).isEqualTo("docs/a.txt\tFailed to copy:   upstream timeout retry later")
+    }
+
+    @Test
+    fun cleanRun_doesNotCallTransferredFiles_andPassesEmptyFailedFiles() = runBlocking {
+        // B9: when errors==0 the worker must NOT call transferredFiles (skip the RC
+        // round-trip) and must pass failedFiles="" to finishRun.
+        val task = task(direction = SyncDirection.UPLOAD)
+        coEvery { taskRepository.getTask(TASK_ID) } returns task
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = task.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), any(), any()) } returns
+            flow { emit(progress(transferred = 2, errors = 0)) }
+
+        val failedFilesSlot = slot<String>()
+        coEvery {
+            historyRepository.finishRun(
+                any(), any(), any(), any(), any(), any(), any(), capture(failedFilesSlot),
+            )
+        } just Runs
+
+        buildWorker().doWork()
+
+        coVerify(exactly = 0) { engine.transferredFiles(any()) }
+        assertThat(failedFilesSlot.captured).isEmpty()
     }
 
     @Test
@@ -452,6 +534,9 @@ class SyncWorkerTest {
         totalFiles = transferred,
         etaSeconds = null,
         errors = errors,
+        // Terminal emissions carry the run's stats group (job/<id>); the worker needs
+        // it to scope the per-file failure query.
+        statsGroup = "job/1",
     )
 
     private companion object {

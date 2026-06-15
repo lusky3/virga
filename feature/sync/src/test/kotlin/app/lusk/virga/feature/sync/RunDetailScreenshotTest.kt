@@ -101,4 +101,50 @@ class RunDetailScreenshotTest {
         composeRule.waitForIdle()
         composeRule.onRoot().captureRoboImage()
     }
+
+    @Test
+    fun runDetailScreen_withFailedFiles() {
+        // B9: verifies that the "Failed files" section renders when SyncRun.failedFiles
+        // is non-empty. Each entry is a "path\terror" line; the section must show the
+        // path and the error message under the FailedFilesSection composable.
+        val run = SyncRun(
+            id = 11L,
+            taskId = 1L,
+            startedAtEpochMs = 0L,
+            endedAtEpochMs = 30_000L,
+            status = SyncStatus.SUCCESS,
+            filesTransferred = 4,
+            bytesTransferred = 1_048_576L,
+            errorCount = 2,
+            failedFiles = "docs/report.pdf\tpermission denied\nphotos/img.jpg\ttimeout",
+        )
+        val historyRepo: SyncHistoryRepository = mockk(relaxed = true) {
+            every { observeRun(any()) } returns flowOf(run)
+        }
+        val taskRepo: SyncTaskRepository = mockk(relaxed = true) {
+            every { task(any()) } returns flowOf(
+                SyncTask(
+                    id = 1L,
+                    name = "Docs backup",
+                    sourcePath = "/sdcard/Docs",
+                    remoteName = "gdrive",
+                    remotePath = "/Backup/Docs",
+                    direction = SyncDirection.UPLOAD,
+                    intervalMinutes = null,
+                ),
+            )
+        }
+        val viewModel = RunDetailViewModel(historyRepo, taskRepo)
+        composeRule.setContent {
+            VirgaTheme {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        RunDetailScreen(runId = 11L, onBack = {}, viewModel = viewModel)
+                    }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage()
+    }
 }

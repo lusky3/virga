@@ -159,4 +159,9 @@ data class SyncRunEntity(
     val errorMessage: String? = null,
     /** Path to the captured rclone verbose log for this run, if any. */
     val logPath: String? = null,
+    /**
+     * Newline-joined per-file failures: each line is "path\terror" (tab-separated).
+     * Capped at 100 entries at capture time. Empty string when no file-level failures.
+     */
+    val failedFiles: String = "",
 )
