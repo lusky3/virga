@@ -259,6 +259,15 @@
     <string name="sync_edit_mirror_confirm_cancel">Cancel</string>
     <string name="sync_summary_mirror">Mirror</string>
     <string name="sync_summary_mirror_on">On - deletes extra files at the destination</string>
+    <!-- Size / age filters (B5) -->
+    <string name="sync_edit_min_size">Min file size</string>
+    <string name="sync_edit_max_size">Max file size</string>
+    <string name="sync_edit_min_age">Min file age</string>
+    <string name="sync_edit_max_age">Max file age</string>
+    <string name="sync_edit_size_placeholder">e.g. 10M or 1.5G</string>
+    <string name="sync_edit_age_placeholder">e.g. 30d or 1h30m</string>
+    <string name="sync_edit_size_hint">Leave blank to skip this limit. Rclone SizeSuffix format (k/M/G/T/P or Ki/Mi/…).</string>
+    <string name="sync_edit_age_hint">Leave blank to skip this limit. Rclone Duration format (ms/s/m/h/d/w/M/y).</string>
     <!-- Move mode toggle (0.3.0, destructive) -->
     <string name="sync_edit_move_label">Move (delete source after transfer)</string>
     <string name="sync_edit_move_sub">Deletes each file from the source after it is successfully transferred.</string>

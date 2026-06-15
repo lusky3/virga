@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 2,
-    "identityHash": "0c0fbecd033b050ccf232164d40734d7",
+    "identityHash": "114535a26427323642084b1fb537f84b",
     "entities": [
       {
         "tableName": "remotes",
@@ -30,7 +30,7 @@
       },
       {
         "tableName": "sync_tasks",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `sourcePath` TEXT NOT NULL, `remoteName` TEXT NOT NULL, `remotePath` TEXT NOT NULL, `direction` TEXT NOT NULL, `intervalMinutes` INTEGER, `scheduleDaysMask` INTEGER NOT NULL, `scheduleHour` INTEGER NOT NULL, `scheduleMinute` INTEGER NOT NULL, `filters` TEXT NOT NULL, `bwLimitWifi` TEXT, `bwLimitMetered` TEXT, `transfers` INTEGER NOT NULL, `checkers` INTEGER NOT NULL, `bufferSize` TEXT NOT NULL, `deleteExtraneous` INTEGER NOT NULL, `deleteSource` INTEGER NOT NULL, `wifiOnly` INTEGER NOT NULL, `requiresCharging` INTEGER NOT NULL, `enabled` INTEGER NOT NULL, `createdAtEpochMs` INTEGER NOT NULL, `checksum` INTEGER NOT NULL, `backupDir` TEXT, `maxDelete` INTEGER, `extraConfig` TEXT NOT NULL)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `sourcePath` TEXT NOT NULL, `remoteName` TEXT NOT NULL, `remotePath` TEXT NOT NULL, `direction` TEXT NOT NULL, `intervalMinutes` INTEGER, `scheduleDaysMask` INTEGER NOT NULL, `scheduleHour` INTEGER NOT NULL, `scheduleMinute` INTEGER NOT NULL, `filters` TEXT NOT NULL, `minSize` TEXT NOT NULL, `maxSize` TEXT NOT NULL, `minAge` TEXT NOT NULL, `maxAge` TEXT NOT NULL, `bwLimitWifi` TEXT, `bwLimitMetered` TEXT, `transfers` INTEGER NOT NULL, `checkers` INTEGER NOT NULL, `bufferSize` TEXT NOT NULL, `deleteExtraneous` INTEGER NOT NULL, `deleteSource` INTEGER NOT NULL, `wifiOnly` INTEGER NOT NULL, `requiresCharging` INTEGER NOT NULL, `enabled` INTEGER NOT NULL, `createdAtEpochMs` INTEGER NOT NULL, `checksum` INTEGER NOT NULL, `backupDir` TEXT, `maxDelete` INTEGER, `extraConfig` TEXT NOT NULL)",
         "fields": [
           {
             "fieldPath": "id",
@@ -94,6 +94,30 @@
           {
             "fieldPath": "filters",
             "columnName": "filters",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "minSize",
+            "columnName": "minSize",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxSize",
+            "columnName": "maxSize",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "minAge",
+            "columnName": "minAge",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxAge",
+            "columnName": "maxAge",
             "affinity": "TEXT",
             "notNull": true
           },
@@ -502,7 +526,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '0c0fbecd033b050ccf232164d40734d7')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '114535a26427323642084b1fb537f84b')"
     ]
   }
 }

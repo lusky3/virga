@@ -57,6 +57,12 @@ data class SyncTaskForm(
     val checkers: Int = 8,
     /** rclone FilterRule lines (newline-joined): "+ pattern" / "- pattern". */
     val filters: String = "",
+    /** rclone --min-size / --max-size (SizeSuffix, e.g. "10M", "1.5G"); blank = unset. */
+    val minSize: String = "",
+    val maxSize: String = "",
+    /** rclone --min-age / --max-age (Duration, e.g. "30d", "1h30m"); blank = unset. */
+    val minAge: String = "",
+    val maxAge: String = "",
     val deleteExtraneous: Boolean = false,
     val deleteSource: Boolean = false,
     // WS3.1 Tier-2 options -------------------------------------------------------
@@ -76,6 +82,10 @@ data class SyncTaskForm(
     val directionError: String? = null,
     /** Null when valid; non-null describes the first offending line. */
     val extraConfigError: String? = null,
+    val minSizeError: String? = null,
+    val maxSizeError: String? = null,
+    val minAgeError: String? = null,
+    val maxAgeError: String? = null,
     // Touched flags — errors only shown after field blur or failed save attempt
     val nameTouched: Boolean = false,
     val sourcePathTouched: Boolean = false,
@@ -116,7 +126,11 @@ data class SyncTaskForm(
             customIntervalError == null &&
             scheduleDaysError == null &&
             directionError == null &&
-            extraConfigError == null
+            extraConfigError == null &&
+            minSizeError == null &&
+            maxSizeError == null &&
+            minAgeError == null &&
+            maxAgeError == null
 }
 
 @HiltViewModel
@@ -211,6 +225,10 @@ class SyncTaskEditViewModel @Inject constructor(
                         transfers = task.transfers,
                         checkers = task.checkers,
                         filters = task.filters,
+                        minSize = task.minSize,
+                        maxSize = task.maxSize,
+                        minAge = task.minAge,
+                        maxAge = task.maxAge,
                         deleteExtraneous = task.deleteExtraneous,
                         deleteSource = task.deleteSource,
                         checksum = task.checksum,
@@ -282,6 +300,10 @@ class SyncTaskEditViewModel @Inject constructor(
                 BISYNC_SAF_ERROR
             } else null,
             extraConfigError = ExtraConfigParser.firstError(next.extraConfig),
+            minSizeError = validateSizeSuffix(next.minSize),
+            maxSizeError = validateSizeSuffix(next.maxSize),
+            minAgeError = validateDuration(next.minAge),
+            maxAgeError = validateDuration(next.maxAge),
         )
     }
 
@@ -330,6 +352,10 @@ class SyncTaskEditViewModel @Inject constructor(
                 transfers = form.transfers,
                 checkers = form.checkers,
                 filters = form.filters,
+                minSize = form.minSize.trim(),
+                maxSize = form.maxSize.trim(),
+                minAge = form.minAge.trim(),
+                maxAge = form.maxAge.trim(),
                 // Normalize Mirror to match the UI: it's inert (write-back never deletes)
                 // for a DOWNLOAD into a SAF folder, so don't persist a misleading `true`
                 // there. Mirrors the disabled-toggle condition in SyncTaskEditScreen.
@@ -359,6 +385,16 @@ class SyncTaskEditViewModel @Inject constructor(
         private val PRESET_INTERVAL_MINUTES = setOf(null, 15, 30, 60, 360, 720, 1440)
         private val BW_LIMIT_REGEX = Regex("""^\d+[KMGTkmgt]?(:\d+[KMGTkmgt]?)?$""")
         private val BUFFER_SIZE_REGEX = Regex("""^\d+[KMGkmg]?$""")
+        // rclone SizeSuffix: optional decimal number followed by an optional unit.
+        // Accepts: plain bytes (e.g. "1024"), SI (e.g. "10M", "1.5G"), IEC (e.g. "16Mi").
+        private val SIZE_SUFFIX_REGEX = Regex(
+            """^\d+(\.\d+)?\s*([kKmMgGtTpP][iI]?[bB]?)?$""",
+        )
+        // rclone Duration: one or more <number><unit> pairs.
+        // Units: ms, s, m, h, d, w, M, y (case-sensitive in rclone, accept all here).
+        private val DURATION_REGEX = Regex(
+            """^(\d+(\.\d+)?\s*(ms|[smhdwMy]))+$""",
+        )
 
         fun validateBwLimit(value: String): String? {
             val trimmed = value.trim()
@@ -374,6 +410,22 @@ class SyncTaskEditViewModel @Inject constructor(
                 !BUFFER_SIZE_REGEX.matches(trimmed) -> "Invalid format — use e.g. 16M or 256K"
                 else -> null
             }
+        }
+
+        /** Accepts blank (unset) or a valid rclone SizeSuffix (e.g. "10M", "1.5G", "512"). */
+        fun validateSizeSuffix(value: String): String? {
+            val trimmed = value.trim()
+            return if (trimmed.isNotBlank() && !SIZE_SUFFIX_REGEX.matches(trimmed)) {
+                "Invalid size — use e.g. 10M, 1.5G, or 512"
+            } else null
+        }
+
+        /** Accepts blank (unset) or a valid rclone Duration (e.g. "30d", "1h30m", "100ms"). */
+        fun validateDuration(value: String): String? {
+            val trimmed = value.trim()
+            return if (trimmed.isNotBlank() && !DURATION_REGEX.matches(trimmed)) {
+                "Invalid age — use e.g. 30d, 1h30m, or 100ms"
+            } else null
         }
     }
 }

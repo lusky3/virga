@@ -150,4 +150,50 @@ class SyncExecutorTest {
         SyncExecutor(engine).run(task(SyncDirection.UPLOAD), metered = false).collect {}
         assertThat(engine.syncArgs!!.third.deleteSource).isFalse()
     }
+
+    // --- B5: size / age filter threading ------------------------------------
+
+    @Test
+    fun `size and age fields are threaded into SyncOptions for one-way sync`() = runTest {
+        val engine = RecordingEngine()
+        val t = task(SyncDirection.UPLOAD).copy(
+            minSize = "10M",
+            maxSize = "2G",
+            minAge = "30d",
+            maxAge = "1y",
+        )
+        SyncExecutor(engine).run(t, metered = false).collect {}
+
+        val opts = engine.syncArgs!!.third
+        assertThat(opts.minSize).isEqualTo("10M")
+        assertThat(opts.maxSize).isEqualTo("2G")
+        assertThat(opts.minAge).isEqualTo("30d")
+        assertThat(opts.maxAge).isEqualTo("1y")
+    }
+
+    @Test
+    fun `size and age fields are threaded into BisyncOptions`() = runTest {
+        val engine = RecordingEngine()
+        val t = task(SyncDirection.BISYNC).copy(minSize = "512", maxAge = "7d")
+        SyncExecutor(engine).run(t, metered = false).collect {}
+
+        val opts = engine.bisyncArgs!!.third
+        assertThat(opts.minSize).isEqualTo("512")
+        assertThat(opts.maxAge).isEqualTo("7d")
+        assertThat(opts.maxSize).isNull()
+        assertThat(opts.minAge).isNull()
+    }
+
+    @Test
+    fun `blank size-age fields become null in SyncOptions`() = runTest {
+        val engine = RecordingEngine()
+        // Default task has empty string fields.
+        SyncExecutor(engine).run(task(SyncDirection.UPLOAD), metered = false).collect {}
+
+        val opts = engine.syncArgs!!.third
+        assertThat(opts.minSize).isNull()
+        assertThat(opts.maxSize).isNull()
+        assertThat(opts.minAge).isNull()
+        assertThat(opts.maxAge).isNull()
+    }
 }

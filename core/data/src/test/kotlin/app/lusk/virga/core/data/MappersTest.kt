@@ -32,6 +32,10 @@ class MappersTest {
             scheduleHour = 14,
             scheduleMinute = 45,
             filters = "+ *.jpg\n- *.tmp",
+            minSize = "100k",
+            maxSize = "500M",
+            minAge = "1d",
+            maxAge = "365d",
             bwLimitWifi = "10M",
             bwLimitMetered = "1M",
             transfers = 6,
@@ -64,6 +68,10 @@ class MappersTest {
                 scheduleHour = 14,
                 scheduleMinute = 45,
                 filters = "+ *.jpg\n- *.tmp",
+                minSize = "100k",
+                maxSize = "500M",
+                minAge = "1d",
+                maxAge = "365d",
                 bwLimitWifi = "10M",
                 bwLimitMetered = "1M",
                 transfers = 6,
@@ -81,6 +89,30 @@ class MappersTest {
                 extraConfig = "TrackRenames=true",
             ),
         )
+    }
+
+    @Test fun `size and age fields survive SyncTask round-trip through toEntity and back`() {
+        val original = SyncTask(
+            id = 20L,
+            name = "SizeAge",
+            sourcePath = "/sdcard/DCIM",
+            remoteName = "gdrive",
+            remotePath = "Archive",
+            direction = SyncDirection.UPLOAD,
+            intervalMinutes = null,
+            createdAtEpochMs = 123L,
+            minSize = "10M",
+            maxSize = "2G",
+            minAge = "30d",
+            maxAge = "1y",
+        )
+
+        val roundTripped = original.toEntity().toDomain()
+
+        assertThat(roundTripped.minSize).isEqualTo("10M")
+        assertThat(roundTripped.maxSize).isEqualTo("2G")
+        assertThat(roundTripped.minAge).isEqualTo("30d")
+        assertThat(roundTripped.maxAge).isEqualTo("1y")
     }
 
     @Test fun `deleteSource true survives SyncTask round-trip through toEntity and back`() {
