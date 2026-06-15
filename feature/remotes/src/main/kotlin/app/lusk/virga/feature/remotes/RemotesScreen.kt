@@ -72,6 +72,7 @@ fun RemotesScreen(
     var remoteToDelete by remember { mutableStateOf<Remote?>(null) }
     var manualError by remember { mutableStateOf<String?>(null) }
     var showExportConfirm by remember { mutableStateOf(false) }
+    var uriToImport by remember { mutableStateOf<android.net.Uri?>(null) }
 
     val listState = rememberLazyListState()
     val fabExpanded by remember { derivedStateOf { !listState.canScrollBackward } }
@@ -87,7 +88,7 @@ fun RemotesScreen(
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent(),
     ) { uri ->
-        if (uri != null) viewModel.importConfigFromUri(uri)
+        if (uri != null) uriToImport = uri
     }
 
     // Export writes the decrypted rclone.conf to a user-chosen document. A null uri
@@ -264,6 +265,16 @@ fun RemotesScreen(
         )
     }
 
+    uriToImport?.let { uri ->
+        ImportConfirmDialog(
+            onConfirm = {
+                viewModel.importConfigFromUri(uri)
+                uriToImport = null
+            },
+            onDismiss = { uriToImport = null },
+        )
+    }
+
     if (showAdd) {
         AddRemoteDialog(
             oauthProviders = viewModel.oauthProviders,
@@ -306,6 +317,35 @@ fun RemotesScreen(
             onClearClientId = viewModel::clearClientId,
         )
     }
+}
+
+/**
+ * Confirms a config import, which REPLACES every existing remote (remotes absent
+ * from the imported file are removed). Destructive, so the confirm button is
+ * error-tinted, mirroring the delete-remote dialog. [onConfirm] runs the import;
+ * [onDismiss] backs out. Internal (not private) so it can be exercised directly
+ * in tests — the picker that opens it can't be driven under Robolectric.
+ */
+@Composable
+internal fun ImportConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.remotes_import_dialog_title)) },
+        text = { Text(stringResource(R.string.remotes_import_dialog_body)) },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error,
+                ),
+            ) { Text(stringResource(R.string.remotes_import_dialog_confirm)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.remotes_delete_cancel))
+            }
+        },
+    )
 }
 
 // ---------------------------------------------------------------------------
