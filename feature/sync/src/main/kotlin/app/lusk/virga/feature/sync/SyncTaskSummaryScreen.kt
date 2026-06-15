@@ -251,6 +251,36 @@ private data class PreviewActionState(
 )
 
 /**
+ * The task's static metadata rows (source, destination, direction, schedule,
+ * filters, bandwidth). Extracted from [SummaryContent]'s LazyColumn so the
+ * content lambda stays under the length limit.
+ */
+@Composable
+private fun TaskSummaryDetails(task: SyncTask) {
+    SummaryRow(stringResource(R.string.sync_summary_source), task.sourcePath)
+    SummaryRow(stringResource(R.string.sync_summary_destination), "${task.remoteName}:${task.remotePath}")
+    SummaryRow(stringResource(R.string.sync_summary_direction), stringResource(directionLabelRes(task.direction)))
+    if (task.deleteExtraneous) {
+        SummaryRow(stringResource(R.string.sync_summary_mirror), stringResource(R.string.sync_summary_mirror_on))
+    }
+    SummaryRow(
+        stringResource(R.string.sync_summary_schedule),
+        app.lusk.virga.sync.SyncSchedule.describe(task.scheduleDaysMask, task.scheduleHour, task.scheduleMinute)
+            ?: task.intervalMinutes?.let { stringResource(R.string.sync_summary_every_minutes, it) }
+            ?: stringResource(R.string.sync_summary_manual),
+    )
+    if (task.filters.isNotBlank()) {
+        SummaryRow(stringResource(R.string.sync_summary_filters), task.filters.lines().filter { it.isNotBlank() }.joinToString(", "))
+    }
+    val bw = listOfNotNull(
+        task.bwLimitWifi?.takeIf { it.isNotBlank() }?.let { "Wi-Fi $it" },
+        task.bwLimitMetered?.takeIf { it.isNotBlank() }?.let { "metered $it" },
+    ).joinToString(", ")
+    if (bw.isNotEmpty()) SummaryRow(stringResource(R.string.sync_summary_bandwidth), bw)
+    HorizontalDivider(Modifier.padding(vertical = VirgaSpacing.sm))
+}
+
+/**
  * The Run/Cancel + Preview + Verify action row. Extracted from [SummaryContent]'s
  * LazyColumn item so that item lambda stays under the complexity/length limits.
  */
@@ -350,29 +380,7 @@ private fun SummaryContent(
             HorizontalDivider(Modifier.padding(vertical = VirgaSpacing.sm))
         }
 
-        item {
-            SummaryRow(stringResource(R.string.sync_summary_source), task.sourcePath)
-            SummaryRow(stringResource(R.string.sync_summary_destination), "${task.remoteName}:${task.remotePath}")
-            SummaryRow(stringResource(R.string.sync_summary_direction), stringResource(directionLabelRes(task.direction)))
-            if (task.deleteExtraneous) {
-                SummaryRow(stringResource(R.string.sync_summary_mirror), stringResource(R.string.sync_summary_mirror_on))
-            }
-            SummaryRow(
-                stringResource(R.string.sync_summary_schedule),
-                app.lusk.virga.sync.SyncSchedule.describe(task.scheduleDaysMask, task.scheduleHour, task.scheduleMinute)
-                    ?: task.intervalMinutes?.let { stringResource(R.string.sync_summary_every_minutes, it) }
-                    ?: stringResource(R.string.sync_summary_manual),
-            )
-            if (task.filters.isNotBlank()) {
-                SummaryRow(stringResource(R.string.sync_summary_filters), task.filters.lines().filter { it.isNotBlank() }.joinToString(", "))
-            }
-            val bw = listOfNotNull(
-                task.bwLimitWifi?.takeIf { it.isNotBlank() }?.let { "Wi-Fi $it" },
-                task.bwLimitMetered?.takeIf { it.isNotBlank() }?.let { "metered $it" },
-            ).joinToString(", ")
-            if (bw.isNotEmpty()) SummaryRow(stringResource(R.string.sync_summary_bandwidth), bw)
-            HorizontalDivider(Modifier.padding(vertical = VirgaSpacing.sm))
-        }
+        item { TaskSummaryDetails(task) }
 
         item {
             Text(
