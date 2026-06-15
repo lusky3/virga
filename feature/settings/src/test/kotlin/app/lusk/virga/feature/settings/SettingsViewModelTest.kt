@@ -72,6 +72,13 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun setAppLock_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setAppLock(true)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { repository.setAppLockEnabled(true) }
+    }
+
+    @Test
     fun setDefaultBwLimits_passesBothValuesThrough() = runTest(mainDispatcher.dispatcher) {
         viewModel().setDefaultBwLimits(wifi = "5M", metered = "500k")
         advanceUntilIdle()

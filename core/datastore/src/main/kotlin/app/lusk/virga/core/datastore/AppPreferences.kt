@@ -32,4 +32,10 @@ data class AppPreferences(
      * explicitly enables this. Reacted to in VirgaApplication (init/close Sentry).
      */
     val crashReportingEnabled: Boolean = false,
+    /**
+     * Opt-in biometric/device-credential app lock. Default OFF. When enabled the app
+     * UI is gated behind a biometric or PIN/pattern/password prompt. The sync worker
+     * and foreground service are NEVER gated — they keep running while the UI is locked.
+     */
+    val appLockEnabled: Boolean = false,
 )

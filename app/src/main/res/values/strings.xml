@@ -57,4 +57,12 @@
     <!-- WhatsNewScreen -->
     <string name="whats_new_title">What\'s new</string>
     <string name="whats_new_cd_back">Back</string>
+
+    <!-- LockScreen + BiometricGate -->
+    <string name="lock_screen_title">Virga is locked</string>
+    <string name="lock_screen_message">Authenticate to continue</string>
+    <string name="lock_unlock_button">Unlock</string>
+    <string name="lock_screen_icon_desc">Lock icon</string>
+    <string name="biometric_prompt_title">Unlock Virga</string>
+    <string name="biometric_prompt_subtitle">Use your biometric or device credential to unlock</string>
 </resources>
