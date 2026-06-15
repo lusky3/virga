@@ -72,7 +72,10 @@ fun RemotesScreen(
     var showAdd by remember { mutableStateOf(false) }
     var remoteToDelete by remember { mutableStateOf<Remote?>(null) }
     var manualError by remember { mutableStateOf<String?>(null) }
-    var showExportConfirm by remember { mutableStateOf(false) }
+    var showExportDialog by remember { mutableStateOf(false) }
+    // Passphrase stashed between the export-dialog confirm and the launcher callback.
+    // Null → raw export; non-null → encrypted. Zeroed in the launcher callback.
+    var stagedExportPassphrase by remember { mutableStateOf<CharArray?>(null) }
     var uriToImport by remember { mutableStateOf<Uri?>(null) }
 
     val listState = rememberLazyListState()
@@ -92,12 +95,18 @@ fun RemotesScreen(
         if (uri != null) uriToImport = uri
     }
 
-    // Export writes the decrypted rclone.conf to a user-chosen document. A null uri
-    // means the user cancelled the system create-document picker — no-op.
+    // Export writes the rclone.conf (plain or encrypted) to a user-chosen document.
+    // A null uri means the user cancelled the system create-document picker — no-op.
+    // stagedExportPassphrase is consumed here and zeroed by the VM/crypto layer.
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
     ) { uri ->
-        if (uri != null) viewModel.exportConfigToUri(uri)
+        if (uri != null) {
+            viewModel.exportConfigToUri(uri, stagedExportPassphrase)
+        } else {
+            stagedExportPassphrase?.fill(' ')
+        }
+        stagedExportPassphrase = null
     }
 
     LaunchedEffect(state.message) {
@@ -120,7 +129,7 @@ fun RemotesScreen(
                     TextButton(onClick = { importLauncher.launch("*/*") }) {
                         Text(stringResource(R.string.remotes_action_import))
                     }
-                    TextButton(onClick = { showExportConfirm = true }) {
+                    TextButton(onClick = { showExportDialog = true }) {
                         Text(stringResource(R.string.remotes_action_export))
                     }
                 },
@@ -245,24 +254,19 @@ fun RemotesScreen(
         )
     }
 
-    if (showExportConfirm) {
-        AlertDialog(
-            onDismissRequest = { showExportConfirm = false },
-            title = { Text(stringResource(R.string.remotes_export_dialog_title)) },
-            text = { Text(stringResource(R.string.remotes_export_dialog_body)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showExportConfirm = false
-                        exportLauncher.launch("rclone.conf")
-                    },
-                ) { Text(stringResource(R.string.remotes_export_dialog_confirm)) }
+    if (showExportDialog) {
+        ExportConfigDialog(
+            onConfirmEncrypted = { passphrase ->
+                showExportDialog = false
+                stagedExportPassphrase = passphrase
+                exportLauncher.launch("virga-config.virgaenc")
             },
-            dismissButton = {
-                TextButton(onClick = { showExportConfirm = false }) {
-                    Text(stringResource(R.string.remotes_delete_cancel))
-                }
+            onConfirmRaw = {
+                showExportDialog = false
+                stagedExportPassphrase = null
+                exportLauncher.launch("rclone.conf")
             },
+            onDismiss = { showExportDialog = false },
         )
     }
 
@@ -273,6 +277,16 @@ fun RemotesScreen(
                 uriToImport = null
             },
             onDismiss = { uriToImport = null },
+        )
+    }
+
+    // Shown after the wipe-confirm when the selected file is an encrypted container.
+    // The VM sets pendingEncryptedImport; wrong-passphrase feedback arrives via snackbar
+    // while the dialog stays open so the user can retry.
+    state.pendingEncryptedImport?.let { uri ->
+        ImportPassphraseDialog(
+            onConfirm = { passphrase -> viewModel.importConfigFromUri(uri, passphrase) },
+            onDismiss = { viewModel.dismissImportPassphrase() },
         )
     }
 

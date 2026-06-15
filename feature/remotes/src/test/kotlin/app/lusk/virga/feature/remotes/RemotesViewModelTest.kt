@@ -1472,4 +1472,209 @@ class RemotesViewModelTest {
         val vm = viewModel()
         assertThat(vm.uiState.value.oauthInProgress).isFalse()
     }
+
+    // --- encrypted config export/import (0.3.0 D2) ----------------------------
+
+    /** Stubs context to resolve the R.string.remotes_msg_config_exported_encrypted resource. */
+    private fun stubEncryptedExportString() {
+        every { context.getString(R.string.remotes_msg_config_exported_encrypted) } returns
+            "Encrypted config exported."
+    }
+
+    private fun stubExportString() {
+        every { context.getString(R.string.remotes_msg_config_exported) } returns "Config exported."
+    }
+
+    private fun stubExportNothingString() {
+        every { context.getString(R.string.remotes_msg_export_nothing) } returns
+            "No remotes configured yet, so there's nothing to export."
+    }
+
+    private fun stubImportWrongPassphraseString() {
+        every { context.getString(R.string.remotes_msg_import_wrong_passphrase) } returns
+            "Wrong passphrase — the file could not be decrypted. Please try again."
+    }
+
+    /** Builds a mock Uri whose ContentResolver returns an OutputStream that captures writes. */
+    private fun uriWithOutputStream(capture: java.io.ByteArrayOutputStream): android.net.Uri {
+        val resolver: android.content.ContentResolver = mockk {
+            every { openOutputStream(any(), any()) } returns capture
+        }
+        every { context.contentResolver } returns resolver
+        return mockk()
+    }
+
+    @Test
+    fun `exportConfigToUri with null passphrase writes plaintext bytes`() =
+        runTest(mainDispatcher.dispatcher) {
+            val confText = "[r]\ntype = drive\n"
+            coEvery { repository.exportConfig() } returns confText
+            stubExportString()
+            val out = java.io.ByteArrayOutputStream()
+            val uri = uriWithOutputStream(out)
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            vm.exportConfigToUri(uri, null)
+            advanceUntilIdle()
+
+            assertThat(out.toByteArray().toString(Charsets.UTF_8)).isEqualTo(confText)
+            assertThat(vm.uiState.value.message).isEqualTo("Config exported.")
+            collector.cancel()
+        }
+
+    @Test
+    fun `exportConfigToUri with non-null passphrase writes an encrypted container`() =
+        runTest(mainDispatcher.dispatcher) {
+            val confText = "[r]\ntype = drive\n"
+            coEvery { repository.exportConfig() } returns confText
+            stubEncryptedExportString()
+            val out = java.io.ByteArrayOutputStream()
+            val uri = uriWithOutputStream(out)
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            vm.exportConfigToUri(uri, "secret".toCharArray())
+            advanceUntilIdle()
+
+            val written = out.toByteArray()
+            assertThat(app.lusk.virga.core.rclone.crypto.ConfigCrypto.isEncryptedContainer(written))
+                .isTrue()
+            collector.cancel()
+        }
+
+    @Test
+    fun `exportConfigToUri encrypted container decrypts back to original config`() =
+        runTest(mainDispatcher.dispatcher) {
+            val confText = "[r]\ntype = b2\naccount = abc\n"
+            coEvery { repository.exportConfig() } returns confText
+            stubEncryptedExportString()
+            val out = java.io.ByteArrayOutputStream()
+            val uri = uriWithOutputStream(out)
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            vm.exportConfigToUri(uri, "roundtrip".toCharArray())
+            advanceUntilIdle()
+
+            val decrypted = app.lusk.virga.core.rclone.crypto.ConfigCrypto.decrypt(
+                out.toByteArray(),
+                "roundtrip".toCharArray(),
+            )
+            assertThat(decrypted).isEqualTo(confText)
+            collector.cancel()
+        }
+
+    @Test
+    fun `importConfigFromUri with encrypted container and no passphrase sets pendingEncryptedImport`() =
+        runTest(mainDispatcher.dispatcher) {
+            val encrypted = app.lusk.virga.core.rclone.crypto.ConfigCrypto.encrypt(
+                "[r]\ntype = s3\n",
+                "secret".toCharArray(),
+            )
+            val uri = uriReturning(encrypted)
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            // Call the no-passphrase overload — must prompt rather than import
+            vm.importConfigFromUri(uri)
+            advanceUntilIdle()
+
+            assertThat(vm.uiState.value.pendingEncryptedImport).isNotNull()
+            coVerify(exactly = 0) { repository.importConfig(any()) }
+            collector.cancel()
+        }
+
+    @Test
+    fun `importConfigFromUri with correct passphrase calls repository with decrypted text`() =
+        runTest(mainDispatcher.dispatcher) {
+            val originalText = "[r]\ntype = s3\n"
+            val encrypted = app.lusk.virga.core.rclone.crypto.ConfigCrypto.encrypt(
+                originalText,
+                "correct".toCharArray(),
+            )
+            val uri = uriReturning(encrypted)
+            coEvery { repository.importConfig(any()) } returns Result.success(Unit)
+            every { context.getString(R.string.remotes_msg_config_imported) } returns "Config imported."
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            vm.importConfigFromUri(uri, "correct".toCharArray())
+            advanceUntilIdle()
+
+            coVerify { repository.importConfig(originalText) }
+            assertThat(vm.uiState.value.pendingEncryptedImport).isNull()
+            collector.cancel()
+        }
+
+    @Test
+    fun `importConfigFromUri with wrong passphrase sets wrong-passphrase message and keeps prompt`() =
+        runTest(mainDispatcher.dispatcher) {
+            val encrypted = app.lusk.virga.core.rclone.crypto.ConfigCrypto.encrypt(
+                "[r]\ntype = s3\n",
+                "correct".toCharArray(),
+            )
+            val uri = uriReturning(encrypted)
+            stubImportWrongPassphraseString()
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            vm.importConfigFromUri(uri, "wrong".toCharArray())
+            advanceUntilIdle()
+
+            assertThat(vm.uiState.value.message).contains("Wrong passphrase")
+            assertThat(vm.uiState.value.pendingEncryptedImport).isNotNull()
+            coVerify(exactly = 0) { repository.importConfig(any()) }
+            collector.cancel()
+        }
+
+    @Test
+    fun `importConfigFromUri with plaintext bytes uses existing import path`() =
+        runTest(mainDispatcher.dispatcher) {
+            val confText = "[r]\ntype = drive\n"
+            val uri = uriReturning(confText.toByteArray(Charsets.UTF_8))
+            coEvery { repository.importConfig(confText) } returns Result.success(Unit)
+            every { context.getString(R.string.remotes_msg_config_imported) } returns "Config imported."
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            vm.importConfigFromUri(uri)
+            advanceUntilIdle()
+
+            coVerify { repository.importConfig(confText) }
+            assertThat(vm.uiState.value.pendingEncryptedImport).isNull()
+            assertThat(vm.uiState.value.message).isEqualTo("Config imported.")
+            collector.cancel()
+        }
+
+    @Test
+    fun `dismissImportPassphrase clears pendingEncryptedImport`() =
+        runTest(mainDispatcher.dispatcher) {
+            val encrypted = app.lusk.virga.core.rclone.crypto.ConfigCrypto.encrypt(
+                "[r]\ntype = s3\n",
+                "pass".toCharArray(),
+            )
+            val uri = uriReturning(encrypted)
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            // Trigger the prompt
+            vm.importConfigFromUri(uri)
+            advanceUntilIdle()
+            assertThat(vm.uiState.value.pendingEncryptedImport).isNotNull()
+
+            vm.dismissImportPassphrase()
+            advanceUntilIdle()
+
+            assertThat(vm.uiState.value.pendingEncryptedImport).isNull()
+            collector.cancel()
+        }
 }

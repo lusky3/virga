@@ -1,5 +1,6 @@
 package app.lusk.virga.feature.remotes
 
+import android.net.Uri
 import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.common.model.RemoteQuota
 
@@ -28,6 +29,9 @@ data class RemotesUiState(
     val connectivityResults: Map<String, ConnectivityResult> = emptyMap(),
     /** Remotes whose connectivity test is currently in flight. */
     val connectivityTesting: Set<String> = emptySet(),
+    /** Non-null while the UI is waiting for the user to supply a passphrase to
+     *  decrypt the encrypted config at this [Uri]. Cleared on success or dismiss. */
+    val pendingEncryptedImport: Uri? = null,
 )
 
 /**
@@ -41,4 +45,7 @@ internal data class RemotesTransientState(
     val message: String? = null,
     /** Paste-token instructions from the daemon OAuth flow; null = no prompt. */
     val daemonOAuthTokenPrompt: String? = null,
+    /** Non-null while awaiting a passphrase to decrypt an encrypted import. Cleared
+     *  on successful decrypt, dismiss, or when a non-encrypted file is imported. */
+    val pendingEncryptedImport: Uri? = null,
 )
