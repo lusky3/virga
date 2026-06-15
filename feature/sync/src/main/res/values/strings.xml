@@ -301,6 +301,14 @@
     <string name="sync_edit_field_extra_config_placeholder">TrackRenames=true\nSizeOnly=false</string>
     <string name="sync_edit_field_extra_config_hint">Advanced: merged into the rclone _config block. One Key=Value per line. Only allowlisted keys are accepted.</string>
     <!-- Dry-run preview (WS2.3) -->
+    <!-- Verify / check (B2) -->
+    <string name="sync_verify_action">Verify</string>
+    <string name="sync_verify_running">Verifying…</string>
+    <string name="sync_verify_title">Verify result</string>
+    <string name="sync_verify_in_sync">Source and destination are in sync.</string>
+    <!-- %1$d = differences, %2$d = total checked -->
+    <string name="sync_verify_differs">%1$d files differ or are missing.</string>
+    <string name="sync_verify_error">Verify failed: %1$s</string>
     <string name="sync_preview_action">Preview changes</string>
     <string name="sync_preview_running">Previewing\u2026</string>
     <string name="sync_preview_title">Preview (dry run)</string>

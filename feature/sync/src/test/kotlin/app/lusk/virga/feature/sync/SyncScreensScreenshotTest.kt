@@ -19,6 +19,7 @@ import app.lusk.virga.core.data.StatsRepository
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
 import app.lusk.virga.core.designsystem.theme.VirgaTheme
+import app.lusk.virga.sync.CheckUseCase
 import app.lusk.virga.sync.DryRunUseCase
 import app.lusk.virga.sync.SyncProgressMonitor
 import app.lusk.virga.sync.SyncScheduler
@@ -297,7 +298,8 @@ class SyncScreensScreenshotTest {
         val scheduler: SyncScheduler = mockk(relaxed = true)
         val monitor: SyncProgressMonitor = mockk(relaxed = true) { every { progressFor(any()) } returns flowOf(null) }
         val dryRun: DryRunUseCase = mockk(relaxed = true)
-        val viewModel = SyncTaskSummaryViewModel(taskRepo, historyRepo, scheduler, monitor, dryRun)
+        val checkUseCase: CheckUseCase = mockk(relaxed = true)
+        val viewModel = SyncTaskSummaryViewModel(taskRepo, historyRepo, scheduler, monitor, dryRun, checkUseCase)
         composeRule.setContent {
             VirgaTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {

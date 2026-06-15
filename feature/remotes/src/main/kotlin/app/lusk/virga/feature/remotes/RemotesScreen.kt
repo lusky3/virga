@@ -71,6 +71,7 @@ fun RemotesScreen(
     val context = LocalContext.current
     var showAdd by remember { mutableStateOf(false) }
     var remoteToDelete by remember { mutableStateOf<Remote?>(null) }
+    var remoteToDedupe by remember { mutableStateOf<Remote?>(null) }
     var manualError by remember { mutableStateOf<String?>(null) }
     var showExportDialog by remember { mutableStateOf(false) }
     // Passphrase stashed between the export-dialog confirm and the launcher callback.
@@ -216,6 +217,7 @@ fun RemotesScreen(
                                 onCreateTask = onCreateTask,
                                 onDelete = { remoteToDelete = remote },
                                 onTestConnectivity = { viewModel.testConnectivity(remote.name) },
+                                onDedupe = { remoteToDedupe = remote },
                                 quota = state.quotas[remote.name],
                                 quotaLoading = remote.name in state.quotaLoading,
                                 connectivity = state.connectivityResults[remote.name],
@@ -251,6 +253,17 @@ fun RemotesScreen(
                     Text(stringResource(R.string.remotes_delete_cancel))
                 }
             },
+        )
+    }
+
+    remoteToDedupe?.let { remote ->
+        DedupeConfirmDialog(
+            remoteName = remote.name,
+            onConfirm = {
+                viewModel.dedupeRemote(remote.name)
+                remoteToDedupe = null
+            },
+            onDismiss = { remoteToDedupe = null },
         )
     }
 
@@ -332,6 +345,36 @@ fun RemotesScreen(
             onClearClientId = viewModel::clearClientId,
         )
     }
+}
+
+/**
+ * Confirms a dedupe operation on [remoteName]. Destructive (removes duplicate files),
+ * so the confirm button is error-tinted. 4 params — within Codacy's composable limit.
+ */
+@Composable
+internal fun DedupeConfirmDialog(
+    remoteName: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.remotes_dedupe_confirm_title, remoteName)) },
+        text = { Text(stringResource(R.string.remotes_dedupe_confirm_body, remoteName)) },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error,
+                ),
+            ) { Text(stringResource(R.string.remotes_dedupe_confirm_action)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.remotes_dedupe_cancel))
+            }
+        },
+    )
 }
 
 /**

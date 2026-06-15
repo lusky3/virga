@@ -63,6 +63,10 @@ class SyncExecutorTest {
         ) = Unit
         override suspend fun <T> withDaemonForOAuth(block: suspend (app.lusk.virga.core.rclone.RcloneDaemon) -> T): T =
             error("unused")
+        override fun check(source: String, dest: String, options: SyncOptions): kotlinx.coroutines.flow.Flow<SyncProgress> =
+            error("unused")
+        override suspend fun dedupe(remoteName: String, dedupeMode: String): Result<Unit> =
+            error("unused")
     }
 
     private fun task(

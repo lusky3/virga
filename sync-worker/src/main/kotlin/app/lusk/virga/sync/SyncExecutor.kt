@@ -102,6 +102,29 @@ class SyncExecutor @Inject constructor(
         }
     }
 
+    /**
+     * Runs a check (compare without transferring) for [task]. Only valid for non-SAF
+     * sources; callers must gate with [CheckUseCase.isAvailableFor]. The returned flow
+     * emits progress and completes when the check finishes.
+     */
+    fun runCheck(task: SyncTask): Flow<SyncProgress> {
+        val local = task.sourcePath
+        val remote = remoteSpec(task)
+        val filters = task.filters.lines().filter { it.isNotBlank() }
+        return engine.check(
+            source = local,
+            dest = remote,
+            options = SyncOptions(
+                direction = task.direction,
+                filters = filters,
+                minSize = task.minSize.ifBlank { null },
+                maxSize = task.maxSize.ifBlank { null },
+                minAge = task.minAge.ifBlank { null },
+                maxAge = task.maxAge.ifBlank { null },
+            ),
+        )
+    }
+
     /** Builds the rclone "remote:path" destination spec. */
     private fun remoteSpec(task: SyncTask): String {
         val path = task.remotePath.removePrefix("/")

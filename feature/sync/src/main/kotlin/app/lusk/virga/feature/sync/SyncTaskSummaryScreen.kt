@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Preview
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -72,6 +73,7 @@ fun SyncTaskSummaryScreen(
     LaunchedEffect(taskId) { viewModel.load(taskId) }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val dryRun by viewModel.dryRun.collectAsStateWithLifecycle()
+    val checkState by viewModel.checkState.collectAsStateWithLifecycle()
     var showDelete by remember { mutableStateOf(false) }
 
     val task = state.task
@@ -106,6 +108,11 @@ fun SyncTaskSummaryScreen(
                 liveProgress = state.liveProgress,
                 previewAvailable = viewModel.previewAvailable(),
                 previewRunning = dryRun.running,
+                verify = VerifyActionState(
+                    available = viewModel.verifyAvailable(),
+                    running = checkState.running,
+                    onVerify = viewModel::verifyChanges,
+                ),
                 modifier = Modifier.padding(padding),
                 onSyncNow = viewModel::syncNow,
                 onCancelSync = viewModel::cancelSync,
@@ -180,6 +187,29 @@ fun SyncTaskSummaryScreen(
         )
     }
 
+    // Verify (check) result dialog: "In sync" or "N files differ".
+    checkState.result?.let { result ->
+        val err = result.error
+        AlertDialog(
+            onDismissRequest = viewModel::dismissVerify,
+            title = { Text(stringResource(R.string.sync_verify_title)) },
+            text = {
+                if (err != null) {
+                    Text(stringResource(R.string.sync_verify_error, err))
+                } else if (result.differences == 0) {
+                    Text(stringResource(R.string.sync_verify_in_sync))
+                } else {
+                    Text(stringResource(R.string.sync_verify_differs, result.differences))
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissVerify) {
+                    Text(stringResource(R.string.sync_preview_close))
+                }
+            },
+        )
+    }
+
     if (showDelete && task != null) {
         AlertDialog(
             onDismissRequest = { showDelete = false },
@@ -200,6 +230,13 @@ fun SyncTaskSummaryScreen(
     }
 }
 
+/** Bundles the verify (check) action state to keep [SummaryContent]'s param count bounded. */
+private data class VerifyActionState(
+    val available: Boolean,
+    val running: Boolean,
+    val onVerify: () -> Unit,
+)
+
 @Composable
 private fun SummaryContent(
     task: SyncTask,
@@ -207,6 +244,7 @@ private fun SummaryContent(
     liveProgress: SyncProgress?,
     previewAvailable: Boolean,
     previewRunning: Boolean,
+    verify: VerifyActionState,
     modifier: Modifier,
     onSyncNow: () -> Unit,
     onCancelSync: () -> Unit,
@@ -247,6 +285,19 @@ private fun SummaryContent(
                                 stringResource(
                                     if (previewRunning) R.string.sync_preview_running
                                     else R.string.sync_preview_action,
+                                ),
+                            )
+                        }
+                    }
+                    if (verify.available) {
+                        Spacer(Modifier.width(VirgaSpacing.sm))
+                        OutlinedButton(onClick = verify.onVerify, enabled = !verify.running) {
+                            Icon(Icons.Filled.Verified, contentDescription = null)
+                            Spacer(Modifier.width(VirgaSpacing.sm))
+                            Text(
+                                stringResource(
+                                    if (verify.running) R.string.sync_verify_running
+                                    else R.string.sync_verify_action,
                                 ),
                             )
                         }

@@ -7,6 +7,8 @@ import app.lusk.virga.core.common.model.SyncRun
 import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
+import app.lusk.virga.sync.CheckResult
+import app.lusk.virga.sync.CheckUseCase
 import app.lusk.virga.sync.DryRunResult
 import app.lusk.virga.sync.DryRunUseCase
 import app.lusk.virga.sync.SyncProgressMonitor
@@ -47,6 +49,7 @@ class SyncTaskSummaryViewModel @Inject constructor(
     private val scheduler: SyncScheduler,
     private val progressMonitor: SyncProgressMonitor,
     private val dryRunUseCase: DryRunUseCase,
+    private val checkUseCase: CheckUseCase,
 ) : ViewModel() {
 
     private val taskId = MutableStateFlow<Long?>(null)
@@ -74,6 +77,27 @@ class SyncTaskSummaryViewModel @Inject constructor(
     }
 
     fun dismissPreview() { _dryRun.value = DryRunUiState() }
+
+    /** Check (verify) state — mirrors [DryRunUiState] for symmetry. */
+    data class CheckUiState(val running: Boolean = false, val result: CheckResult? = null)
+
+    private val _checkState = MutableStateFlow(CheckUiState())
+    val checkState: StateFlow<CheckUiState> = _checkState.asStateFlow()
+
+    /** True when a verify (check) operation can be offered for the current task. */
+    fun verifyAvailable(): Boolean =
+        uiState.value.task?.let { checkUseCase.isAvailableFor(it) } ?: false
+
+    fun verifyChanges() {
+        val task = uiState.value.task ?: return
+        if (!checkUseCase.isAvailableFor(task)) return
+        viewModelScope.launch {
+            _checkState.value = CheckUiState(running = true)
+            _checkState.value = CheckUiState(running = false, result = checkUseCase.verify(task))
+        }
+    }
+
+    fun dismissVerify() { _checkState.value = CheckUiState() }
 
     /** Idempotent: starts observing the given task. Safe to call from a `LaunchedEffect`. */
     fun load(id: Long) {
