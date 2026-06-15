@@ -166,6 +166,14 @@
     <string name="remotes_rename_error_taken">\"%1$s\" is already used by another remote.</string>
     <string name="remotes_msg_remote_renamed">Renamed \"%1$s\" to \"%2$s\".</string>
 
+    <!-- Re-auth badge and actions -->
+    <string name="remotes_card_reauth_badge">Sign-in expired</string>
+    <string name="remotes_card_menu_reauth">Re-authenticate</string>
+    <string name="remotes_card_menu_sign_out">Sign out</string>
+    <string name="remotes_msg_reauth_success">Re-authenticated \"%1$s\" successfully.</string>
+    <string name="remotes_msg_sign_out_done">Signed out of \"%1$s\".</string>
+    <string name="remotes_msg_reauth_failed">Re-authentication failed: %1$s</string>
+
     <!-- Dedupe (B2) -->
     <string name="remotes_card_menu_dedupe">Find duplicates</string>
     <string name="remotes_dedupe_confirm_title">Find duplicates on \"%1$s\"?</string>

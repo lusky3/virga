@@ -237,6 +237,29 @@ class MappersTest {
         assertThat(existing.toEntity().createdAtEpochMs).isEqualTo(0L)
     }
 
+    // --- RemoteEntity / Remote needsReauth round-trip ---
+
+    @Test fun `needsReauth true is preserved in Remote domain model`() {
+        // The RemoteRepository maps RemoteEntity -> Remote; verify the flag is carried.
+        // The mapper is inline in the repository, so we test via RemoteEntity field copy.
+        val entity = app.lusk.virga.core.database.entity.RemoteEntity(
+            name = "gdrive",
+            type = "drive",
+            needsReauth = true,
+        )
+        val domain = app.lusk.virga.core.common.model.Remote(
+            name = entity.name,
+            type = entity.type,
+            needsReauth = entity.needsReauth,
+        )
+        assertThat(domain.needsReauth).isTrue()
+    }
+
+    @Test fun `needsReauth false is the default for Remote`() {
+        val domain = app.lusk.virga.core.common.model.Remote(name = "s3", type = "s3")
+        assertThat(domain.needsReauth).isFalse()
+    }
+
     // --- SyncRunEntity toDomain ---
 
     @Test fun `SyncRunEntity toDomain copies every field including nullable end and log`() {

@@ -1,5 +1,6 @@
 package app.lusk.virga.core.rclone
 
+import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.common.model.SyncDirection
 import com.google.common.truth.Truth.assertThat
 import kotlinx.serialization.json.booleanOrNull
@@ -11,10 +12,106 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
 
 /**
- * Unit tests for [putFilters] and [putConfig] in RcloneJson.kt.
- * No daemon, no coroutines — pure JSON construction.
+ * Unit tests for [putFilters], [putConfig], [isAuthError], and [classifyJobError] in RcloneJson.kt.
+ * No daemon, no coroutines — pure logic.
  */
 class RcloneJsonTest {
+
+    // --- isAuthError ------------------------------------------------------------
+
+    @Test fun `isAuthError matches oauth2 marker`() {
+        assertThat(isAuthError("oauth2: cannot fetch token: 401 Unauthorized")).isTrue()
+    }
+
+    @Test fun `isAuthError matches invalid_grant`() {
+        assertThat(isAuthError("Error: invalid_grant: Token has been expired or revoked")).isTrue()
+    }
+
+    @Test fun `isAuthError matches token expired`() {
+        assertThat(isAuthError("token expired for remote")).isTrue()
+    }
+
+    @Test fun `isAuthError matches expired token`() {
+        assertThat(isAuthError("The expired token cannot be refreshed")).isTrue()
+    }
+
+    @Test fun `isAuthError matches couldn't fetch token`() {
+        assertThat(isAuthError("couldn't fetch token: server returned 401")).isTrue()
+    }
+
+    @Test fun `isAuthError matches failed to refresh`() {
+        assertThat(isAuthError("failed to refresh the OAuth token")).isTrue()
+    }
+
+    @Test fun `isAuthError matches 401 with adjacent context - status 401`() {
+        assertThat(isAuthError("http status 401")).isTrue()
+    }
+
+    @Test fun `isAuthError matches 401 with adjacent context - 401 unauthorized`() {
+        assertThat(isAuthError("server returned 401 Unauthorized")).isTrue()
+    }
+
+    @Test fun `isAuthError matches 403 with adjacent context - 403 forbidden`() {
+        assertThat(isAuthError("403 Forbidden")).isTrue()
+    }
+
+    @Test fun `isAuthError does NOT match bare 401 digit substring in byte count`() {
+        // "Transferred: 1401 / 2401 Bytes" must NOT be flagged as auth error.
+        assertThat(isAuthError("Transferred: 1401 / 2401 Bytes, 100%, 0 Bytes/s, ETA -")).isFalse()
+    }
+
+    @Test fun `isAuthError does NOT match bare 403 digit substring in byte count`() {
+        assertThat(isAuthError("Transferred: 7403 / 8403 Bytes, 88%")).isFalse()
+    }
+
+    @Test fun `isAuthError matches unauthorized case insensitive`() {
+        assertThat(isAuthError("UNAUTHORIZED access")).isTrue()
+    }
+
+    @Test fun `isAuthError matches permission denied`() {
+        assertThat(isAuthError("permission denied for bucket")).isTrue()
+    }
+
+    @Test fun `isAuthError matches accessdenied`() {
+        assertThat(isAuthError("AccessDenied")).isTrue()
+    }
+
+    @Test fun `isAuthError matches access denied with space`() {
+        assertThat(isAuthError("Access Denied: operation not permitted")).isTrue()
+    }
+
+    @Test fun `isAuthError matches invalid_client`() {
+        assertThat(isAuthError("error: invalid_client")).isTrue()
+    }
+
+    @Test fun `isAuthError matches revoked`() {
+        assertThat(isAuthError("token has been revoked")).isTrue()
+    }
+
+    @Test fun `isAuthError does not match a plain directory-not-found error`() {
+        assertThat(isAuthError("directory not found: /Backup")).isFalse()
+    }
+
+    @Test fun `isAuthError does not match a generic network error`() {
+        assertThat(isAuthError("connection reset by peer")).isFalse()
+    }
+
+    // --- classifyJobError does not misclassify auth as transient ---------------
+
+    @Test fun `classifyJobError returns Rclone for oauth2 error not Network`() {
+        val err = classifyJobError("oauth2: cannot fetch token: 401 Unauthorized")
+        assertThat(err).isInstanceOf(VirgaError.Rclone::class.java)
+    }
+
+    @Test fun `classifyJobError still returns Network for timeout`() {
+        val err = classifyJobError("timeout waiting for connection")
+        assertThat(err).isInstanceOf(VirgaError.Network::class.java)
+    }
+
+    @Test fun `classifyJobError still returns Rclone for directory not found`() {
+        val err = classifyJobError("directory not found")
+        assertThat(err).isInstanceOf(VirgaError.Rclone::class.java)
+    }
 
     // --- putConfig: MaxTransfer / CutoffMode (B6) ---------------------------
 

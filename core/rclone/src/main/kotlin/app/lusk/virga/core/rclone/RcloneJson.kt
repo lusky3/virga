@@ -76,6 +76,35 @@ internal fun JsonObject.toSyncProgress(): SyncProgress = SyncProgress(
 )
 
 /**
+ * Returns true when [err] looks like an OAuth / credential failure. Auth errors must
+ * NOT be retried (they won't clear on their own) and must set the remote's needsReauth
+ * flag so the UI can prompt the user to re-authenticate.
+ *
+ * Markers are matched case-insensitively as substrings so they catch rclone's multi-
+ * line error strings (e.g. "oauth2: cannot fetch token: 401 Unauthorized").
+ *
+ * Bare HTTP-code substrings ("401", "403") are intentionally NOT matched because
+ * rclone error output can embed byte counts or file sizes that contain those digit
+ * sequences — false-positives would flag healthy remotes (the same trap
+ * [classifyJobError]'s KDoc warns about). Instead, require adjacent auth context
+ * (e.g. "401 unauthorized", "http 401", "error 403").
+ */
+fun isAuthError(err: String): Boolean {
+    val lower = err.lowercase()
+    val wordMarkers = listOf(
+        "oauth2", "invalid_grant", "token expired", "expired token",
+        "couldn't fetch token", "failed to refresh",
+        "unauthorized", "permission denied", "accessdenied", "access denied",
+        "invalid_client", "revoked",
+    )
+    val httpMarkers = listOf(
+        "401 unauthorized", "http 401", "status 401", "error 401", "code 401",
+        "403 forbidden", "http 403", "status 403", "error 403", "code 403",
+    )
+    return wordMarkers.any { it in lower } || httpMarkers.any { it in lower }
+}
+
+/**
  * Classifies a finished-job error string. Transient transport failures become
  * [VirgaError.Network] so the worker retries (a blanket [VirgaError.Rclone] never
  * retried). Everything else stays [VirgaError.Rclone] carrying the original rclone

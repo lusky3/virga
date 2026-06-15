@@ -18,9 +18,11 @@ import app.lusk.virga.core.common.model.SyncProgress
 import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.data.ConflictRepository
+import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.data.StatsRepository
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
+import app.lusk.virga.core.rclone.isAuthError
 import app.lusk.virga.core.rclone.RcloneEngine
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -49,6 +51,7 @@ open class SyncWorker @AssistedInject constructor(
     private val statsRepository: StatsRepository,
     private val staging: LocalStaging,
     private val scheduler: SyncScheduler,
+    private val remoteRepository: RemoteRepository,
 ) : CoroutineWorker(appContext, params) {
 
     private val notifications = SyncNotifications(appContext)
@@ -330,6 +333,11 @@ open class SyncWorker @AssistedInject constructor(
                 NotificationManagerCompat.from(applicationContext)
                     .notify(SyncNotifications.resultId(taskId), notification)
             }
+            // Belt-and-suspenders: a successful sync proves the token is valid.
+            // Clear any lingering needsReauth flag so re-auth via an out-of-band
+            // token fix (e.g. rclone config on another machine) auto-recovers.
+            runCatching { remoteRepository.setNeedsReauth(task.remoteName, false) }
+                .onFailure { Log.w(TAG, "Failed to clear needsReauth for ${task.remoteName}", it) }
             Result.success()
         } else {
             val msg = failure.message ?: "Sync failed"
@@ -338,6 +346,11 @@ open class SyncWorker @AssistedInject constructor(
             runCatching {
                 NotificationManagerCompat.from(applicationContext)
                     .notify(SyncNotifications.resultId(taskId), notifications.error(task.name, msg, taskId))
+            }
+            // Auth failures are non-retryable and mark the remote so the UI can prompt re-auth.
+            if (isAuthError(msg)) {
+                runCatching { remoteRepository.setNeedsReauth(task.remoteName, true) }
+                    .onFailure { Log.w(TAG, "Failed to set needsReauth flag for ${task.remoteName}", it) }
             }
             // Transient transport problems are worth retrying; everything else fails.
             if (failure is VirgaError.Network) Result.retry() else Result.failure()

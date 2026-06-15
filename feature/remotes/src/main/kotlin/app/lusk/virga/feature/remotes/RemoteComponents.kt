@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.DropdownMenu
@@ -67,6 +68,8 @@ internal fun RemoteCard(
     onDedupe: () -> Unit = {},
     onEdit: () -> Unit = {},
     onRename: () -> Unit = {},
+    onReauth: () -> Unit = {},
+    onSignOut: () -> Unit = {},
     quota: RemoteQuota? = null,
     quotaLoading: Boolean = false,
     connectivity: ConnectivityResult? = null,
@@ -93,6 +96,9 @@ internal fun RemoteCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(friendlyType, style = MaterialTheme.typography.bodyMedium)
+                if (remote.needsReauth) {
+                    ReauthBadgeRow()
+                }
                 RemoteQuotaRow(quota, quotaLoading)
                 RemoteConnectivityRow(connectivity, connectivityTesting)
             }
@@ -132,6 +138,23 @@ internal fun RemoteCard(
                     text = { Text(stringResource(R.string.remotes_card_menu_rename)) },
                     onClick = { menuExpanded = false; onRename() },
                 )
+                if (remote.needsReauth) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.remotes_card_menu_reauth)) },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Filled.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        },
+                        onClick = { menuExpanded = false; onReauth() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.remotes_card_menu_sign_out)) },
+                        onClick = { menuExpanded = false; onSignOut() },
+                    )
+                }
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.remotes_card_menu_delete)) },
                     leadingIcon = {
@@ -245,6 +268,33 @@ private fun ConnectivityTestingRow() {
                 .fillMaxWidth()
                 .padding(top = VirgaSpacing.xs)
                 .semantics { contentDescription = testingLabel },
+        )
+    }
+}
+
+/**
+ * Warning badge shown when the remote's stored token has expired or been revoked. Tinted
+ * error-red to draw the user's attention before a sync fails.
+ */
+@Composable
+internal fun ReauthBadgeRow() {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = VirgaSpacing.xs)
+            .semantics { liveRegion = LiveRegionMode.Polite },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Filled.Warning,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.error,
+        )
+        Text(
+            stringResource(R.string.remotes_card_reauth_badge),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(start = VirgaSpacing.xs),
         )
     }
 }

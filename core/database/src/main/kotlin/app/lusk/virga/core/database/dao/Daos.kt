@@ -32,13 +32,23 @@ interface RemoteDao {
     @Query("DELETE FROM remotes")
     suspend fun clear()
 
+    @Query("SELECT name, needsReauth FROM remotes")
+    suspend fun getNeedsReauthMap(): List<NeedsReauthRow>
+
+    @Query("UPDATE remotes SET needsReauth = :flag WHERE name = :name")
+    suspend fun setNeedsReauth(name: String, flag: Boolean)
+
     /** Atomically clears all remote rows and inserts [remotes] in one transaction. */
     @Transaction
     suspend fun replaceAll(remotes: List<RemoteEntity>) {
+        val reauth = getNeedsReauthMap().associateBy({ it.name }, { it.needsReauth })
         clear()
-        upsertAll(remotes)
+        upsertAll(remotes.map { it.copy(needsReauth = reauth[it.name] ?: false) })
     }
 }
+
+/** Lightweight projection used by [RemoteDao.replaceAll] to carry the flag across a cache rebuild. */
+data class NeedsReauthRow(val name: String, val needsReauth: Boolean)
 
 @Dao
 interface SyncTaskDao {
