@@ -348,7 +348,8 @@ open class SyncWorker @AssistedInject constructor(
                     .notify(SyncNotifications.resultId(taskId), notifications.error(task.name, msg, taskId))
             }
             // Auth failures are non-retryable and mark the remote so the UI can prompt re-auth.
-            if (isAuthError(msg)) {
+            // Recognise both the typed VirgaError.Auth and message-shaped auth errors.
+            if (failure is VirgaError.Auth || isAuthError(msg)) {
                 runCatching { remoteRepository.setNeedsReauth(task.remoteName, true) }
                     .onFailure { Log.w(TAG, "Failed to set needsReauth flag for ${task.remoteName}", it) }
             }
@@ -391,7 +392,7 @@ open class SyncWorker @AssistedInject constructor(
      * attempt 2 fails — yielding exactly 3 total tries.
      */
     private fun retryDecision(failure: Throwable, attempt: Int, task: SyncTask): Result {
-        val isAuth = isAuthError(failure.message ?: "")
+        val isAuth = failure is VirgaError.Auth || isAuthError(failure.message ?: "")
         if (isAuth) return Result.failure()
         val retryable = failure is VirgaError.Network ||
             (task.retryOnRclone && failure is VirgaError.Rclone)

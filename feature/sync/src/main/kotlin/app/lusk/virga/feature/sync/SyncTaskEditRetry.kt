@@ -35,7 +35,9 @@ internal fun RetryConfigSection(form: SyncTaskForm, viewModel: SyncTaskEditViewM
             onValueChange = { raw ->
                 val n = raw.filter { it.isDigit() }
                 viewModel.update { f ->
-                    f.copy(maxRetriesText = n, maxRetries = n.toIntOrNull()?.coerceAtLeast(1) ?: f.maxRetries)
+                    // Keep numeric state in lock-step with the typed text; the floor is
+                    // applied once at save() so multi-digit entry isn't disrupted mid-type.
+                    f.copy(maxRetriesText = n, maxRetries = n.toIntOrNull() ?: f.maxRetries)
                 }
             },
             label = { Text(stringResource(R.string.sync_edit_field_max_retries)) },
@@ -55,9 +57,9 @@ internal fun RetryConfigSection(form: SyncTaskForm, viewModel: SyncTaskEditViewM
             onValueChange = { raw ->
                 val n = raw.filter { it.isDigit() }
                 viewModel.update { f ->
-                    // 10s is WorkManager's MIN_BACKOFF_MILLIS floor; lower values get
-                    // silently raised, so clamp here to keep the displayed value honest.
-                    f.copy(backoffSecondsText = n, backoffSeconds = n.toLongOrNull()?.coerceAtLeast(10L) ?: f.backoffSeconds)
+                    // Numeric state tracks the typed text; the 10s WorkManager floor is
+                    // applied once at save() (the hint documents the minimum).
+                    f.copy(backoffSecondsText = n, backoffSeconds = n.toLongOrNull() ?: f.backoffSeconds)
                 }
             },
             label = { Text(stringResource(R.string.sync_edit_field_backoff_seconds)) },
