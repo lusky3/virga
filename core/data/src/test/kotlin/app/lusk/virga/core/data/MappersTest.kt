@@ -283,6 +283,34 @@ class MappersTest {
         assertThat(domain.status).isEqualTo(SyncStatus.RUNNING)
     }
 
+    @Test fun `failedFiles survives SyncRunEntity toDomain round-trip`() {
+        val failedFilesValue = "docs/report.pdf\tpermission denied\nphotos/img.jpg\ttimeout"
+        val entity = SyncRunEntity(
+            id = 5L,
+            taskId = 2L,
+            startedAtEpochMs = 1000L,
+            status = SyncStatus.SUCCESS,
+            failedFiles = failedFilesValue,
+        )
+
+        val domain = entity.toDomain()
+
+        assertThat(domain.failedFiles).isEqualTo(failedFilesValue)
+    }
+
+    @Test fun `failedFiles defaults to empty string when absent from entity`() {
+        val entity = SyncRunEntity(
+            id = 6L,
+            taskId = 2L,
+            startedAtEpochMs = 2000L,
+            status = SyncStatus.SUCCESS,
+        )
+
+        val domain = entity.toDomain()
+
+        assertThat(domain.failedFiles).isEmpty()
+    }
+
     // --- ConflictEntity toDomain ---
 
     @Test fun `ConflictEntity toDomain copies every field`() {

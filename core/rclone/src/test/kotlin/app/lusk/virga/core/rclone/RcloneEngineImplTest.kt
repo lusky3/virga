@@ -1178,6 +1178,80 @@ class RcloneEngineImplTest {
         coVerify { configManager.persistAndCleanup() }
     }
 
+    // --- transferredFiles ---
+
+    @Test fun `transferredFiles returns all entries from core_transferred response`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        val params = mutableListOf<kotlinx.serialization.json.JsonObject>()
+        coEvery { apiClient.call(any(), any(), any(), "core/transferred", capture(params)) } returns buildJsonObject {
+            put("transferred", kotlinx.serialization.json.buildJsonArray {
+                add(buildJsonObject { put("name", "photos/img1.jpg"); put("error", "") })
+                add(buildJsonObject { put("name", "docs/report.pdf"); put("error", "permission denied") })
+                add(buildJsonObject { put("name", "videos/clip.mp4"); put("error", "timeout") })
+            })
+        }
+
+        engine.startDaemon()
+        val files = engine.transferredFiles("job/9")
+
+        // Scoped to the run's stats group so other concurrent jobs' transfers aren't included.
+        assertThat(params.first()["group"]?.jsonPrimitive?.contentOrNull).isEqualTo("job/9")
+        assertThat(files).hasSize(3)
+        assertThat(files[0].name).isEqualTo("photos/img1.jpg")
+        assertThat(files[0].error).isEmpty()
+        assertThat(files[1].name).isEqualTo("docs/report.pdf")
+        assertThat(files[1].error).isEqualTo("permission denied")
+        assertThat(files[2].name).isEqualTo("videos/clip.mp4")
+        assertThat(files[2].error).isEqualTo("timeout")
+    }
+
+    @Test fun `transferredFiles skips entries with blank or missing name defensively`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "core/transferred", any()) } returns buildJsonObject {
+            put("transferred", kotlinx.serialization.json.buildJsonArray {
+                add(buildJsonObject { put("name", "valid/file.txt"); put("error", "some error") })
+                add(buildJsonObject { put("name", ""); put("error", "blank name") })      // blank name → skip
+                add(buildJsonObject { put("error", "no name key") })                      // missing name → skip
+            })
+        }
+
+        engine.startDaemon()
+        val files = engine.transferredFiles("job/9")
+
+        assertThat(files).hasSize(1)
+        assertThat(files[0].name).isEqualTo("valid/file.txt")
+    }
+
+    @Test fun `transferredFiles returns empty list when transferred key is absent`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "core/transferred", any()) } returns buildJsonObject {}
+
+        engine.startDaemon()
+        val files = engine.transferredFiles("job/9")
+
+        assertThat(files).isEmpty()
+    }
+
+    @Test fun `transferredFiles uses refcount lease — does not stop daemon while a sync co-leases`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "core/transferred", any()) } returns buildJsonObject {}
+
+        engine.acquireDaemon()  // simulate SyncWorker holding its lease
+        engine.transferredFiles("job/9")
+        coVerify(exactly = 0) { daemonManager.stop(fakeDaemon) }
+
+        engine.releaseDaemon()
+        coVerify(exactly = 1) { daemonManager.stop(fakeDaemon) }
+    }
+
     @Test fun `withDaemonForOAuth failure while a sync co-leases discards the tainted config on the last release`() = runTest(testDispatcher) {
         coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
         coEvery { daemonManager.start(any()) } returns fakeDaemon

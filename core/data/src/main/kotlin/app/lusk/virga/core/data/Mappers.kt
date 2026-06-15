@@ -95,6 +95,7 @@ internal fun SyncRunEntity.toDomain() = SyncRun(
     errorCount = errorCount,
     errorMessage = errorMessage,
     logPath = logPath,
+    failedFiles = failedFiles,
 )
 
 internal fun ConflictEntity.toDomain() = Conflict(

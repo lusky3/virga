@@ -22,6 +22,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.time.Instant
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.booleanOrNull
@@ -481,6 +482,37 @@ class RcloneEngineImpl @Inject constructor(
         }
     }
 
+    /**
+     * Fetches transfer records for [group] from `core/transferred` (scoped so a
+     * concurrent run's transfers on the shared daemon aren't mis-attributed). Returns
+     * both success and failure entries; callers filter to entries where
+     * [TransferredFile.error] is non-blank. Entries with a missing or blank `name` are
+     * skipped defensively. Uses a refcount lease (withLease) consistent with other
+     * one-shot read operations.
+     *
+     * RC response shape (rclone ≥ 1.50, confirmed present in v1.74.2):
+     *   {"transferred": [{"name": "...", "error": "...", "bytes": N, ...}, ...]}
+     * The "transferred" array may be absent (empty stats) or contain objects missing
+     * optional keys — all handled defensively below.
+     */
+    override suspend fun transferredFiles(group: String): List<TransferredFile> = withLease { d ->
+        // Scope to the run's stats group ("job/<id>"): the shared daemon may be
+        // running other concurrent "sync all" jobs whose transfers would otherwise
+        // be returned and mis-attributed to this run.
+        val result = rc(d, "core/transferred", buildJsonObject { put("group", group) })
+        val entries: List<JsonElement> = result["transferred"]?.jsonArray ?: emptyList()
+        entries.mapNotNull { element ->
+            val obj = runCatching { element.jsonObject }.getOrNull()
+            val name = obj?.get("name")?.jsonPrimitive?.contentOrNull
+            // Skip entries with no usable name (if/else avoids labelled returns).
+            if (name.isNullOrBlank()) {
+                null
+            } else {
+                TransferredFile(name = name, error = obj["error"]?.jsonPrimitive?.contentOrNull ?: "")
+            }
+        }
+    }
+
     override suspend fun about(remoteName: String): RemoteQuota = withLease { d ->
         val result = rc(d, "operations/about", buildJsonObject {
             put("fs", "$remoteName:")
@@ -510,9 +542,11 @@ class RcloneEngineImpl @Inject constructor(
         tolerateFileErrors: Boolean,
     ): SyncProgress {
         val success = status["success"]?.jsonPrimitive?.booleanOrNull ?: false
-        if (success) return statsFor(d, group)
+        // Stamp the run's stats group on the terminal emission so the worker can
+        // scope its per-file failure query (core/transferred) to THIS run.
+        if (success) return statsFor(d, group).copy(statsGroup = group)
         // A copy/backup treats a non-fatal file-level failure as partial success.
-        if (tolerateFileErrors) partialSuccessStats(d, group)?.let { return it }
+        if (tolerateFileErrors) partialSuccessStats(d, group)?.let { return it.copy(statsGroup = group) }
         throw classifyJobError(status["error"]?.jsonPrimitive?.contentOrNull ?: "sync failed")
     }
 

@@ -99,6 +99,12 @@ data class SyncRun(
     val errorMessage: String? = null,
     /** Path to the captured rclone verbose log for this run, if any. */
     val logPath: String? = null,
+    /**
+     * Newline-joined list of per-file failures from the last error run. Each line is
+     * "path\terror" (tab-separated). Empty when there are no file-level failures.
+     * Capped at 100 entries at capture time to avoid unbounded storage.
+     */
+    val failedFiles: String = "",
 )
 
 /**
@@ -189,6 +195,12 @@ data class SyncProgress(
     /** Files deleted (mirror / delete-extraneous). In `--dry-run` this is the
      *  count rclone *would* delete, surfaced in the preview's blast radius. */
     val deletes: Int = 0,
+    /** rclone stats group ("job/<id>") for this run, stamped on the terminal
+     *  emission. Lets the worker scope a `core/transferred` failure query to THIS
+     *  run rather than the whole shared daemon — concurrent "sync all" runs would
+     *  otherwise cross-contaminate each other's failed-file lists. Null on
+     *  non-terminal and dry-run emissions. */
+    val statsGroup: String? = null,
 ) {
     val fraction: Float
         get() = if (totalBytes > 0) (bytesTransferred.toFloat() / totalBytes).coerceIn(0f, 1f) else 0f

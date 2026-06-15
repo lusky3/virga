@@ -33,6 +33,9 @@ class SyncHistoryRepository @Inject constructor(
      * Finalizes the run [runId]. Uses a targeted UPDATE so the `startedAtEpochMs`
      * recorded by [startRun] is preserved (the caller no longer supplies it, which
      * previously overwrote it with a slightly-later timestamp).
+     *
+     * [failedFiles] is a newline-joined list of "path\terror" entries (tab-separated),
+     * capped at 100 by the caller. Defaults to empty (no file-level failures).
      */
     suspend fun finishRun(
         runId: Long,
@@ -42,6 +45,7 @@ class SyncHistoryRepository @Inject constructor(
         errorCount: Int,
         errorMessage: String? = null,
         logPath: String? = null,
+        failedFiles: String = "",
     ) = runDao.finishRun(
         runId = runId,
         endedAtEpochMs = System.currentTimeMillis(),
@@ -51,6 +55,7 @@ class SyncHistoryRepository @Inject constructor(
         errorCount = errorCount,
         errorMessage = errorMessage,
         logPath = logPath,
+        failedFiles = failedFiles,
     )
 
     suspend fun pruneOlderThan(beforeEpochMs: Long) = runDao.pruneOlderThan(beforeEpochMs)

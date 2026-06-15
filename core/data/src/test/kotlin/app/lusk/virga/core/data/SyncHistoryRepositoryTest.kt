@@ -70,6 +70,7 @@ class SyncHistoryRepositoryTest {
                 errorCount = 0,
                 errorMessage = null,
                 logPath = "/logs/run5.txt",
+                failedFiles = "",
             )
         }
     }
@@ -94,6 +95,33 @@ class SyncHistoryRepositoryTest {
                 errorCount = 2,
                 errorMessage = "boom",
                 logPath = null,
+                failedFiles = "",
+            )
+        }
+    }
+
+    @Test fun `finishRun forwards failedFiles to the dao`() = runTest {
+        val failedFiles = "path/to/file.txt\tpermission denied"
+        repo.finishRun(
+            runId = 7L,
+            status = SyncStatus.SUCCESS,
+            filesTransferred = 5,
+            bytesTransferred = 512L,
+            errorCount = 1,
+            failedFiles = failedFiles,
+        )
+
+        coVerify {
+            runDao.finishRun(
+                runId = 7L,
+                endedAtEpochMs = match { it > 0L },
+                status = SyncStatus.SUCCESS,
+                filesTransferred = 5,
+                bytesTransferred = 512L,
+                errorCount = 1,
+                errorMessage = null,
+                logPath = null,
+                failedFiles = failedFiles,
             )
         }
     }

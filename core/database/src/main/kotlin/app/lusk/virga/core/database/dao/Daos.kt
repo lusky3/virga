@@ -92,7 +92,8 @@ interface SyncRunDao {
     @Query(
         "UPDATE sync_runs SET endedAtEpochMs = :endedAtEpochMs, status = :status, " +
             "filesTransferred = :filesTransferred, bytesTransferred = :bytesTransferred, " +
-            "errorCount = :errorCount, errorMessage = :errorMessage, logPath = :logPath " +
+            "errorCount = :errorCount, errorMessage = :errorMessage, logPath = :logPath, " +
+            "failedFiles = :failedFiles " +
             "WHERE id = :runId",
     )
     suspend fun finishRun(
@@ -104,6 +105,7 @@ interface SyncRunDao {
         errorCount: Int,
         errorMessage: String?,
         logPath: String?,
+        failedFiles: String = "",
     )
 
     @Query("DELETE FROM sync_runs WHERE startedAtEpochMs < :beforeEpochMs")

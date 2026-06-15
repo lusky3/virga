@@ -197,6 +197,49 @@ private fun RunDetailContent(
                 )
             }
         }
+        if (run.failedFiles.isNotBlank()) {
+            val entries = run.failedFiles.lines().mapNotNull { line ->
+                val tab = line.indexOf('\t')
+                if (tab < 0) null else line.substring(0, tab) to line.substring(tab + 1)
+            }
+            if (entries.isNotEmpty()) {
+                HorizontalDivider()
+                FailedFilesSection(entries)
+            }
+        }
+    }
+}
+
+/**
+ * A compact "Failed files" list shown when the run has per-file transfer failures.
+ * [entries] is a list of (path, error) pairs parsed from [SyncRun.failedFiles].
+ * Extracted to keep [RunDetailContent] within Lizard/detekt complexity limits.
+ */
+@Composable
+private fun FailedFilesSection(entries: List<Pair<String, String>>) {
+    Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.xs)) {
+        Text(
+            stringResource(R.string.run_detail_failed_files_header),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.error,
+        )
+        entries.forEach { (path, error) ->
+            // Wrap the whole entry so both the path AND the error are selectable —
+            // users copy error text to search/report it.
+            SelectionContainer {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = path,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        text = stringResource(R.string.run_detail_failed_files_error, error),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        }
     }
 }
 

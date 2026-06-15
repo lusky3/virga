@@ -125,6 +125,8 @@
     <string name="run_detail_errors">Errors</string>
     <string name="run_detail_log">Log / error message</string>
     <string name="run_detail_copy_log">Copy log</string>
+    <string name="run_detail_failed_files_header">Failed files</string>
+    <string name="run_detail_failed_files_error">Error: %1$s</string>
 
     <!-- SyncTaskEditScreen -->
     <string name="sync_edit_title_new">New sync task</string>
