@@ -25,6 +25,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
@@ -190,72 +192,63 @@ private fun RemoteQuotaRow(quota: RemoteQuota?, loading: Boolean) {
  * "Connected" (success) or "Connection failed" (failure) with appropriate color.
  * Renders nothing when no test has been started and nothing is in flight.
  */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun RemoteConnectivityRow(result: ConnectivityResult?, testing: Boolean) {
     when {
-        testing -> {
-            val testingLabel = stringResource(R.string.remotes_connectivity_testing)
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = VirgaSpacing.xs)
-                    .semantics { liveRegion = LiveRegionMode.Polite },
-            ) {
-                Text(
-                    testingLabel,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                LinearWavyProgressIndicator(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = VirgaSpacing.xs)
-                        .semantics { contentDescription = testingLabel },
-                )
-            }
-        }
-        result == ConnectivityResult.SUCCESS -> {
-            val label = stringResource(R.string.remotes_connectivity_success)
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = VirgaSpacing.xs),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    Icons.Filled.Wifi,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = VirgaSpacing.xs),
-                )
-            }
-        }
-        result == ConnectivityResult.FAILURE -> {
-            val label = stringResource(R.string.remotes_connectivity_failed)
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = VirgaSpacing.xs),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    Icons.Filled.WifiOff,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                )
-                Text(
-                    label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(start = VirgaSpacing.xs),
-                )
-            }
-        }
+        testing -> ConnectivityTestingRow()
+        result == ConnectivityResult.SUCCESS -> ConnectivityStatusRow(
+            icon = Icons.Filled.Wifi,
+            label = stringResource(R.string.remotes_connectivity_success),
+            color = MaterialTheme.colorScheme.primary,
+        )
+        result == ConnectivityResult.FAILURE -> ConnectivityStatusRow(
+            icon = Icons.Filled.WifiOff,
+            label = stringResource(R.string.remotes_connectivity_failed),
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+}
+
+/** In-flight state: a "Testing…" label over an indeterminate progress bar. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun ConnectivityTestingRow() {
+    val testingLabel = stringResource(R.string.remotes_connectivity_testing)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = VirgaSpacing.xs)
+            .semantics { liveRegion = LiveRegionMode.Polite },
+    ) {
+        Text(
+            testingLabel,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        LinearWavyProgressIndicator(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = VirgaSpacing.xs)
+                .semantics { contentDescription = testingLabel },
+        )
+    }
+}
+
+/** Finished state: an [icon] + [label] tinted [color] (success or failure share this). */
+@Composable
+private fun ConnectivityStatusRow(icon: ImageVector, label: String, color: Color) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = VirgaSpacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = color)
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = color,
+            modifier = Modifier.padding(start = VirgaSpacing.xs),
+        )
     }
 }
