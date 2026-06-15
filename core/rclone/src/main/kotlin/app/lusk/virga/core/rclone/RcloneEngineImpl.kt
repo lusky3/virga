@@ -360,17 +360,7 @@ class RcloneEngineImpl @Inject constructor(
                 put("srcFs", srcFs)
                 put("dstFs", dstFs)
                 put("_async", true)
-                putConfig(
-                    bwLimit = options.bwLimit,
-                    transfers = options.transfers,
-                    checkers = options.checkers,
-                    bufferSize = options.bufferSize,
-                    dryRun = options.dryRun,
-                    checksum = options.checksum,
-                    backupDir = options.backupDir,
-                    maxDelete = options.maxDelete,
-                    extraConfig = options.extraConfig,
-                )
+                putConfig(options)
                 putFilters(options.filters, options.minSize, options.maxSize, options.minAge, options.maxAge)
             })
         }
@@ -396,17 +386,7 @@ class RcloneEngineImpl @Inject constructor(
                 put("path2", path2)
                 put("_async", true)
                 if (options.resync) put("resync", true)
-                putConfig(
-                    bwLimit = options.bwLimit,
-                    transfers = options.transfers,
-                    checkers = options.checkers,
-                    bufferSize = options.bufferSize,
-                    dryRun = options.dryRun,
-                    checksum = options.checksum,
-                    backupDir = options.backupDir,
-                    maxDelete = options.maxDelete,
-                    extraConfig = options.extraConfig,
-                )
+                putConfig(options)
                 putFilters(options.filters, options.minSize, options.maxSize, options.minAge, options.maxAge)
             })
         }

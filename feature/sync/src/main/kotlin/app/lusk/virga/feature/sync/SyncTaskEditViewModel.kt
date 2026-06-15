@@ -75,6 +75,9 @@ data class SyncTaskForm(
     val maxDeleteText: String = "",
     /** Raw "Key=Value" extra config block (newline-separated). */
     val extraConfig: String = "",
+    /** rclone MaxTransfer cap (SizeSuffix, e.g. "10G"); blank = unset. */
+    val maxTransfer: String = "",
+    val maxTransferError: String? = null,
     val bwLimitWifiError: String? = null,
     val bwLimitMeteredError: String? = null,
     val bufferSizeError: String? = null,
@@ -130,7 +133,8 @@ data class SyncTaskForm(
             minSizeError == null &&
             maxSizeError == null &&
             minAgeError == null &&
-            maxAgeError == null
+            maxAgeError == null &&
+            maxTransferError == null
 }
 
 @HiltViewModel
@@ -236,6 +240,7 @@ class SyncTaskEditViewModel @Inject constructor(
                         maxDelete = task.maxDelete,
                         maxDeleteText = task.maxDelete?.toString() ?: "",
                         extraConfig = task.extraConfig,
+                        maxTransfer = task.maxTransfer,
                         createdAtEpochMs = task.createdAtEpochMs,
                         directionError = if (isSaf && task.direction == SyncDirection.BISYNC) BISYNC_SAF_ERROR else null,
                     )
@@ -304,6 +309,7 @@ class SyncTaskEditViewModel @Inject constructor(
             maxSizeError = validateSizeSuffix(next.maxSize),
             minAgeError = validateDuration(next.minAge),
             maxAgeError = validateDuration(next.maxAge),
+            maxTransferError = validateSizeSuffix(next.maxTransfer),
         )
     }
 
@@ -370,6 +376,7 @@ class SyncTaskEditViewModel @Inject constructor(
                 backupDir = form.backupDir.trim().ifBlank { null },
                 maxDelete = form.maxDelete,
                 extraConfig = form.extraConfig.trim(),
+                maxTransfer = form.maxTransfer.trim(),
                 // New task: stamp creation time now. Existing task (edit): preserve the
                 // original timestamp loaded into the form, so editing doesn't reset it.
                 createdAtEpochMs = if (form.id == 0L) System.currentTimeMillis() else form.createdAtEpochMs,
@@ -383,7 +390,12 @@ class SyncTaskEditViewModel @Inject constructor(
     private companion object {
         const val BISYNC_SAF_ERROR = "Two-way sync isn't available for this folder on this device."
         private val PRESET_INTERVAL_MINUTES = setOf(null, 15, 30, 60, 360, 720, 1440)
-        private val BW_LIMIT_REGEX = Regex("""^\d+[KMGTkmgt]?(:\d+[KMGTkmgt]?)?$""")
+        // Single-rate: e.g. 1M, 10M:1M (upload:download)
+        private val BW_LIMIT_SINGLE_REGEX = Regex("""^\d+[KMGTkmgt]?(:\d+[KMGTkmgt]?)?$""")
+        // One timetable token: HH:MM,RATE — HH 00-23, MM 00-59,
+        // RATE = "off" | SizeSuffix | SizeSuffix:SizeSuffix
+        private val BW_LIMIT_TOKEN_REGEX =
+            Regex("""^(?:[01]\d|2[0-3]):[0-5]\d,(?:off|\d+[KMGTkmgt]?(?::\d+[KMGTkmgt]?)?)$""")
         private val BUFFER_SIZE_REGEX = Regex("""^\d+[KMGkmg]?$""")
         // rclone SizeSuffix: optional decimal number followed by an optional unit.
         // Accepts: plain bytes (e.g. "1024"), SI (e.g. "10M", "1.5G"), IEC (e.g. "16Mi").
@@ -398,9 +410,14 @@ class SyncTaskEditViewModel @Inject constructor(
 
         fun validateBwLimit(value: String): String? {
             val trimmed = value.trim()
-            return if (trimmed.isNotBlank() && !BW_LIMIT_REGEX.matches(trimmed)) {
-                "Invalid format — use e.g. 1M or 10M:1M"
-            } else null
+            if (trimmed.isBlank()) return null
+            if (BW_LIMIT_SINGLE_REGEX.matches(trimmed)) return null
+            // Accept a timetable: one-or-more whitespace-separated HH:MM,RATE tokens.
+            // Split on a whitespace run (not a single space) so pasted input with
+            // doubled spaces doesn't yield an empty token and spuriously fail.
+            val tokens = trimmed.split(Regex("""\s+""")).filter { it.isNotBlank() }
+            if (tokens.isNotEmpty() && tokens.all { BW_LIMIT_TOKEN_REGEX.matches(it) }) return null
+            return "Invalid bandwidth limit — use e.g. 1M, 10M:1M, or a timetable like 08:00,512k 19:00,off"
         }
 
         fun validateBufferSize(value: String): String? {

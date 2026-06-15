@@ -72,6 +72,7 @@ class SyncExecutor @Inject constructor(
                     backupDir = task.backupDir,
                     maxDelete = task.maxDelete,
                     extraConfig = extra,
+                    maxTransfer = task.maxTransfer.ifBlank { null },
                 ),
             )
             else -> engine.sync(
@@ -95,6 +96,7 @@ class SyncExecutor @Inject constructor(
                     backupDir = task.backupDir,
                     maxDelete = task.maxDelete,
                     extraConfig = extra,
+                    maxTransfer = task.maxTransfer.ifBlank { null },
                 ),
             )
         }

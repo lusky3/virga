@@ -1,6 +1,8 @@
 package app.lusk.virga.core.rclone
 
+import app.lusk.virga.core.common.model.SyncDirection
 import com.google.common.truth.Truth.assertThat
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
@@ -9,10 +11,42 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
 
 /**
- * Unit tests for [putFilters] in RcloneJson.kt.
+ * Unit tests for [putFilters] and [putConfig] in RcloneJson.kt.
  * No daemon, no coroutines — pure JSON construction.
  */
 class RcloneJsonTest {
+
+    // --- putConfig: MaxTransfer / CutoffMode (B6) ---------------------------
+
+    @Test
+    fun `putConfig emits MaxTransfer and CutoffMode CAUTIOUS when maxTransfer is set`() {
+        val obj = buildJsonObject {
+            putConfig(SyncOptions(direction = SyncDirection.UPLOAD, maxTransfer = "10G"))
+        }
+        val cfg = obj["_config"]!!.jsonObject
+        assertThat(cfg["MaxTransfer"]?.jsonPrimitive?.contentOrNull).isEqualTo("10G")
+        assertThat(cfg["CutoffMode"]?.jsonPrimitive?.contentOrNull).isEqualTo("CAUTIOUS")
+    }
+
+    @Test
+    fun `putConfig omits MaxTransfer and CutoffMode when maxTransfer is blank`() {
+        val obj = buildJsonObject {
+            putConfig(SyncOptions(direction = SyncDirection.UPLOAD, maxTransfer = ""))
+        }
+        val cfg = obj["_config"]!!.jsonObject
+        assertThat(cfg.containsKey("MaxTransfer")).isFalse()
+        assertThat(cfg.containsKey("CutoffMode")).isFalse()
+    }
+
+    @Test
+    fun `putConfig omits MaxTransfer and CutoffMode when maxTransfer is null`() {
+        val obj = buildJsonObject {
+            putConfig(SyncOptions(direction = SyncDirection.UPLOAD))
+        }
+        val cfg = obj["_config"]!!.jsonObject
+        assertThat(cfg.containsKey("MaxTransfer")).isFalse()
+        assertThat(cfg.containsKey("CutoffMode")).isFalse()
+    }
 
     @Test
     fun `putFilters omits _filter block when all inputs are blank`() {

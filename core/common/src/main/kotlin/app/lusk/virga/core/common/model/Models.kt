@@ -52,9 +52,13 @@ data class SyncTask(
     /** rclone --min-age / --max-age (Duration, e.g. "30d", "1h"); blank = unset. */
     val minAge: String = "",
     val maxAge: String = "",
-    /** rclone --bwlimit on WiFi/metered; null/blank = no limit. e.g. "1M". */
+    /** rclone --bwlimit on WiFi/metered; null/blank = no limit. e.g. "1M" or a timetable. */
     val bwLimitWifi: String? = null,
     val bwLimitMetered: String? = null,
+    /** rclone _config key "MaxTransfer" (SizeSuffix, e.g. "10G"); blank = unset. When set,
+     *  rclone stops the run when this many bytes have been transferred. CutoffMode is set
+     *  to CAUTIOUS so the cap is never exceeded. */
+    val maxTransfer: String = "",
     val transfers: Int = 4,
     val checkers: Int = 8,
     val bufferSize: String = "16M",
