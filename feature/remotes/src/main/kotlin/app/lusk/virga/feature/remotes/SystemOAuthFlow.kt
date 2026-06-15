@@ -65,27 +65,10 @@ internal class SystemOAuthFlow(
             )
             return
         }
-        // Google derives its redirect from the client ID, so a BYO Google client
-        // needs its redirect recomputed from the user's ID (not the built-in).
-        val redirectUri = if (provider.id == OAuthProviders.GoogleDrive.id && override != null) {
-            OAuthConfig.googleAndroidRedirect(clientId, oauthConfig.redirectUri(provider.id))
-        } else {
-            oauthConfig.redirectUri(provider.id)
-        }
-        // UI-M1: a BYO Google client derives a reverse-domain redirect scheme from
-        // the user's client ID, but the manifest intent-filter only advertises the
-        // scheme baked from the BUILT-IN client ID — so the OS routes the redirect
-        // to no activity and the flow dead-ends after sign-in. The manifest scheme
-        // cannot be registered at runtime, so refuse to launch when the BYO Google
-        // redirect differs from the built-in one.
-        if (provider.id == OAuthProviders.GoogleDrive.id && override != null &&
-            redirectUri != oauthConfig.redirectUri(provider.id)
-        ) {
-            transient.value = transient.value.copy(
-                message = context.getString(R.string.remotes_msg_byo_google_unsupported),
-            )
-            return
-        }
+        // Resolve the redirect URI (recomputed for a BYO Google client) and reject the
+        // runtime-unregisterable BYO-Google scheme; a null result means the flow was
+        // refused and the user-facing message is already set.
+        val redirectUri = resolveRedirectUri(provider, clientId, override) ?: return
         val pending = OAuthTokenExchanger.PendingAuth(
             provider = provider,
             state = UUID.randomUUID().toString(),
@@ -98,6 +81,35 @@ internal class SystemOAuthFlow(
         oauthStore.startPending(pending)
         transient.value = transient.value.copy(oauthInProgress = true, message = null)
         onLaunchUrl(tokenExchanger.authorizeUrl(pending))
+    }
+
+    /**
+     * Resolves the redirect URI for [provider] given the resolved [clientId] and whether
+     * a BYO [override] client is in use. Google derives its redirect from the client ID,
+     * so a BYO Google client needs its redirect recomputed from the user's ID.
+     *
+     * UI-M1: a BYO Google client derives a reverse-domain redirect scheme from the user's
+     * client ID, but the manifest intent-filter only advertises the scheme baked from the
+     * BUILT-IN client ID — so the OS routes the redirect to no activity and the flow
+     * dead-ends after sign-in. The manifest scheme cannot be registered at runtime, so
+     * returns null (and sets the user-facing message) when the BYO Google redirect differs
+     * from the built-in one.
+     */
+    private fun resolveRedirectUri(provider: OAuthProvider, clientId: String, override: String?): String? {
+        val isByoGoogle = provider.id == OAuthProviders.GoogleDrive.id && override != null
+        val builtInRedirect = oauthConfig.redirectUri(provider.id)
+        val redirectUri = if (isByoGoogle) {
+            OAuthConfig.googleAndroidRedirect(clientId, builtInRedirect)
+        } else {
+            builtInRedirect
+        }
+        if (isByoGoogle && redirectUri != builtInRedirect) {
+            transient.value = transient.value.copy(
+                message = context.getString(R.string.remotes_msg_byo_google_unsupported),
+            )
+            return null
+        }
+        return redirectUri
     }
 
     /**
