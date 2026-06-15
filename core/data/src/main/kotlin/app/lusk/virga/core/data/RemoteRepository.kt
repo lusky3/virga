@@ -122,4 +122,11 @@ class RemoteRepository @Inject constructor(
      * fails — callers should fall back to freeform input in that case.
      */
     suspend fun providers(): List<RemoteProvider> = engine.providers()
+
+    /**
+     * Finds and removes duplicate files on [remoteName] using rclone dedupe.
+     * [dedupeMode] controls which duplicate to keep ("skip" = safest).
+     */
+    suspend fun dedupe(remoteName: String, dedupeMode: String = "skip"): Result<Unit> =
+        engine.dedupe(remoteName, dedupeMode)
 }

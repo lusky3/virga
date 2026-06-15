@@ -102,6 +102,42 @@ class SyncExecutor @Inject constructor(
         }
     }
 
+    /**
+     * Runs a check (compare without transferring) for [task]. Only valid for non-SAF
+     * sources; callers must gate with [CheckUseCase.isAvailableFor]. The returned flow
+     * emits progress and completes when the check finishes.
+     */
+    fun runCheck(task: SyncTask): Flow<SyncProgress> {
+        val local = task.sourcePath
+        val remote = remoteSpec(task)
+        val filters = task.filters.lines().filter { it.isNotBlank() }
+        return engine.check(
+            source = local,
+            dest = remote,
+            options = SyncOptions(
+                direction = task.direction,
+                // Forward the task's performance + comparison config so a verify behaves
+                // like the real run it previews (checkers especially matter — check is
+                // checker-bound; checksum decides hash-vs-size compare; extraConfig is
+                // the power-user escape hatch). A verify is user-initiated with no
+                // metered signal, so it uses the Wi-Fi bandwidth limit. Transfer/delete
+                // knobs (deleteExtraneous, maxDelete, maxTransfer, backupDir) are
+                // intentionally omitted — a check transfers and deletes nothing.
+                bwLimit = task.bwLimitWifi,
+                transfers = task.transfers,
+                checkers = task.checkers,
+                bufferSize = task.bufferSize,
+                filters = filters,
+                minSize = task.minSize.ifBlank { null },
+                maxSize = task.maxSize.ifBlank { null },
+                minAge = task.minAge.ifBlank { null },
+                maxAge = task.maxAge.ifBlank { null },
+                checksum = task.checksum,
+                extraConfig = ExtraConfigParser.parseToMap(task.extraConfig),
+            ),
+        )
+    }
+
     /** Builds the rclone "remote:path" destination spec. */
     private fun remoteSpec(task: SyncTask): String {
         val path = task.remotePath.removePrefix("/")

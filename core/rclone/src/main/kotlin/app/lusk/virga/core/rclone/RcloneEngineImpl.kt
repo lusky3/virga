@@ -23,6 +23,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.time.Instant
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -32,6 +33,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -431,6 +433,51 @@ class RcloneEngineImpl @Inject constructor(
             } catch (e: Throwable) {
                 Result.failure(e)
             }
+        }
+    }
+
+    override fun check(source: String, dest: String, options: SyncOptions): Flow<SyncProgress> =
+        // check never deletes, so file-level errors (a missing file) are informational.
+        runJobWithProgress(tolerateFileErrors = true) { d ->
+            rc(d, "operations/check", buildJsonObject {
+                put("srcFs", source)
+                put("dstFs", dest)
+                put("_async", true)
+                putConfig(options)
+                putFilters(options.filters, options.minSize, options.maxSize, options.minAge, options.maxAge)
+            })
+        }
+
+    override suspend fun dedupe(remoteName: String, dedupeMode: String): Result<Unit> {
+        var leased = false
+        return try {
+            val d = acquireDaemon()
+            leased = true
+            // rclone exposes `dedupe` only as a CLI command, not an operations/* RC
+            // method, so run it through core/command. COMBINED_OUTPUT returns
+            // {"error": <bool>, "result": "<text>"}; a true error flag means the
+            // dedupe itself failed even though the HTTP call succeeded.
+            val resp = rc(d, "core/command", buildJsonObject {
+                put("command", "dedupe")
+                putJsonArray("arg") { add("$remoteName:") }
+                putJsonObject("opt") { put("dedupe-mode", dedupeMode) }
+                put("returnType", "COMBINED_OUTPUT")
+            })
+            if (resp["error"]?.jsonPrimitive?.booleanOrNull == true) {
+                Result.failure(
+                    VirgaError.Rclone(
+                        message = resp["result"]?.jsonPrimitive?.contentOrNull ?: "dedupe failed",
+                    ),
+                )
+            } else {
+                Result.success(Unit)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            Result.failure(e)
+        } finally {
+            if (leased) withContext(NonCancellable) { runCatching { releaseDaemon() } }
         }
     }
 

@@ -16,12 +16,14 @@ import kotlinx.coroutines.flow.Flow
  * is an absolute filesystem path (requires MANAGE_EXTERNAL_STORAGE for SD cards).
  *
  * ## Failure convention
- * Every operation signals failure the same way: `suspend` methods **throw**
+ * Most operations signal failure the same way: `suspend` methods **throw**
  * [app.lusk.virga.core.common.error.VirgaError] on failure (rather than some
  * returning `Result` and others throwing), and the streaming [sync]/[bisync]
  * flows surface failures by terminating the flow with a `VirgaError`. Callers
  * that need a `Result` (e.g. repositories at the UI boundary) wrap the call in
- * `runCatching`.
+ * `runCatching`. The sole exception is [dedupe], a fire-and-forget maintenance
+ * action that returns [Result] directly because its caller always treats failure
+ * as a non-fatal, surfaced-to-snackbar outcome rather than a thrown error.
  */
 interface RcloneEngine {
     suspend fun startDaemon(): RcloneDaemon
@@ -137,4 +139,36 @@ interface RcloneEngine {
     /** Emits progress until the sync completes; the terminal emission has full counts. */
     fun sync(source: String, dest: String, options: SyncOptions): Flow<SyncProgress>
     fun bisync(path1: String, path2: String, options: BisyncOptions): Flow<SyncProgress>
+
+    /**
+     * Compares [source] and [dest] without transferring any data (rclone check).
+     *
+     * RC endpoint: `operations/check` — chosen over the generic command runner
+     * because it is the only RC endpoint that runs a check job asynchronously
+     * with job-status polling (same pattern as sync/copy). It accepts `srcFs`,
+     * `dstFs`, `_filter`, and `_config` blocks, so task filters and config
+     * options apply identically to sync.
+     *
+     * Terminal [SyncProgress.errors] carries rclone's check `errors` stat, which
+     * counts each differing or missing file (plus any genuine read/hash error) —
+     * treat it as the "files that differ or are missing" count, not an exact clean
+     * diff. The flow completes with a single terminal emission (like [sync]).
+     */
+    fun check(source: String, dest: String, options: SyncOptions): Flow<SyncProgress>
+
+    /**
+     * Finds and removes duplicate files on [remoteName] by hash.
+     *
+     * rclone exposes `dedupe` only as a CLI command — there is no `operations/dedupe`
+     * RC method — so this routes through the generic `core/command` runner
+     * (`command="dedupe"`, `arg=["<remoteName>:"]`, `opt={"dedupe-mode": …}`,
+     * `returnType=COMBINED_OUTPUT`). A truthy `error` flag in the response is mapped
+     * to [Result.failure]. [dedupeMode] is one of "skip", "first", "newest",
+     * "oldest", "rename", or "largest"; defaults to "skip" (non-destructive of
+     * differing same-name files — removes only exact byte duplicates).
+     *
+     * Routes through [acquireDaemon]/[releaseDaemon] with NonCancellable
+     * release, consistent with the pattern used by [DryRunUseCase].
+     */
+    suspend fun dedupe(remoteName: String, dedupeMode: String = "skip"): Result<Unit>
 }

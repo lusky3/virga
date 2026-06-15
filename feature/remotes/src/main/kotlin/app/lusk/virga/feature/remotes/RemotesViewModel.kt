@@ -371,6 +371,26 @@ class RemotesViewModel @Inject constructor(
     }
 
     /**
+     * Runs rclone dedupe on [remoteName]. Requires user confirmation before calling
+     * (the caller presents a confirm dialog). Surfaces success/failure via the
+     * screen-level snackbar.
+     */
+    fun dedupeRemote(remoteName: String) {
+        viewModelScope.launch {
+            val result = repository.dedupe(remoteName)
+            val msg = if (result.isSuccess) {
+                context.getString(R.string.remotes_dedupe_success, remoteName)
+            } else {
+                // Surface the rclone reason (e.g. "directory not found", quota) — the
+                // engine threads it through; don't collapse it to a generic failure.
+                val reason = result.exceptionOrNull()?.toUserMessage().orEmpty()
+                context.getString(R.string.remotes_dedupe_failed, remoteName, reason)
+            }
+            transient.update { it.copy(message = msg) }
+        }
+    }
+
+    /**
      * Lazily fetches storage quota for [remoteName]. Called from the card's
      * LaunchedEffect. Attempted at most once per VM lifetime per remote (guarded
      * by [quotaAttempted], which records the attempt BEFORE the call so failures

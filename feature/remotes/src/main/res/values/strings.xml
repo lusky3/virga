@@ -146,4 +146,12 @@
     <string name="remotes_msg_connectivity_warning">Remote \"%1$s\" was saved, but could not verify connectivity. Check your credentials.</string>
     <string name="remotes_msg_freeform_no_obscure">Heads up: the provider schema wasn\'t available, so any password values were stored without obscuring. Re-create this remote once the schema loads if it contains secrets.</string>
     <string name="remotes_msg_oauth_timed_out">Authorization timed out. Please try again.</string>
+    <!-- Dedupe (B2) -->
+    <string name="remotes_card_menu_dedupe">Find duplicates</string>
+    <string name="remotes_dedupe_confirm_title">Find duplicates on \"%1$s\"?</string>
+    <string name="remotes_dedupe_confirm_body">rclone will scan \"%1$s\" for duplicate files (same hash) and remove extras, keeping one copy. This cannot be undone.</string>
+    <string name="remotes_dedupe_confirm_action">Find duplicates</string>
+    <string name="remotes_dedupe_cancel">Cancel</string>
+    <string name="remotes_dedupe_success">Dedupe complete on \"%1$s\".</string>
+    <string name="remotes_dedupe_failed">Dedupe failed on \"%1$s\": %2$s</string>
 </resources>

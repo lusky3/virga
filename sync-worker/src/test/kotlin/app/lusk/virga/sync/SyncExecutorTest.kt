@@ -22,6 +22,7 @@ class SyncExecutorTest {
     private class RecordingEngine : RcloneEngine {
         var syncArgs: Triple<String, String, SyncOptions>? = null
         var bisyncArgs: Triple<String, String, BisyncOptions>? = null
+        var checkArgs: Triple<String, String, SyncOptions>? = null
 
         override fun sync(source: String, dest: String, options: SyncOptions): Flow<SyncProgress> {
             syncArgs = Triple(source, dest, options)
@@ -62,6 +63,12 @@ class SyncExecutorTest {
             salt: String?,
         ) = Unit
         override suspend fun <T> withDaemonForOAuth(block: suspend (app.lusk.virga.core.rclone.RcloneDaemon) -> T): T =
+            error("unused")
+        override fun check(source: String, dest: String, options: SyncOptions): Flow<SyncProgress> {
+            checkArgs = Triple(source, dest, options)
+            return flowOf(SyncProgress(0, 0, 0.0, 0, 0, null, 0))
+        }
+        override suspend fun dedupe(remoteName: String, dedupeMode: String): Result<Unit> =
             error("unused")
     }
 
@@ -231,5 +238,103 @@ class SyncExecutorTest {
         val engine = RecordingEngine()
         SyncExecutor(engine).run(task(SyncDirection.BISYNC), metered = false).collect {}
         assertThat(engine.bisyncArgs!!.third.maxTransfer).isNull()
+    }
+
+    @Test
+    fun `runCheck forwards task performance settings and wifi bwlimit`() = runTest {
+        val engine = RecordingEngine()
+        val perfTask = task(SyncDirection.UPLOAD).copy(
+            bwLimitWifi = "5M",
+            bwLimitMetered = "1M",
+            transfers = 7,
+            checkers = 16,
+            bufferSize = "64M",
+        )
+        SyncExecutor(engine).runCheck(perfTask).collect {}
+
+        val opts = engine.checkArgs!!.third
+        // Verify mirrors the run's knobs; uses the Wi-Fi limit (not the metered cap).
+        assertThat(opts.bwLimit).isEqualTo("5M")
+        assertThat(opts.transfers).isEqualTo(7)
+        assertThat(opts.checkers).isEqualTo(16)
+        assertThat(opts.bufferSize).isEqualTo("64M")
+    }
+
+    @Test
+    fun `runCheck blank size-age fields become null in SyncOptions`() = runTest {
+        val engine = RecordingEngine()
+        // Default task has blank strings for minSize/maxSize/minAge/maxAge.
+        SyncExecutor(engine).runCheck(task(SyncDirection.UPLOAD)).collect {}
+
+        val opts = engine.checkArgs!!.third
+        assertThat(opts.minSize).isNull()
+        assertThat(opts.maxSize).isNull()
+        assertThat(opts.minAge).isNull()
+        assertThat(opts.maxAge).isNull()
+    }
+
+    @Test
+    fun `runCheck threads non-blank size-age fields into SyncOptions`() = runTest {
+        val engine = RecordingEngine()
+        val t = task(SyncDirection.UPLOAD).copy(
+            minSize = "1M",
+            maxSize = "1G",
+            minAge = "7d",
+            maxAge = "1y",
+        )
+        SyncExecutor(engine).runCheck(t).collect {}
+
+        val opts = engine.checkArgs!!.third
+        assertThat(opts.minSize).isEqualTo("1M")
+        assertThat(opts.maxSize).isEqualTo("1G")
+        assertThat(opts.minAge).isEqualTo("7d")
+        assertThat(opts.maxAge).isEqualTo("1y")
+    }
+
+    @Test
+    fun `runCheck builds correct remote spec`() = runTest {
+        val engine = RecordingEngine()
+        SyncExecutor(engine).runCheck(task(SyncDirection.UPLOAD)).collect {}
+
+        val (source, dest, _) = engine.checkArgs!!
+        assertThat(source).isEqualTo("/storage/emulated/0/DCIM")
+        assertThat(dest).isEqualTo("gdrive:Backup/DCIM")
+    }
+
+    @Test
+    fun `runCheck forwards checksum flag`() = runTest {
+        val engine = RecordingEngine()
+        val t = task(SyncDirection.UPLOAD).copy(checksum = true)
+        SyncExecutor(engine).runCheck(t).collect {}
+
+        assertThat(engine.checkArgs!!.third.checksum).isTrue()
+    }
+
+    @Test
+    fun `allowDeletes true sets deleteExtraneous on SyncOptions`() = runTest {
+        val engine = RecordingEngine()
+        SyncExecutor(engine).run(task(SyncDirection.UPLOAD), metered = false, allowDeletes = true).collect {}
+        assertThat(engine.syncArgs!!.third.deleteExtraneous).isTrue()
+    }
+
+    @Test
+    fun `allowDeletes defaults to false so deleteExtraneous is false`() = runTest {
+        val engine = RecordingEngine()
+        SyncExecutor(engine).run(task(SyncDirection.UPLOAD), metered = false).collect {}
+        assertThat(engine.syncArgs!!.third.deleteExtraneous).isFalse()
+    }
+
+    @Test
+    fun `dryRun true is forwarded into SyncOptions`() = runTest {
+        val engine = RecordingEngine()
+        SyncExecutor(engine).run(task(SyncDirection.UPLOAD), metered = false, dryRun = true).collect {}
+        assertThat(engine.syncArgs!!.third.dryRun).isTrue()
+    }
+
+    @Test
+    fun `dryRun true is forwarded into BisyncOptions`() = runTest {
+        val engine = RecordingEngine()
+        SyncExecutor(engine).run(task(SyncDirection.BISYNC), metered = false, dryRun = true).collect {}
+        assertThat(engine.bisyncArgs!!.third.dryRun).isTrue()
     }
 }

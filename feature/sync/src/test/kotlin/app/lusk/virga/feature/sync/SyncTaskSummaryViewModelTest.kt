@@ -7,6 +7,8 @@ import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
+import app.lusk.virga.sync.CheckResult
+import app.lusk.virga.sync.CheckUseCase
 import app.lusk.virga.sync.DryRunResult
 import app.lusk.virga.sync.DryRunUseCase
 import app.lusk.virga.sync.SyncProgressMonitor
@@ -48,9 +50,12 @@ class SyncTaskSummaryViewModelTest {
         every { progressFor(any()) } returns progressFlow
     }
     private val dryRunUseCase: DryRunUseCase = mockk(relaxed = true)
+    private val checkUseCase: CheckUseCase = mockk(relaxed = true)
 
     private fun viewModel() =
-        SyncTaskSummaryViewModel(taskRepository, historyRepository, scheduler, progressMonitor, dryRunUseCase)
+        SyncTaskSummaryViewModel(
+            taskRepository, historyRepository, scheduler, progressMonitor, dryRunUseCase, checkUseCase,
+        )
 
     // --- initial state -----------------------------------------------------
 
@@ -323,6 +328,71 @@ class SyncTaskSummaryViewModelTest {
 
         assertThat(vm.dryRun.value.running).isFalse()
         assertThat(vm.dryRun.value.result).isNull()
+        job.cancel()
+    }
+
+    // --- verifyChanges (CheckUseCase wiring) --------------------------------
+
+    @Test
+    fun verifyChanges_runsVerifyAndStoresResult() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.uiState.collect {} }
+        val t = task(id = 7L)
+        val result = CheckResult(differences = 2)
+        every { checkUseCase.isAvailableFor(t) } returns true
+        coEvery { checkUseCase.verify(t) } returns result
+
+        vm.load(id = 7L)
+        taskFlow.value = t
+        advanceUntilIdle()
+
+        vm.verifyChanges()
+        advanceUntilIdle()
+
+        assertThat(vm.checkState.value.running).isFalse()
+        assertThat(vm.checkState.value.result).isEqualTo(result)
+        coVerify(exactly = 1) { checkUseCase.verify(t) }
+        job.cancel()
+    }
+
+    @Test
+    fun verifyChanges_whenUnavailable_doesNotRun() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.uiState.collect {} }
+        val t = task(id = 7L)
+        every { checkUseCase.isAvailableFor(t) } returns false
+
+        vm.load(id = 7L)
+        taskFlow.value = t
+        advanceUntilIdle()
+
+        vm.verifyChanges()
+        advanceUntilIdle()
+
+        assertThat(vm.checkState.value.result).isNull()
+        coVerify(exactly = 0) { checkUseCase.verify(any()) }
+        job.cancel()
+    }
+
+    @Test
+    fun dismissVerify_resetsCheckState() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.uiState.collect {} }
+        val t = task(id = 7L)
+        every { checkUseCase.isAvailableFor(t) } returns true
+        coEvery { checkUseCase.verify(t) } returns CheckResult(differences = 0)
+
+        vm.load(id = 7L)
+        taskFlow.value = t
+        advanceUntilIdle()
+        vm.verifyChanges()
+        advanceUntilIdle()
+        assertThat(vm.checkState.value.result).isNotNull()
+
+        vm.dismissVerify()
+
+        assertThat(vm.checkState.value.running).isFalse()
+        assertThat(vm.checkState.value.result).isNull()
         job.cancel()
     }
 
