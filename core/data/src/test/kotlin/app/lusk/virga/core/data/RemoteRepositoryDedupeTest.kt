@@ -3,6 +3,7 @@ package app.lusk.virga.core.data
 import androidx.room.withTransaction
 import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.database.VirgaDatabase
+import app.lusk.virga.core.database.dao.ConflictDao
 import app.lusk.virga.core.database.dao.RemoteDao
 import app.lusk.virga.core.database.dao.SyncTaskDao
 import app.lusk.virga.core.rclone.RcloneEngine
@@ -29,6 +30,7 @@ class RemoteRepositoryDedupeTest {
     private val db = mockk<VirgaDatabase>()
     private val remoteDao = mockk<RemoteDao>(relaxed = true)
     private val syncTaskDao = mockk<SyncTaskDao>(relaxed = true)
+    private val conflictDao = mockk<ConflictDao>(relaxed = true)
     private val engine = mockk<RcloneEngine>()
     private val configManager = mockk<RcloneConfigManager>()
 
@@ -38,7 +40,7 @@ class RemoteRepositoryDedupeTest {
         mockkStatic("androidx.room.RoomDatabaseKt")
         val block = slot<suspend () -> Any?>()
         coEvery { db.withTransaction(capture(block)) } coAnswers { block.captured.invoke() }
-        repo = RemoteRepository(db, remoteDao, syncTaskDao, engine, configManager)
+        repo = RemoteRepository(db, remoteDao, syncTaskDao, conflictDao, engine, configManager)
     }
 
     @Test

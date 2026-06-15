@@ -219,6 +219,7 @@ fun RemotesScreen(
                                 onTestConnectivity = { viewModel.testConnectivity(remote.name) },
                                 onDedupe = { remoteToDedupe = remote },
                                 onEdit = { viewModel.beginEditRemote(remote.name) },
+                                onRename = { viewModel.beginRenameRemote(remote.name) },
                                 quota = state.quotas[remote.name],
                                 quotaLoading = remote.name in state.quotaLoading,
                                 connectivity = state.connectivityResults[remote.name],
@@ -324,6 +325,18 @@ fun RemotesScreen(
             onOAuth = { _, _ -> },
             onSaveClientId = { _, _ -> },
             onClearClientId = { },
+        )
+    }
+
+    // Rename dialog — mutually exclusive with edit (beginRenameRemote clears editMode).
+    state.renameTarget?.let { oldName ->
+        RenameRemoteDialog(
+            oldName = oldName,
+            inFlight = state.renameInFlight,
+            onConfirm = { newName, onError ->
+                viewModel.submitRename(oldName, newName, onError)
+            },
+            onDismiss = { viewModel.dismissRenameRemote() },
         )
     }
 

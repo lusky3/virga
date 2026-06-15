@@ -156,6 +156,16 @@
     <string name="remotes_msg_no_changes">No changes to save.</string>
     <string name="remotes_edit_schema_unavailable">Couldn\'t load this remote\'s settings. Check your connection and try again.</string>
 
+    <!-- Rename remote -->
+    <string name="remotes_card_menu_rename">Rename</string>
+    <string name="remotes_rename_dialog_title">Rename \"%1$s\"</string>
+    <string name="remotes_rename_new_name_label">New name</string>
+    <string name="remotes_rename_confirm">Rename</string>
+    <string name="remotes_rename_error_blank">Name must not be blank.</string>
+    <string name="remotes_rename_error_same">New name is the same as the current name.</string>
+    <string name="remotes_rename_error_taken">\"%1$s\" is already used by another remote.</string>
+    <string name="remotes_msg_remote_renamed">Renamed \"%1$s\" to \"%2$s\".</string>
+
     <!-- Dedupe (B2) -->
     <string name="remotes_card_menu_dedupe">Find duplicates</string>
     <string name="remotes_dedupe_confirm_title">Find duplicates on \"%1$s\"?</string>

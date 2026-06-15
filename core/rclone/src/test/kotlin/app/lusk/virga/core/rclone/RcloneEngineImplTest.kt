@@ -1342,6 +1342,115 @@ class RcloneEngineImplTest {
         coVerify(exactly = 1) { daemonManager.stop(fakeDaemon) }
     }
 
+    // --- renameRemote ---
+
+    @Test fun `renameRemote issues config_get, config_create (no obscure), config_delete in order`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.persistAndCleanup() } returns Unit
+
+        coEvery { apiClient.call(any(), any(), any(), "config/get", any()) } returns buildJsonObject {
+            put("type", "drive")
+            put("client_id", "abc123")
+            put("token", "{\"access_token\":\"stored\"}")
+        }
+        val createCapture = mutableListOf<kotlinx.serialization.json.JsonObject>()
+        coEvery { apiClient.call(any(), any(), any(), "config/create", capture(createCapture)) } returns buildJsonObject {}
+        val deleteCapture = mutableListOf<kotlinx.serialization.json.JsonObject>()
+        coEvery { apiClient.call(any(), any(), any(), "config/delete", capture(deleteCapture)) } returns buildJsonObject {}
+
+        engine.renameRemote("old", "new")
+
+        // Verify order: get → create → delete.
+        coVerify(ordering = io.mockk.Ordering.ORDERED) {
+            apiClient.call(any(), any(), any(), "config/get", any())
+            apiClient.call(any(), any(), any(), "config/create", any())
+            apiClient.call(any(), any(), any(), "config/delete", any())
+        }
+        // create must target the new name with type set correctly.
+        val createReq = createCapture.first()
+        assertThat(createReq["name"]?.jsonPrimitive?.contentOrNull).isEqualTo("new")
+        assertThat(createReq["type"]?.jsonPrimitive?.contentOrNull).isEqualTo("drive")
+        // Parameters must include non-type values verbatim.
+        val params = createReq["parameters"]?.jsonObject
+        assertThat(params?.get("client_id")?.jsonPrimitive?.contentOrNull).isEqualTo("abc123")
+        assertThat(params?.get("token")?.jsonPrimitive?.contentOrNull).isEqualTo("{\"access_token\":\"stored\"}")
+        assertThat(params?.containsKey("type")).isFalse()
+        // delete must target the old name.
+        assertThat(deleteCapture.first()["name"]?.jsonPrimitive?.contentOrNull).isEqualTo("old")
+    }
+
+    @Test fun `renameRemote opt does NOT contain obscure — no double-obscure`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.persistAndCleanup() } returns Unit
+        coEvery { apiClient.call(any(), any(), any(), "config/get", any()) } returns buildJsonObject {
+            put("type", "sftp")
+            put("pass", "YWxyZWFkeU9ic2N1cmVk") // pre-obscured value
+        }
+        val createCapture = mutableListOf<kotlinx.serialization.json.JsonObject>()
+        coEvery { apiClient.call(any(), any(), any(), "config/create", capture(createCapture)) } returns buildJsonObject {}
+        coEvery { apiClient.call(any(), any(), any(), "config/delete", any()) } returns buildJsonObject {}
+
+        engine.renameRemote("sftp-old", "sftp-new")
+
+        val opt = createCapture.first()["opt"]?.jsonObject
+        // obscure must NOT be set — values are already in rclone's obscured form.
+        assertThat(opt?.containsKey("obscure")).isFalse()
+        // nonInteractive must still be set.
+        assertThat(opt?.get("nonInteractive")?.jsonPrimitive?.booleanOrNull).isTrue()
+    }
+
+    @Test fun `renameRemote rejects when leases are held (exclusive section)`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        engine.acquireDaemon() // leases = 1
+
+        val error = assertThrows<VirgaError.Rclone> {
+            engine.renameRemote("a", "b")
+        }
+        assertThat(error.message).contains("Stop running syncs")
+    }
+
+    @Test fun `renameRemote throws when source remote type is missing`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.cleanup() } returns Unit
+        // config/get returns an object with no "type" key — remote not found.
+        coEvery { apiClient.call(any(), any(), any(), "config/get", any()) } returns buildJsonObject {}
+
+        val error = assertThrows<VirgaError.Rclone> {
+            engine.renameRemote("ghost", "new")
+        }
+        assertThat(error.message).contains("ghost")
+        // create must never be called.
+        coVerify(exactly = 0) { apiClient.call(any(), any(), any(), "config/create", any()) }
+    }
+
+    @Test fun `renameRemote does not delete old when create fails`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(fakeDaemon) } returns Unit
+        coEvery { configManager.cleanup() } returns Unit
+        coEvery { apiClient.call(any(), any(), any(), "config/get", any()) } returns buildJsonObject {
+            put("type", "drive")
+        }
+        coEvery { apiClient.call(any(), any(), any(), "config/create", any()) } throws
+            VirgaError.Rclone(exitCode = 400, message = "already exists")
+
+        assertThrows<VirgaError.Rclone> { engine.renameRemote("old", "taken") }
+
+        coVerify(exactly = 0) { apiClient.call(any(), any(), any(), "config/delete", any()) }
+    }
+
     @Test fun `withDaemonForOAuth failure while a sync co-leases discards the tainted config on the last release`() = runTest(testDispatcher) {
         coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
         coEvery { daemonManager.start(any()) } returns fakeDaemon

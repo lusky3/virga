@@ -76,6 +76,9 @@ class RemotesViewModelTest {
                 R.string.remotes_msg_freeform_no_obscure ->
                     "Heads up: the provider schema wasn't available, so any password values were stored " +
                         "without obscuring. Re-create this remote once the schema loads if it contains secrets."
+                R.string.remotes_rename_error_blank -> "Name must not be blank."
+                R.string.remotes_rename_error_same -> "New name is the same as the current name."
+                R.string.remotes_add_name_invalid -> "Name can't contain ':' or '/'"
                 else -> "string#$id"
             }
         }
@@ -95,6 +98,10 @@ class RemotesViewModelTest {
                     "Remote \"${args[0]}\" was saved, but could not verify connectivity. Check your credentials."
                 R.string.remotes_msg_remote_updated ->
                     "Remote \"${args[0]}\" updated."
+                R.string.remotes_rename_error_taken ->
+                    "\"${args[0]}\" is already used by another remote."
+                R.string.remotes_msg_remote_renamed ->
+                    "Renamed \"${args[0]}\" to \"${args[1]}\"."
                 else -> "string#$id(${args.joinToString()})"
             }
         }
@@ -1877,6 +1884,164 @@ class RemotesViewModelTest {
             advanceUntilIdle()
 
             assertThat(vm.uiState.value.pendingEncryptedImport).isNull()
+            collector.cancel()
+        }
+
+    // --- rename remote (0.3.0 A2) ------------------------------------------------
+
+    private fun remoteNamed(name: String) = Remote(name = name, type = "s3")
+
+    @Test
+    fun `beginRenameRemote sets renameTarget and clears editMode`() =
+        runTest(mainDispatcher.dispatcher) {
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            vm.beginRenameRemote("myremote")
+            advanceUntilIdle()
+
+            assertThat(vm.uiState.value.renameTarget).isEqualTo("myremote")
+            assertThat(vm.uiState.value.editMode).isNull()
+            collector.cancel()
+        }
+
+    @Test
+    fun `dismissRenameRemote clears renameTarget and renameInFlight`() =
+        runTest(mainDispatcher.dispatcher) {
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            vm.beginRenameRemote("myremote")
+            advanceUntilIdle()
+            assertThat(vm.uiState.value.renameTarget).isNotNull()
+
+            vm.dismissRenameRemote()
+            advanceUntilIdle()
+
+            assertThat(vm.uiState.value.renameTarget).isNull()
+            assertThat(vm.uiState.value.renameInFlight).isFalse()
+            collector.cancel()
+        }
+
+    @Test
+    fun `submitRename with blank name calls onValidationError without calling repository`() =
+        runTest(mainDispatcher.dispatcher) {
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+            var error: String? = null
+
+            vm.submitRename("old", "   ") { error = it }
+            advanceUntilIdle()
+
+            assertThat(error).isEqualTo("Name must not be blank.")
+            coVerify(exactly = 0) { repository.renameRemote(any(), any()) }
+            collector.cancel()
+        }
+
+    @Test
+    fun `submitRename with same name calls onValidationError without calling repository`() =
+        runTest(mainDispatcher.dispatcher) {
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+            var error: String? = null
+
+            vm.submitRename("myremote", "myremote") { error = it }
+            advanceUntilIdle()
+
+            assertThat(error).isEqualTo("New name is the same as the current name.")
+            coVerify(exactly = 0) { repository.renameRemote(any(), any()) }
+            collector.cancel()
+        }
+
+    @Test
+    fun `submitRename with name already taken calls onValidationError without calling repository`() =
+        runTest(mainDispatcher.dispatcher) {
+            remotesFlow.value = listOf(remoteNamed("taken"), remoteNamed("old"))
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+            var error: String? = null
+
+            vm.submitRename("old", "taken") { error = it }
+            advanceUntilIdle()
+
+            assertThat(error).contains("taken")
+            coVerify(exactly = 0) { repository.renameRemote(any(), any()) }
+            collector.cancel()
+        }
+
+    @Test
+    fun `submitRename with invalid chars calls onValidationError without calling repository`() =
+        runTest(mainDispatcher.dispatcher) {
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+            var error: String? = null
+
+            vm.submitRename("old", "bad:name") { error = it }
+            advanceUntilIdle()
+
+            assertThat(error).isNotNull()
+            coVerify(exactly = 0) { repository.renameRemote(any(), any()) }
+            collector.cancel()
+        }
+
+    @Test
+    fun `submitRename success calls repository, clears renameTarget, and sets confirmation message`() =
+        runTest(mainDispatcher.dispatcher) {
+            coEvery { repository.renameRemote("old", "newname") } returns Result.success(Unit)
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+            vm.beginRenameRemote("old")
+            advanceUntilIdle()
+
+            vm.submitRename("old", "newname") { }
+            advanceUntilIdle()
+
+            coVerify { repository.renameRemote("old", "newname") }
+            assertThat(vm.uiState.value.renameTarget).isNull()
+            assertThat(vm.uiState.value.renameInFlight).isFalse()
+            assertThat(vm.uiState.value.message).isEqualTo("Renamed \"old\" to \"newname\".")
+            collector.cancel()
+        }
+
+    @Test
+    fun `submitRename trims whitespace before calling repository`() =
+        runTest(mainDispatcher.dispatcher) {
+            coEvery { repository.renameRemote("old", "trimmed") } returns Result.success(Unit)
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            vm.submitRename("old", "  trimmed  ") { }
+            advanceUntilIdle()
+
+            coVerify { repository.renameRemote("old", "trimmed") }
+            collector.cancel()
+        }
+
+    @Test
+    fun `submitRename failure surfaces error message and clears renameTarget`() =
+        runTest(mainDispatcher.dispatcher) {
+            coEvery { repository.renameRemote(any(), any()) } returns
+                Result.failure(app.lusk.virga.core.common.error.VirgaError.Rclone(message = "rename failed"))
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+            vm.beginRenameRemote("old")
+            advanceUntilIdle()
+
+            vm.submitRename("old", "newname") { }
+            advanceUntilIdle()
+
+            assertThat(vm.uiState.value.renameTarget).isNull()
+            assertThat(vm.uiState.value.renameInFlight).isFalse()
+            assertThat(vm.uiState.value.message).contains("rename failed")
             collector.cancel()
         }
 }

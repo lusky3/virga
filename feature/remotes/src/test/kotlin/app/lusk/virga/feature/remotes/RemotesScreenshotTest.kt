@@ -222,6 +222,35 @@ class RemotesScreenshotTest {
         composeRule.onRoot().captureRoboImage()
     }
 
+    /**
+     * Golden of [RenameRemoteDialog].
+     *
+     * Uses the standalone-lambda form of [captureRoboImage] to avoid the
+     * AlertDialog + OutlinedTextField cursor-blink loop that blocks
+     * [waitForIdle] under Robolectric (see ConfigTransferDialogsTest for the
+     * full explanation). The Roborazzi pipeline renders the composable directly
+     * without registering an Espresso idling resource.
+     */
+    @Test
+    fun renameRemoteDialog_default() {
+        captureRoboImage(
+            filePath = "src/test/snapshots/" +
+                "app.lusk.virga.feature.remotes.RemotesScreenshotTest." +
+                "renameRemoteDialog_default.png",
+        ) {
+            MaterialTheme {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    RenameRemoteDialog(
+                        oldName = "gdrive",
+                        inFlight = false,
+                        onConfirm = { _, _ -> },
+                        onDismiss = {},
+                    )
+                }
+            }
+        }
+    }
+
     @Test
     fun credentialForm_typedFields() {
         val options = listOf(

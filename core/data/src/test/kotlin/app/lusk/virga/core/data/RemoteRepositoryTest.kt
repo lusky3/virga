@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.database.VirgaDatabase
+import app.lusk.virga.core.database.dao.ConflictDao
 import app.lusk.virga.core.database.dao.RemoteDao
 import app.lusk.virga.core.database.dao.SyncTaskDao
 import app.lusk.virga.core.database.entity.RemoteEntity
@@ -24,6 +25,7 @@ class RemoteRepositoryTest {
     private val db = mockk<VirgaDatabase>()
     private val remoteDao = mockk<RemoteDao>(relaxed = true)
     private val syncTaskDao = mockk<SyncTaskDao>(relaxed = true)
+    private val conflictDao = mockk<ConflictDao>(relaxed = true)
     private val engine = mockk<RcloneEngine>()
     private val configManager = mockk<RcloneConfigManager>()
 
@@ -35,7 +37,7 @@ class RemoteRepositoryTest {
         mockkStatic("androidx.room.RoomDatabaseKt")
         val block = slot<suspend () -> Any?>()
         coEvery { db.withTransaction(capture(block)) } coAnswers { block.captured.invoke() }
-        repo = RemoteRepository(db, remoteDao, syncTaskDao, engine, configManager)
+        repo = RemoteRepository(db, remoteDao, syncTaskDao, conflictDao, engine, configManager)
     }
 
     // --- refresh ---
@@ -267,5 +269,49 @@ class RemoteRepositoryTest {
         val result = repo.getRemoteParams("ghost")
 
         assertThat(result.isFailure).isTrue()
+    }
+
+    // --- renameRemote ---
+
+    @Test fun `renameRemote calls engine then repoints tasks, conflicts, and refreshes`() = runTest {
+        coEvery { engine.renameRemote("old", "new") } returns Unit
+        coEvery { engine.listRemotes() } returns listOf(Remote("new", "drive"))
+
+        val result = repo.renameRemote("old", "new")
+
+        assertThat(result.isSuccess).isTrue()
+        coVerify { engine.renameRemote("old", "new") }
+        coVerify { syncTaskDao.repointRemoteName("old", "new") }
+        coVerify { conflictDao.repointRemoteName("old", "new") }
+        coVerify { remoteDao.replaceAll(match { it.any { r -> r.name == "new" } }) }
+    }
+
+    @Test fun `renameRemote does not repoint tasks or conflicts when engine fails`() = runTest {
+        coEvery { engine.renameRemote(any(), any()) } throws
+            VirgaError.Rclone(message = "not found")
+
+        val result = repo.renameRemote("ghost", "x")
+
+        assertThat(result.isFailure).isTrue()
+        coVerify(exactly = 0) { syncTaskDao.repointRemoteName(any(), any()) }
+        coVerify(exactly = 0) { conflictDao.repointRemoteName(any(), any()) }
+    }
+
+    @Test fun `renameRemote returns failure when repoint fails`() = runTest {
+        coEvery { engine.renameRemote("a", "b") } returns Unit
+        coEvery { syncTaskDao.repointRemoteName(any(), any()) } throws RuntimeException("db error")
+
+        val result = repo.renameRemote("a", "b")
+
+        assertThat(result.isFailure).isTrue()
+    }
+
+    @Test fun `renameRemote repoints conflict rows from old to new remoteName`() = runTest {
+        coEvery { engine.renameRemote("gdrive", "gdrive2") } returns Unit
+        coEvery { engine.listRemotes() } returns listOf(Remote("gdrive2", "drive"))
+
+        repo.renameRemote("gdrive", "gdrive2")
+
+        coVerify { conflictDao.repointRemoteName("gdrive", "gdrive2") }
     }
 }

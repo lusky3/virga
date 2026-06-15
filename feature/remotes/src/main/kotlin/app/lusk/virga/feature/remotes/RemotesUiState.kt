@@ -51,6 +51,10 @@ data class RemotesUiState(
     val editMode: EditModeState? = null,
     /** True while [editMode] is being loaded via getRemoteParams. */
     val editLoading: Boolean = false,
+    /** Non-null while the user has triggered rename for a remote (holds old name). */
+    val renameTarget: String? = null,
+    /** True while a rename is in flight (blocks further submits). */
+    val renameInFlight: Boolean = false,
 )
 
 /**
@@ -71,4 +75,8 @@ internal data class RemotesTransientState(
     val editMode: EditModeState? = null,
     /** True while [editMode] is being loaded via getRemoteParams. */
     val editLoading: Boolean = false,
+    /** Non-null while the user has triggered rename for a remote (holds old name). */
+    val renameTarget: String? = null,
+    /** True while a rename is in flight (blocks further submits). */
+    val renameInFlight: Boolean = false,
 )

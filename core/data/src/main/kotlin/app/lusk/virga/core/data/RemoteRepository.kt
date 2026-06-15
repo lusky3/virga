@@ -6,6 +6,7 @@ import app.lusk.virga.core.common.model.RemoteProvider
 import app.lusk.virga.core.common.model.RemoteQuota
 import androidx.room.withTransaction
 import app.lusk.virga.core.database.VirgaDatabase
+import app.lusk.virga.core.database.dao.ConflictDao
 import app.lusk.virga.core.database.dao.RemoteDao
 import app.lusk.virga.core.database.dao.SyncTaskDao
 import app.lusk.virga.core.database.entity.RemoteEntity
@@ -25,6 +26,7 @@ class RemoteRepository @Inject constructor(
     private val db: VirgaDatabase,
     private val remoteDao: RemoteDao,
     private val syncTaskDao: SyncTaskDao,
+    private val conflictDao: ConflictDao,
     private val engine: RcloneEngine,
     private val configManager: RcloneConfigManager,
 ) {
@@ -111,6 +113,24 @@ class RemoteRepository @Inject constructor(
                 syncTaskDao.deleteByRemoteName(name)
             }
         }
+
+    /**
+     * Renames [oldName] to [newName] in the rclone config, then repoints all
+     * [SyncTaskEntity] and [ConflictEntity] rows so neither tasks nor unresolved
+     * conflicts are dropped (unlike delete, which cascades). The DB repoint only
+     * runs after the engine rename succeeds. Refreshes the remote cache on success.
+     */
+    suspend fun renameRemote(oldName: String, newName: String): Result<Unit> =
+        runCatching { engine.renameRemote(oldName, newName) }
+            .mapCatching {
+                // Repoint both tables atomically: a failure between them would leave
+                // conflicts dangling at the old name while sync_tasks already moved.
+                db.withTransaction {
+                    syncTaskDao.repointRemoteName(oldName, newName)
+                    conflictDao.repointRemoteName(oldName, newName)
+                }
+                refresh().getOrThrow()
+            }
 
     suspend fun importConfig(confContent: String): Result<Unit> {
         if (confContent.isBlank()) {
