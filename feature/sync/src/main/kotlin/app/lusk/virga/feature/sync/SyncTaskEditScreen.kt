@@ -281,18 +281,26 @@ fun SyncTaskEditScreen(
 
             // Size / age filters (B5) — rclone MinSize/MaxSize/MinAge/MaxAge.
             SizeAgeFilterEditor(
-                minSize = form.minSize,
-                maxSize = form.maxSize,
-                minAge = form.minAge,
-                maxAge = form.maxAge,
-                minSizeError = form.minSizeError,
-                maxSizeError = form.maxSizeError,
-                minAgeError = form.minAgeError,
-                maxAgeError = form.maxAgeError,
-                onMinSizeChange = { v -> viewModel.update { f -> f.copy(minSize = v) } },
-                onMaxSizeChange = { v -> viewModel.update { f -> f.copy(maxSize = v) } },
-                onMinAgeChange = { v -> viewModel.update { f -> f.copy(minAge = v) } },
-                onMaxAgeChange = { v -> viewModel.update { f -> f.copy(maxAge = v) } },
+                state = SizeAgeFilterState(
+                    minSize = form.minSize,
+                    maxSize = form.maxSize,
+                    minAge = form.minAge,
+                    maxAge = form.maxAge,
+                    minSizeError = form.minSizeError,
+                    maxSizeError = form.maxSizeError,
+                    minAgeError = form.minAgeError,
+                    maxAgeError = form.maxAgeError,
+                ),
+                onChange = { field, v ->
+                    viewModel.update { f ->
+                        when (field) {
+                            SizeAgeFilterField.MIN_SIZE -> f.copy(minSize = v)
+                            SizeAgeFilterField.MAX_SIZE -> f.copy(maxSize = v)
+                            SizeAgeFilterField.MIN_AGE -> f.copy(minAge = v)
+                            SizeAgeFilterField.MAX_AGE -> f.copy(maxAge = v)
+                        }
+                    }
+                },
             )
 
             // Performance preset (Tier 1) — maps to rclone transfers/checkers.

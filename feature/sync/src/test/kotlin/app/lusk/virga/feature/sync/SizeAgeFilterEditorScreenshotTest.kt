@@ -43,18 +43,8 @@ class SizeAgeFilterEditorScreenshotTest {
             MaterialTheme {
                 Surface {
                     SizeAgeFilterEditor(
-                        minSize = "",
-                        maxSize = "",
-                        minAge = "",
-                        maxAge = "",
-                        minSizeError = null,
-                        maxSizeError = null,
-                        minAgeError = null,
-                        maxAgeError = null,
-                        onMinSizeChange = {},
-                        onMaxSizeChange = {},
-                        onMinAgeChange = {},
-                        onMaxAgeChange = {},
+                        state = SizeAgeFilterState(),
+                        onChange = { _, _ -> },
                     )
                 }
             }
@@ -68,18 +58,15 @@ class SizeAgeFilterEditorScreenshotTest {
             MaterialTheme {
                 Surface {
                     SizeAgeFilterEditor(
-                        minSize = "10M",
-                        maxSize = "badvalue!!",
-                        minAge = "30d",
-                        maxAge = "notanage",
-                        minSizeError = null,
-                        maxSizeError = "Invalid size — use e.g. 10M, 1.5G, or 512",
-                        minAgeError = null,
-                        maxAgeError = "Invalid age — use e.g. 30d, 1h30m, or 100ms",
-                        onMinSizeChange = {},
-                        onMaxSizeChange = {},
-                        onMinAgeChange = {},
-                        onMaxAgeChange = {},
+                        state = SizeAgeFilterState(
+                            minSize = "10M",
+                            maxSize = "badvalue!!",
+                            minAge = "30d",
+                            maxAge = "notanage",
+                            maxSizeError = "Invalid size — use e.g. 10M, 1.5G, or 512",
+                            maxAgeError = "Invalid age — use e.g. 30d, 1h30m, or 100ms",
+                        ),
+                        onChange = { _, _ -> },
                     )
                 }
             }
