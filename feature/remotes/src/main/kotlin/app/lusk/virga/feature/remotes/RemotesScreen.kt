@@ -1,6 +1,7 @@
 package app.lusk.virga.feature.remotes
 
 import android.content.res.Configuration
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -72,7 +73,7 @@ fun RemotesScreen(
     var remoteToDelete by remember { mutableStateOf<Remote?>(null) }
     var manualError by remember { mutableStateOf<String?>(null) }
     var showExportConfirm by remember { mutableStateOf(false) }
-    var uriToImport by remember { mutableStateOf<android.net.Uri?>(null) }
+    var uriToImport by remember { mutableStateOf<Uri?>(null) }
 
     val listState = rememberLazyListState()
     val fabExpanded by remember { derivedStateOf { !listState.canScrollBackward } }
