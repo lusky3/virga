@@ -361,7 +361,7 @@ internal fun RetentionSection(days: Int, onDaysChange: (Int) -> Unit) {
         onExpandedChange = { expanded = it },
     ) {
         OutlinedTextField(
-            value = stringResource(labels.getValue(days)),
+            value = stringResource(labels[days] ?: R.string.settings_retention_forever),
             onValueChange = {},
             readOnly = true,
             label = { Text(stringResource(R.string.settings_retention_label)) },

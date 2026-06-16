@@ -21,6 +21,9 @@ class SyncHistoryRepository @Inject constructor(
 ) {
     val recentRuns: Flow<List<SyncRun>> = runDao.observeRecent().map { rows -> rows.map { it.toDomain() } }
 
+    /** Distinct taskIds present in sync_runs — drives filter-chip derivation without LIMIT 100. */
+    val distinctTaskIds: Flow<List<Long>> = runDao.observeDistinctTaskIds()
+
     fun observeRun(id: Long): Flow<SyncRun?> = runDao.observeById(id).map { it?.toDomain() }
 
     fun runsForTask(taskId: Long): Flow<List<SyncRun>> =

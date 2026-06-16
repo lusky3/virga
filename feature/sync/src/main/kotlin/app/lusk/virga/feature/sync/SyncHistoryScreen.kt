@@ -40,6 +40,7 @@ import androidx.core.content.FileProvider
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.ui.LocalNavAnimatedContentScope
+import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
 import app.lusk.virga.core.common.model.SyncRun
 import app.lusk.virga.core.common.model.SyncStatus
@@ -49,7 +50,9 @@ import app.lusk.virga.core.designsystem.component.VirgaCard
 import app.lusk.virga.core.designsystem.theme.LocalSharedTransitionScope
 import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import app.lusk.virga.core.designsystem.theme.rememberReduceMotion
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.DateFormat
 import java.util.Date
@@ -127,7 +130,11 @@ fun SyncHistoryScreen(
                     onSelectTask = viewModel::setFilter,
                 )
             }
-            if (!state.loading && pagedItems.itemCount == 0) {
+            if (pagedItems.loadState.refresh is LoadState.Loading) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.align(Alignment.CenterHorizontally).padding(VirgaSpacing.md),
+                )
+            } else if (pagedItems.loadState.refresh is LoadState.NotLoading && pagedItems.itemCount == 0) {
                 EmptyState(title = stringResource(R.string.sync_history_empty))
             } else {
                 LazyColumn(
@@ -156,14 +163,16 @@ fun SyncHistoryScreen(
 }
 
 private suspend fun shareExport(context: Context, viewModel: SyncHistoryViewModel, csv: Boolean) {
-    val rows = viewModel.exportRows()
-    val content = if (csv) SyncHistoryExporter.toCsv(rows) else SyncHistoryExporter.toJson(rows)
     val ext = if (csv) "csv" else "json"
     val mimeType = if (csv) "text/csv" else "application/json"
-    val dir = File(context.cacheDir, "shared").also { it.mkdirs() }
-    val file = File(dir, "history_export.$ext")
-    file.writeText(content)
-    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    val uri = withContext(Dispatchers.IO) {
+        val rows = viewModel.exportRows()
+        val content = if (csv) SyncHistoryExporter.toCsv(rows) else SyncHistoryExporter.toJson(rows)
+        val dir = File(context.cacheDir, "shared").also { it.mkdirs() }
+        val file = File(dir, "history_export.$ext")
+        file.writeText(content)
+        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    }
     val intent = Intent(Intent.ACTION_SEND).apply {
         type = mimeType
         putExtra(Intent.EXTRA_STREAM, uri)

@@ -57,18 +57,34 @@ object SyncHistoryExporter {
     }
 
     private fun csvEscape(field: String): String {
-        val needsQuoting = field.contains(',') || field.contains('"') || field.contains('\n')
-        if (!needsQuoting) return field
-        return "\"${field.replace("\"", "\"\"")}\""
+        // Prefix spreadsheet formula-injection triggers with a single quote so
+        // cells beginning with =, +, -, @, TAB, or CR cannot execute on open.
+        val sanitized = if (field.isNotEmpty() && field[0] in setOf('=', '+', '-', '@', '\t', '\r')) {
+            "'$field"
+        } else {
+            field
+        }
+        val needsQuoting = sanitized.contains(',') || sanitized.contains('"') || sanitized.contains('\n')
+        if (!needsQuoting) return sanitized
+        return "\"${sanitized.replace("\"", "\"\"")}\""
     }
 
     private fun jsonString(s: String): String {
-        val escaped = s
-            .replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-            .replace("\t", "\\t")
-        return "\"$escaped\""
+        val sb = StringBuilder(s.length + 2)
+        for (ch in s) {
+            when (ch) {
+                '\\' -> sb.append("\\\\")
+                '"' -> sb.append("\\\"")
+                '\n' -> sb.append("\\n")
+                '\r' -> sb.append("\\r")
+                '\t' -> sb.append("\\t")
+                else -> if (ch.code < 0x20) {
+                    sb.append("\\u${ch.code.toString(16).padStart(4, '0')}")
+                } else {
+                    sb.append(ch)
+                }
+            }
+        }
+        return "\"$sb\""
     }
 }

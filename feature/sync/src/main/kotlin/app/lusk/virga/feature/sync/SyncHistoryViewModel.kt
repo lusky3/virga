@@ -37,7 +37,6 @@ data class HistoryTaskFilter(
 )
 
 data class SyncHistoryUiState(
-    val rows: List<SyncRunRow> = emptyList(),
     val tasks: List<HistoryTaskFilter> = emptyList(),
     val selectedTaskId: Long? = null,
     val statusFilter: SyncStatus? = null,
@@ -59,29 +58,17 @@ class SyncHistoryViewModel @Inject constructor(
 
     val uiState: StateFlow<SyncHistoryUiState> =
         combine(
-            historyRepository.recentRuns,
+            historyRepository.distinctTaskIds,
             taskRepository.tasks,
             selectedTaskId,
             statusFilter,
             searchQuery,
-        ) { runs, tasks, filterId, statusF, query ->
-            val names = tasks.associate { it.id to it.name }
-            val taskIdsInHistory = runs.mapTo(mutableSetOf()) { it.taskId }
-            val q = query.trim().lowercase()
-            val filtered = runs
-                .let { if (filterId == null) it else it.filter { r -> r.taskId == filterId } }
-                .let { if (statusF == null) it else it.filter { r -> r.status == statusF } }
-                .let { list ->
-                    if (q.isEmpty()) list
-                    else list.filter { r ->
-                        val name = names[r.taskId]?.lowercase() ?: ""
-                        name.contains(q) || r.remoteName.lowercase().contains(q) ||
-                            r.errorMessage?.lowercase()?.contains(q) == true
-                    }
-                }
+        ) { taskIdsInHistory, tasks, filterId, statusF, query ->
+            // The list itself is driven by [pagedRuns] (DB-level filter/search); this
+            // state only carries the filter-chip options + current selections + loading.
+            val idSet = taskIdsInHistory.toHashSet()
             SyncHistoryUiState(
-                rows = filtered.map { SyncRunRow(it, names[it.taskId] ?: "(deleted task)") },
-                tasks = tasks.filter { it.id in taskIdsInHistory }
+                tasks = tasks.filter { it.id in idSet }
                     .map { HistoryTaskFilter(it.id, it.name) },
                 selectedTaskId = filterId,
                 statusFilter = statusF,

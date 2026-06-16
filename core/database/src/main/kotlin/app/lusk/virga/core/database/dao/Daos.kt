@@ -218,6 +218,10 @@ interface SyncRunDao {
     @Query("DELETE FROM sync_runs")
     suspend fun deleteAll()
 
+    /** All distinct taskIds referenced by sync_runs — used for filter-chip derivation. */
+    @Query("SELECT DISTINCT taskId FROM sync_runs")
+    fun observeDistinctTaskIds(): Flow<List<Long>>
+
     @Query(
         "SELECT r.id, r.taskId, r.startedAtEpochMs, r.endedAtEpochMs, r.status, " +
             "r.filesTransferred, r.bytesTransferred, r.errorCount, r.errorMessage, " +
