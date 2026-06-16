@@ -16,7 +16,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -24,10 +26,12 @@ import app.lusk.virga.R
 import app.lusk.virga.core.designsystem.component.VirgaCard
 import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 
-/** Full-screen changelog listing all [RELEASE_NOTES] entries, newest first. */
+/** Full-screen changelog listing all release notes entries, newest first. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WhatsNewScreen(onBack: () -> Unit) {
+    val resources = LocalContext.current.resources
+    val notes = remember(resources) { releaseNotes(resources) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -52,7 +56,7 @@ fun WhatsNewScreen(onBack: () -> Unit) {
                 .padding(bottom = VirgaSpacing.lg),
             verticalArrangement = Arrangement.spacedBy(VirgaSpacing.md),
         ) {
-            RELEASE_NOTES.forEach { release ->
+            notes.forEach { release ->
                 VirgaCard {
                     Text(
                         text = release.versionName,

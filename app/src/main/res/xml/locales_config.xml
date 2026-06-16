@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Supported per-app locales. Referenced by android:localeConfig on <application>.
+  When adding a new translation: append a <locale android:name="…"/> entry here.
+  The system language picker shows exactly the locales listed in this file.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+</locale-config>

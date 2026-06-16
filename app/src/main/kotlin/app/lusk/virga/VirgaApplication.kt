@@ -46,6 +46,9 @@ class VirgaApplication : Application(), Configuration.Provider {
         // can't run the worker's finally), so history doesn't show a phantom
         // in-progress sync after a crash/force-stop.
         val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        // The per-app locale is restored synchronously before onCreate by AppCompat's
+        // AppLocalesMetadataHolderService (autoStoreLocales=true in the manifest), so there
+        // is no startup work to do here — applying it async would race first render.
         appScope.launch {
             runCatching { syncHistory.reconcileInterruptedRuns(processStartMs) }
                 .onFailure { Log.w(TAG, "Failed to reconcile interrupted runs on startup", it) }

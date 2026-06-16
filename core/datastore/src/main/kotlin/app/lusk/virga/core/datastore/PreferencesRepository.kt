@@ -44,6 +44,11 @@ class PreferencesRepository @Inject constructor(
     suspend fun setRunRetentionDays(days: Int) =
         edit { it[Keys.RUN_RETENTION_DAYS] = normalizeRetention(days) }
 
+    suspend fun setAppLanguageTag(tag: String?) = edit { prefs ->
+        if (tag.isNullOrBlank()) prefs.remove(Keys.APP_LANGUAGE_TAG)
+        else prefs[Keys.APP_LANGUAGE_TAG] = tag
+    }
+
     suspend fun setDefaultBwLimits(wifi: String?, metered: String?) = edit { prefs ->
         if (wifi.isNullOrBlank()) prefs.remove(Keys.BW_WIFI) else prefs[Keys.BW_WIFI] = wifi
         if (metered.isNullOrBlank()) prefs.remove(Keys.BW_METERED) else prefs[Keys.BW_METERED] = metered
@@ -71,6 +76,7 @@ class PreferencesRepository @Inject constructor(
         quietHoursStartMinutes = this[Keys.QUIET_HOURS_START] ?: 0,
         quietHoursEndMinutes = this[Keys.QUIET_HOURS_END] ?: 0,
         runRetentionDays = normalizeRetention(this[Keys.RUN_RETENTION_DAYS] ?: 0),
+        appLanguageTag = this[Keys.APP_LANGUAGE_TAG],
     )
 
     /** Clamp a stored/incoming retention value to a value the UI knows how to render
@@ -95,6 +101,7 @@ class PreferencesRepository @Inject constructor(
         val QUIET_HOURS_START = intPreferencesKey("quiet_hours_start_minutes")
         val QUIET_HOURS_END = intPreferencesKey("quiet_hours_end_minutes")
         val RUN_RETENTION_DAYS = intPreferencesKey("run_retention_days")
+        val APP_LANGUAGE_TAG = stringPreferencesKey("app_language_tag")
     }
 
     private companion object {

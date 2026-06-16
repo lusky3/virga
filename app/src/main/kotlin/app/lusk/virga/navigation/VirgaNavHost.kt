@@ -56,6 +56,7 @@ import app.lusk.virga.feature.sync.SyncTaskEditScreen
 import app.lusk.virga.feature.sync.SyncTaskSummaryScreen
 import app.lusk.virga.feature.sync.HomeScreen
 import app.lusk.virga.feature.sync.SyncTasksAdaptiveScreen
+import app.lusk.virga.locale.LocaleManager
 import app.lusk.virga.update.HomeBannersViewModel
 import app.lusk.virga.update.WhatsNewScreen
 import kotlinx.serialization.Serializable
@@ -309,6 +310,9 @@ fun VirgaNavHost(
                 crashReportingAvailable = app.lusk.virga.BuildConfig.SENTRY_DSN.isNotBlank(),
                 // All-files-access builds (foss) can offer a storage-access grant in Settings.
                 storageAccessRelevant = app.lusk.virga.BuildConfig.SDCARD_ACCESS_AVAILABLE,
+                // Apply the locale immediately when the user changes it; the VM also
+                // persists it to DataStore so startup can restore the choice.
+                onLanguageChange = LocaleManager::apply,
             )
         }
         entry<StatsRoute> {

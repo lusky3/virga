@@ -1,6 +1,7 @@
 package app.lusk.virga.update
 
 import android.app.Activity
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.lusk.virga.BuildConfig
@@ -8,6 +9,7 @@ import app.lusk.virga.core.datastore.PreferencesRepository
 import app.lusk.virga.feature.sync.ChangelogInfo
 import app.lusk.virga.feature.sync.UpdateBanner
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -24,6 +26,7 @@ data class HomeBannersState(
 
 @HiltViewModel
 class HomeBannersViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val prefs: PreferencesRepository,
     private val updateChecker: UpdateChecker,
 ) : ViewModel() {
@@ -40,7 +43,7 @@ class HomeBannersViewModel @Inject constructor(
         _updateDismissed,
     ) { appPrefs, availableUpdate, updateDismissed ->
         val changelogInfo = if (BuildConfig.VERSION_CODE > appPrefs.lastSeenChangelogVersionCode) {
-            releaseNotesFor(BuildConfig.VERSION_NAME)
+            releaseNotesFor(BuildConfig.VERSION_NAME, context.resources)
                 ?.let { ChangelogInfo(it.versionName, it.notes) }
         } else {
             null
