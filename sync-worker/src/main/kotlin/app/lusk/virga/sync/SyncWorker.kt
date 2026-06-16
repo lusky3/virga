@@ -348,6 +348,7 @@ open class SyncWorker @AssistedInject constructor(
             runCatching {
                 val suppressSuccess = finalErrorCount == 0 &&
                     runCatching { preferencesRepository.preferences.first().notifyOnFailureOnly }
+                        .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
                         .getOrDefault(false)
                 if (!suppressSuccess) {
                     val notification = if (finalErrorCount > 0) {
