@@ -15,8 +15,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -232,6 +236,11 @@ fun SettingsScreen(
                 onEndChange = viewModel::setQuietHoursEnd,
             )
 
+            RetentionSection(
+                days = prefs.runRetentionDays,
+                onDaysChange = viewModel::setRunRetentionDays,
+            )
+
             HorizontalDivider()
             SectionTitle(stringResource(R.string.settings_section_help_about))
             SettingsLinkRow(
@@ -326,4 +335,46 @@ private fun CommitOnBlurField(
             },
         singleLine = true,
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun RetentionSection(days: Int, onDaysChange: (Int) -> Unit) {
+    val options = listOf(0, 30, 90, 180, 365)
+    val labels = mapOf(
+        0 to R.string.settings_retention_forever,
+        30 to R.string.settings_retention_30,
+        90 to R.string.settings_retention_90,
+        180 to R.string.settings_retention_180,
+        365 to R.string.settings_retention_365,
+    )
+    var expanded by remember { mutableStateOf(false) }
+    HorizontalDivider()
+    SectionTitle(stringResource(R.string.settings_section_history))
+    Text(
+        stringResource(R.string.settings_retention_hint),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+    ) {
+        OutlinedTextField(
+            value = stringResource(labels.getValue(days)),
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(stringResource(R.string.settings_retention_label)) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(labels.getValue(option))) },
+                    onClick = { onDaysChange(option); expanded = false },
+                )
+            }
+        }
+    }
 }

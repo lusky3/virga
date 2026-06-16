@@ -57,4 +57,9 @@ data class AppPreferences(
      * Equal to quietHoursStartMinutes means disabled / zero-width window.
      */
     val quietHoursEndMinutes: Int = 0,
+    /**
+     * How many days of sync-run history to keep (0 = keep forever).
+     * Enforced at app startup by pruning rows older than this many days.
+     */
+    val runRetentionDays: Int = 0,
 )

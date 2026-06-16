@@ -62,6 +62,14 @@
     <string name="settings_quiet_hours_hint">Scheduled syncs are paused during this window. Manual syncs always run immediately regardless of quiet hours.</string>
     <string name="settings_quiet_hours_start">Start time</string>
     <string name="settings_quiet_hours_end">End time</string>
+    <string name="settings_section_history">Run history</string>
+    <string name="settings_retention_label">Keep history for</string>
+    <string name="settings_retention_hint">Run history older than this limit will be removed at startup. Choose "Forever" to keep all history.</string>
+    <string name="settings_retention_forever">Forever</string>
+    <string name="settings_retention_30">30 days</string>
+    <string name="settings_retention_90">90 days</string>
+    <string name="settings_retention_180">180 days</string>
+    <string name="settings_retention_365">365 days</string>
 
     <!-- AboutScreen -->
     <string name="about_title">About</string>

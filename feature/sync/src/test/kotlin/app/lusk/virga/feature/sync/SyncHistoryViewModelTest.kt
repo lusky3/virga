@@ -1,5 +1,7 @@
 package app.lusk.virga.feature.sync
 
+import androidx.paging.PagingData
+import app.lusk.virga.core.common.model.NamedSyncRun
 import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.data.SyncHistoryRepository
@@ -14,6 +16,7 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -31,6 +34,7 @@ class SyncHistoryViewModelTest {
     private val tasksFlow = MutableStateFlow<List<SyncTask>>(emptyList())
     private val historyRepository: SyncHistoryRepository = mockk(relaxed = true) {
         every { recentRuns } returns runsFlow
+        every { pagedRuns(any(), any(), any()) } returns flowOf(PagingData.empty<NamedSyncRun>())
     }
     private val taskRepository: SyncTaskRepository = mockk(relaxed = true) {
         every { tasks } returns tasksFlow
@@ -222,6 +226,38 @@ class SyncHistoryViewModelTest {
     fun isTerminal_isFalseForQueuedAndIdle() {
         assertThat(SyncHistoryViewModel.isTerminal(SyncStatus.QUEUED)).isFalse()
         assertThat(SyncHistoryViewModel.isTerminal(SyncStatus.IDLE)).isFalse()
+    }
+
+    // --- setSearchQuery -------------------------------------------------------
+
+    @Test
+    fun setSearchQuery_updatesSearchQueryInUiState() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.uiState.collect {} }
+        tasksFlow.value = listOf(task(id = 1, name = "Photos"))
+        runsFlow.value = listOf(run(id = 10, taskId = 1))
+        advanceUntilIdle()
+
+        vm.setSearchQuery("hello")
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.searchQuery).isEqualTo("hello")
+        job.cancel()
+    }
+
+    @Test
+    fun setSearchQuery_emptyQueryShowsAllRows() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.uiState.collect {} }
+        tasksFlow.value = listOf(task(id = 1, name = "Photos"))
+        runsFlow.value = listOf(run(id = 10, taskId = 1), run(id = 11, taskId = 1))
+        advanceUntilIdle()
+
+        vm.setSearchQuery("")
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.rows).hasSize(2)
+        job.cancel()
     }
 
     // --- helpers ------------------------------------------------------------

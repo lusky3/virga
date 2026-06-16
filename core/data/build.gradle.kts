@@ -21,5 +21,6 @@ dependencies {
     // room-ktx for `withTransaction` — RemoteRepository.deleteRemote wraps its two
     // DAO writes in one transaction so process death can't orphan task rows.
     implementation(libs.room.ktx)
+    implementation(libs.paging.runtime)
     implementation(libs.bundles.coroutines)
 }

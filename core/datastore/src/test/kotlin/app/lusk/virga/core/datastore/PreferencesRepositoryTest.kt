@@ -304,6 +304,34 @@ class PreferencesRepositoryTest {
         }
     }
 
+    // --- runRetentionDays ---
+
+    @Test fun `runRetentionDays defaults to 0`() = testScope.runTest {
+        val repo = createRepo()
+        repo.preferences.test {
+            assertThat(awaitItem().runRetentionDays).isEqualTo(0)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `setRunRetentionDays persists value`() = testScope.runTest {
+        val repo = createRepo()
+        repo.setRunRetentionDays(90)
+        repo.preferences.test {
+            assertThat(awaitItem().runRetentionDays).isEqualTo(90)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `setRunRetentionDays coerces negative to 0`() = testScope.runTest {
+        val repo = createRepo()
+        repo.setRunRetentionDays(-5)
+        repo.preferences.test {
+            assertThat(awaitItem().runRetentionDays).isEqualTo(0)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
     // --- invalid ThemeMode name stored externally ---
 
     @Test fun `unknown theme mode string stored externally falls back to SYSTEM`() = testScope.runTest {

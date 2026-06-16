@@ -113,6 +113,10 @@
     <string name="sync_history_error_count">%1$d error(s)</string>
     <string name="sync_history_filter_all">All tasks</string>
     <string name="sync_history_filter_failed">Failed only</string>
+    <string name="sync_history_search_hint">Search history…</string>
+    <string name="sync_history_export_csv">Export CSV</string>
+    <string name="sync_history_export_json">Export JSON</string>
+    <string name="sync_history_status_all">All</string>
 
     <!-- RunDetailScreen -->
     <string name="run_detail_title">Run detail</string>
