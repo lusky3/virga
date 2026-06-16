@@ -78,6 +78,17 @@ data class SyncTaskForm(
     /** rclone MaxTransfer cap (SizeSuffix, e.g. "10G"); blank = unset. */
     val maxTransfer: String = "",
     val maxTransferError: String? = null,
+    // B8: configurable retry ---------------------------------------------------
+    /** Maximum total WorkManager attempts; must be >= 1. */
+    val maxRetries: Int = 3,
+    val maxRetriesText: String = "3",
+    /** When true, non-auth rclone errors also retry (up to [maxRetries]). */
+    val retryOnRclone: Boolean = false,
+    /** Initial backoff delay in seconds. */
+    val backoffSeconds: Long = 30,
+    val backoffSecondsText: String = "30",
+    /** EXPONENTIAL backoff when true; LINEAR when false. */
+    val backoffExponential: Boolean = true,
     val bwLimitWifiError: String? = null,
     val bwLimitMeteredError: String? = null,
     val bufferSizeError: String? = null,
@@ -243,6 +254,12 @@ class SyncTaskEditViewModel @Inject constructor(
                         maxTransfer = task.maxTransfer,
                         createdAtEpochMs = task.createdAtEpochMs,
                         directionError = if (isSaf && task.direction == SyncDirection.BISYNC) BISYNC_SAF_ERROR else null,
+                        maxRetries = task.maxRetries,
+                        maxRetriesText = task.maxRetries.toString(),
+                        retryOnRclone = task.retryOnRclone,
+                        backoffSeconds = task.backoffSeconds,
+                        backoffSecondsText = task.backoffSeconds.toString(),
+                        backoffExponential = task.backoffExponential,
                     )
                 }
             }
@@ -380,6 +397,10 @@ class SyncTaskEditViewModel @Inject constructor(
                 // New task: stamp creation time now. Existing task (edit): preserve the
                 // original timestamp loaded into the form, so editing doesn't reset it.
                 createdAtEpochMs = if (form.id == 0L) System.currentTimeMillis() else form.createdAtEpochMs,
+                maxRetries = form.maxRetries.coerceAtLeast(1),
+                retryOnRclone = form.retryOnRclone,
+                backoffSeconds = form.backoffSeconds.coerceAtLeast(10L),
+                backoffExponential = form.backoffExponential,
             )
             val id = taskRepository.save(task)
             scheduler.schedule(task.copy(id = id))

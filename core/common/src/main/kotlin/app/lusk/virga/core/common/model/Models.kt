@@ -86,6 +86,19 @@ data class SyncTask(
      * Must be validated against the allowlist (see ExtraConfigParser) before use.
      */
     val extraConfig: String = "",
+    // B8: configurable retry ---------------------------------------------------
+    /**
+     * Maximum total WorkManager attempts. runAttemptCount is 0-based; retrying when
+     * runAttemptCount < maxRetries - 1 yields exactly [maxRetries] total tries.
+     * Default 3 caps the previously-unbounded Network retry.
+     */
+    val maxRetries: Int = 3,
+    /** When true, non-auth VirgaError.Rclone failures also retry (up to [maxRetries]). */
+    val retryOnRclone: Boolean = false,
+    /** Initial backoff delay in seconds for WorkManager setBackoffCriteria. */
+    val backoffSeconds: Long = 30,
+    /** EXPONENTIAL backoff when true; LINEAR when false. */
+    val backoffExponential: Boolean = true,
 )
 
 /** A single execution of a [SyncTask]. Domain model; mirrors `SyncRunEntity`. */

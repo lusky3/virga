@@ -170,6 +170,8 @@ internal fun AdvancedSection(form: SyncTaskForm, viewModel: SyncTaskEditViewMode
                     minLines = 2,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                // B8: per-task retry configuration
+                RetryConfigSection(form = form, viewModel = viewModel)
             }
         }
     }

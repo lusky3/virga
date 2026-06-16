@@ -78,7 +78,12 @@ class SyncWorkerTest {
     // inFlightOverride: when non-null, the built worker's anotherRunInFlight() seam
     // returns it (true = simulate a sibling run already in flight) without needing a
     // live WorkManager. null = production WorkManager-backed behaviour.
-    private fun buildWorker(inFlightOverride: Boolean? = null, manual: Boolean = false): SyncWorker =
+    // runAttemptCount: simulates WorkManager's retry counter (0-based, 0 = first attempt).
+    private fun buildWorker(
+        inFlightOverride: Boolean? = null,
+        manual: Boolean = false,
+        runAttemptCount: Int = 0,
+    ): SyncWorker =
         TestListenableWorkerBuilder<SyncWorker>(context)
             .setInputData(
                 if (manual) {
@@ -87,6 +92,7 @@ class SyncWorkerTest {
                     workDataOf(SyncWorker.KEY_TASK_ID to TASK_ID)
                 },
             )
+            .setRunAttemptCount(runAttemptCount)
             .setWorkerFactory(object : androidx.work.WorkerFactory() {
                 override fun createWorker(
                     appContext: Context,
@@ -304,7 +310,9 @@ class SyncWorkerTest {
     }
 
     @Test
-    fun networkFailure_returnsRetry() = runBlocking {
+    fun networkFailure_belowRetryCapReturnsRetry() = runBlocking {
+        // B8(a): Network failure on attempt 0 with default maxRetries=3 -> retry.
+        // (Attempt 0 < maxRetries-1=2, so retry is allowed.)
         val task = task(direction = SyncDirection.UPLOAD)
         coEvery { taskRepository.getTask(TASK_ID) } returns task
         coEvery { staging.prepare(any(), any(), any()) } returns
@@ -312,10 +320,71 @@ class SyncWorkerTest {
         coEvery { executor.run(any(), any(), any(), any(), any()) } returns
             flow { throw VirgaError.Network("connection reset") }
 
-        val result = buildWorker().doWork()
+        val result = buildWorker(runAttemptCount = 0).doWork()
 
         assertThat(result).isEqualTo(ListenableWorker.Result.retry())
         coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun networkFailure_atRetryCapReturnsFailed() = runBlocking {
+        // B8(b): Network failure at attempt maxRetries-1=2 (third try) -> fail, no more retries.
+        val task = task(direction = SyncDirection.UPLOAD)
+        coEvery { taskRepository.getTask(TASK_ID) } returns task
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = task.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), any(), any()) } returns
+            flow { throw VirgaError.Network("connection reset") }
+
+        val result = buildWorker(runAttemptCount = 2).doWork()
+
+        assertThat(result).isEqualTo(ListenableWorker.Result.failure())
+    }
+
+    @Test
+    fun rcloneFailure_retryOnRcloneFalse_returnsFailed() = runBlocking {
+        // B8(c): Rclone failure with retryOnRclone=false -> always fail.
+        val task = task(direction = SyncDirection.UPLOAD).copy(retryOnRclone = false)
+        coEvery { taskRepository.getTask(TASK_ID) } returns task
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = task.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), any(), any()) } returns
+            flow { throw VirgaError.Rclone(message = "directory not found") }
+
+        val result = buildWorker(runAttemptCount = 0).doWork()
+
+        assertThat(result).isEqualTo(ListenableWorker.Result.failure())
+    }
+
+    @Test
+    fun rcloneFailure_retryOnRcloneTrue_belowCap_returnsRetry() = runBlocking {
+        // B8(d): Rclone non-auth failure with retryOnRclone=true and below cap -> retry.
+        val task = task(direction = SyncDirection.UPLOAD).copy(retryOnRclone = true)
+        coEvery { taskRepository.getTask(TASK_ID) } returns task
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = task.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), any(), any()) } returns
+            flow { throw VirgaError.Rclone(message = "io timeout") }
+
+        val result = buildWorker(runAttemptCount = 0).doWork()
+
+        assertThat(result).isEqualTo(ListenableWorker.Result.retry())
+    }
+
+    @Test
+    fun authFailure_retryOnRcloneTrue_neverRetries() = runBlocking {
+        // B8(e): Auth failure with retryOnRclone=true and retries remaining -> still fail.
+        val task = task(direction = SyncDirection.UPLOAD).copy(retryOnRclone = true)
+        coEvery { taskRepository.getTask(TASK_ID) } returns task
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = task.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), any(), any()) } returns
+            flow { throw VirgaError.Rclone(message = "oauth2: cannot fetch token: 401 Unauthorized") }
+
+        val result = buildWorker(runAttemptCount = 0).doWork()
+
+        assertThat(result).isEqualTo(ListenableWorker.Result.failure())
+        coVerify { remoteRepository.setNeedsReauth("gdrive", true) }
     }
 
     @Test

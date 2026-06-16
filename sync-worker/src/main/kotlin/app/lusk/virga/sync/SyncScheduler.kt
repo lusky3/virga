@@ -30,11 +30,17 @@ class SyncScheduler @Inject constructor(
 ) {
     private val workManager get() = WorkManager.getInstance(context)
 
-    /** Enqueues an immediate one-time sync of [taskId]. */
+    /** Enqueues an immediate one-time sync of [taskId] with per-task backoff if available. */
     fun syncNow(taskId: Long) {
+        syncNow(taskId, backoffSeconds = DEFAULT_BACKOFF_SECONDS, backoffExponential = true)
+    }
+
+    /** Internal overload used by [syncAllEnabled] when the task is already loaded. */
+    internal fun syncNow(taskId: Long, backoffSeconds: Long, backoffExponential: Boolean) {
+        val policy = if (backoffExponential) BackoffPolicy.EXPONENTIAL else BackoffPolicy.LINEAR
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setInputData(workDataOf(SyncWorker.KEY_TASK_ID to taskId, SyncWorker.KEY_MANUAL to true))
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+            .setBackoffCriteria(policy, backoffSeconds, TimeUnit.SECONDS)
             .build()
         workManager.enqueueUniqueWork(
             uniqueName(taskId) + "_now",
@@ -53,7 +59,7 @@ class SyncScheduler @Inject constructor(
      */
     suspend fun syncAllEnabled(): Int {
         val enabled = taskRepository.tasks.first().filter { it.enabled }
-        enabled.forEach { syncNow(it.id) }
+        enabled.forEach { syncNow(it.id, it.backoffSeconds, it.backoffExponential) }
         return enabled.size
     }
 
@@ -75,12 +81,13 @@ class SyncScheduler @Inject constructor(
 
     private fun schedulePeriodic(task: SyncTask, interval: Int) {
         val effectiveMinutes = interval.coerceAtLeast(MIN_INTERVAL_MINUTES)
+        val policy = if (task.backoffExponential) BackoffPolicy.EXPONENTIAL else BackoffPolicy.LINEAR
         val request = PeriodicWorkRequestBuilder<SyncWorker>(
             effectiveMinutes.toLong(), TimeUnit.MINUTES,
         )
             .setConstraints(task.toConstraints())
             .setInputData(workDataOf(SyncWorker.KEY_TASK_ID to task.id))
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 5, TimeUnit.MINUTES)
+            .setBackoffCriteria(policy, task.backoffSeconds, TimeUnit.SECONDS)
             .build()
         workManager.enqueueUniquePeriodicWork(
             uniqueName(task.id),
@@ -102,11 +109,12 @@ class SyncScheduler @Inject constructor(
             cancel(task.id)
             return
         }
+        val calPolicy = if (task.backoffExponential) BackoffPolicy.EXPONENTIAL else BackoffPolicy.LINEAR
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setInitialDelay(nextMs - now, TimeUnit.MILLISECONDS)
             .setConstraints(task.toConstraints())
             .setInputData(workDataOf(SyncWorker.KEY_TASK_ID to task.id))
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 5, TimeUnit.MINUTES)
+            .setBackoffCriteria(calPolicy, task.backoffSeconds, TimeUnit.SECONDS)
             .build()
         workManager.enqueueUniqueWork(
             uniqueName(task.id),
@@ -166,5 +174,7 @@ class SyncScheduler @Inject constructor(
 
     private companion object {
         const val MIN_INTERVAL_MINUTES = 15
+        /** Fallback backoff for syncNow(taskId) callers that don't have a task object. */
+        const val DEFAULT_BACKOFF_SECONDS = 30L
     }
 }

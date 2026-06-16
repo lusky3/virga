@@ -302,6 +302,18 @@
     <string name="sync_edit_field_extra_config">Extra rclone config (Key=Value per line)</string>
     <string name="sync_edit_field_extra_config_placeholder">TrackRenames=true\nSizeOnly=false</string>
     <string name="sync_edit_field_extra_config_hint">Advanced: merged into the rclone _config block. One Key=Value per line. Only allowlisted keys are accepted.</string>
+    <!-- B8: retry config -->
+    <string name="sync_edit_retry_section">Retry behavior</string>
+    <string name="sync_edit_field_max_retries">Max retries</string>
+    <string name="sync_edit_field_max_retries_placeholder">e.g. 3</string>
+    <string name="sync_edit_field_max_retries_hint">Maximum total sync attempts on transient failure (minimum 1).</string>
+    <string name="sync_edit_field_retry_on_rclone">Retry on rclone errors</string>
+    <string name="sync_edit_field_retry_on_rclone_hint">Also retry non-auth rclone errors, not just network failures.</string>
+    <string name="sync_edit_field_backoff_seconds">Initial backoff delay (seconds)</string>
+    <string name="sync_edit_field_backoff_seconds_placeholder">e.g. 30</string>
+    <string name="sync_edit_field_backoff_seconds_hint">Delay before the first retry (minimum 10s). WorkManager doubles it each attempt (exponential) or repeats it (linear).</string>
+    <string name="sync_edit_field_backoff_exponential">Exponential backoff</string>
+    <string name="sync_edit_field_backoff_exponential_hint">Doubles the delay on each retry. Disable for a fixed-delay (linear) backoff.</string>
     <!-- Dry-run preview (WS2.3) -->
     <!-- Verify / check (B2) -->
     <string name="sync_verify_action">Verify</string>

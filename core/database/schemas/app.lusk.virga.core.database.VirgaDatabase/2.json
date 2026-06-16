@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 2,
-    "identityHash": "4a11a882e639f2497b96a7db9c201a47",
+    "identityHash": "483ed2e8d4253b103f249f4fe9cfb75a",
     "entities": [
       {
         "tableName": "remotes",
@@ -36,7 +36,7 @@
       },
       {
         "tableName": "sync_tasks",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `sourcePath` TEXT NOT NULL, `remoteName` TEXT NOT NULL, `remotePath` TEXT NOT NULL, `direction` TEXT NOT NULL, `intervalMinutes` INTEGER, `scheduleDaysMask` INTEGER NOT NULL, `scheduleHour` INTEGER NOT NULL, `scheduleMinute` INTEGER NOT NULL, `filters` TEXT NOT NULL, `minSize` TEXT NOT NULL, `maxSize` TEXT NOT NULL, `minAge` TEXT NOT NULL, `maxAge` TEXT NOT NULL, `bwLimitWifi` TEXT, `bwLimitMetered` TEXT, `transfers` INTEGER NOT NULL, `checkers` INTEGER NOT NULL, `bufferSize` TEXT NOT NULL, `deleteExtraneous` INTEGER NOT NULL, `deleteSource` INTEGER NOT NULL, `wifiOnly` INTEGER NOT NULL, `requiresCharging` INTEGER NOT NULL, `enabled` INTEGER NOT NULL, `createdAtEpochMs` INTEGER NOT NULL, `checksum` INTEGER NOT NULL, `backupDir` TEXT, `maxDelete` INTEGER, `extraConfig` TEXT NOT NULL, `maxTransfer` TEXT NOT NULL)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `sourcePath` TEXT NOT NULL, `remoteName` TEXT NOT NULL, `remotePath` TEXT NOT NULL, `direction` TEXT NOT NULL, `intervalMinutes` INTEGER, `scheduleDaysMask` INTEGER NOT NULL, `scheduleHour` INTEGER NOT NULL, `scheduleMinute` INTEGER NOT NULL, `filters` TEXT NOT NULL, `minSize` TEXT NOT NULL, `maxSize` TEXT NOT NULL, `minAge` TEXT NOT NULL, `maxAge` TEXT NOT NULL, `bwLimitWifi` TEXT, `bwLimitMetered` TEXT, `transfers` INTEGER NOT NULL, `checkers` INTEGER NOT NULL, `bufferSize` TEXT NOT NULL, `deleteExtraneous` INTEGER NOT NULL, `deleteSource` INTEGER NOT NULL, `wifiOnly` INTEGER NOT NULL, `requiresCharging` INTEGER NOT NULL, `enabled` INTEGER NOT NULL, `createdAtEpochMs` INTEGER NOT NULL, `checksum` INTEGER NOT NULL, `backupDir` TEXT, `maxDelete` INTEGER, `extraConfig` TEXT NOT NULL, `maxTransfer` TEXT NOT NULL, `maxRetries` INTEGER NOT NULL, `retryOnRclone` INTEGER NOT NULL, `backoffSeconds` INTEGER NOT NULL, `backoffExponential` INTEGER NOT NULL)",
         "fields": [
           {
             "fieldPath": "id",
@@ -217,6 +217,30 @@
             "fieldPath": "maxTransfer",
             "columnName": "maxTransfer",
             "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxRetries",
+            "columnName": "maxRetries",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "retryOnRclone",
+            "columnName": "retryOnRclone",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "backoffSeconds",
+            "columnName": "backoffSeconds",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "backoffExponential",
+            "columnName": "backoffExponential",
+            "affinity": "INTEGER",
             "notNull": true
           }
         ],
@@ -544,7 +568,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '4a11a882e639f2497b96a7db9c201a47')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '483ed2e8d4253b103f249f4fe9cfb75a')"
     ]
   }
 }

@@ -94,6 +94,20 @@ data class SyncTaskEntity(
      * to CAUTIOUS so the cap is never exceeded. Blank = unset.
      */
     val maxTransfer: String = "",
+    // B8: configurable retry ---------------------------------------------------
+    /**
+     * Maximum total WorkManager attempts before giving up. runAttemptCount is
+     * 0-based (first attempt = 0); allowing retry when
+     * runAttemptCount < maxRetries - 1 yields exactly [maxRetries] total tries.
+     * Default 3 caps the previously-unbounded Network retry.
+     */
+    val maxRetries: Int = 3,
+    /** When true, non-auth VirgaError.Rclone failures also retry (up to [maxRetries]). */
+    val retryOnRclone: Boolean = false,
+    /** Initial backoff delay in seconds passed to WorkManager setBackoffCriteria. */
+    val backoffSeconds: Long = 30,
+    /** EXPONENTIAL backoff when true; LINEAR when false. */
+    val backoffExponential: Boolean = true,
 )
 
 /**
