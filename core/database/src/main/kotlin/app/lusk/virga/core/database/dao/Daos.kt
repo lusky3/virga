@@ -174,7 +174,7 @@ interface SyncRunDao {
         "SELECT remoteName, COUNT(*) AS totalRuns, " +
             "SUM(CASE WHEN status='SUCCESS' THEN 1 ELSE 0 END) AS successRuns, " +
             "SUM(bytesTransferred) AS bytes, SUM(filesTransferred) AS files " +
-            "FROM sync_runs GROUP BY remoteName",
+            "FROM sync_runs WHERE remoteName != '' GROUP BY remoteName",
     )
     fun observeRemoteStats(): Flow<List<RemoteStatRow>>
 

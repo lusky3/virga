@@ -182,8 +182,7 @@ private fun RemoteStatsSection(remoteStats: List<RemoteStat>) {
     if (remoteStats.isEmpty()) return
     SectionLabel(stringResource(R.string.stats_section_by_remote))
     Column(modifier = Modifier.testTag("stats_remote_section")) {
-        remoteStats.forEach { stat ->
-            if (stat.remoteName.isBlank()) return@forEach
+        remoteStats.filter { it.remoteName.isNotBlank() }.forEach { stat ->
             VirgaCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(stat.remoteName, style = MaterialTheme.typography.titleSmall)

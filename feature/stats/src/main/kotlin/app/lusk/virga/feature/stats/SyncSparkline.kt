@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -27,20 +26,21 @@ fun SyncSparkline(
             .height(48.dp)
             .testTag("sparkline"),
     ) {
-        if (data.isEmpty() || data.all { it == 0L }) return@Canvas
-        val max = data.max().toFloat().coerceAtLeast(1f)
-        val n = data.size
-        val step = size.width / (n - 1).coerceAtLeast(1)
-        val path = Path()
-        data.forEachIndexed { i, v ->
-            val x = i * step
-            val y = size.height - (v.toFloat() / max) * size.height
-            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        if (data.isNotEmpty() && data.any { it != 0L }) {
+            val max = data.max().toFloat().coerceAtLeast(1f)
+            val n = data.size
+            val step = size.width / (n - 1).coerceAtLeast(1)
+            val path = Path()
+            data.forEachIndexed { i, v ->
+                val x = i * step
+                val y = size.height - (v.toFloat() / max) * size.height
+                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            drawPath(
+                path = path,
+                color = lineColor,
+                style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+            )
         }
-        drawPath(
-            path = path,
-            color = lineColor,
-            style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
-        )
     }
 }
