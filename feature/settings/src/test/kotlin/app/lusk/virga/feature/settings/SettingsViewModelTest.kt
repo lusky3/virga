@@ -238,4 +238,34 @@ class SettingsViewModelTest {
         assertThat(vm.state.value.quietHoursEndMinutes).isEqualTo(360)
         job.cancel()
     }
+
+    // --- D5: notifyOnFailureOnly ---
+
+    @Test
+    fun setNotifyOnFailureOnly_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setNotifyOnFailureOnly(true)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { repository.setNotifyOnFailureOnly(true) }
+    }
+
+    @Test
+    fun notifyOnFailureOnly_defaultsFalse() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.state.collect {} }
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.notifyOnFailureOnly).isFalse()
+        job.cancel()
+    }
+
+    @Test
+    fun notifyOnFailureOnly_trueReflectedInState() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.state.collect {} }
+        prefsFlow.value = AppPreferences(notifyOnFailureOnly = true)
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.notifyOnFailureOnly).isTrue()
+        job.cancel()
+    }
 }
