@@ -40,6 +40,18 @@
         android:enableOnBackInvokedCallback="true"
         android:localeConfig="@xml/locales_config">
 
+        <!-- Enable AppCompat's automatic per-app locale storage so the override
+             chosen in Settings is persisted and restored synchronously before
+             onCreate (across the minSdk-26 backport range), with no startup race. -->
+        <service
+            android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
+            android:enabled="false"
+            android:exported="false">
+            <meta-data
+                android:name="autoStoreLocales"
+                android:value="true" />
+        </service>
+
         <!-- Crash reporting is OPT-IN. Disable the Sentry SDK's ContentProvider
              auto-init so it never starts on its own; CrashReporter initializes it
              manually only after the user enables the Settings toggle (and only when a
