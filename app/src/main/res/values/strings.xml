@@ -12,6 +12,8 @@
     <string name="onboarding_storage_granted">Storage access granted.</string>
     <string name="onboarding_storage_needed">Storage access not yet granted.</string>
     <string name="onboarding_battery_exempt">Battery optimization already disabled.</string>
+    <string name="onboarding_notif_granted">Notifications enabled.</string>
+    <string name="onboarding_notif_needed">Notifications not yet enabled.</string>
 
     <!-- OnboardingScreen — snackbar messages -->
     <string name="onboarding_storage_settings_error">Could not open storage settings. Please grant access manually.</string>
@@ -27,9 +29,12 @@
     <string name="onboarding_battery_title">Keep syncing in the background</string>
     <string name="onboarding_battery_body">Some manufacturers aggressively kill background apps, which can stop scheduled syncs. Tap Next, then choose \"Allow\" when Android asks whether to let Virga keep running in the background. Android\'s prompt mentions battery use, but allowing it is what keeps your scheduled syncs from being killed. See dontkillmyapp.com for device-specific tips.</string>
     <string name="onboarding_battery_needed">Battery optimization not yet disabled.</string>
+    <!-- OnboardingScreen — notifications rationale page (API 33+) -->
+    <string name="onboarding_notif_title">Stay informed</string>
+    <string name="onboarding_notif_body">Virga shows a small progress notification while a sync is running so you can see it in the status bar and cancel it if needed. Tap Next to allow notifications, or skip — syncs will still run silently.</string>
     <string name="onboarding_first_remote_title">Add your first cloud account</string>
     <!-- beg-01: define "remote" and "sync task" in plain language before using them -->
-    <string name="onboarding_first_remote_body">A cloud account (called a "remote") connects Virga to Google Drive, Dropbox, OneDrive, and more. A sync task copies files between a folder on your phone and a remote.\n\nOn the Remotes tab, tap Add cloud account to connect a provider, then create a sync task. You can also import an existing rclone.conf file from your desktop. Tap Get started.</string>
+    <string name="onboarding_first_remote_body">A cloud account (called a "remote") connects Virga to Google Drive, Dropbox, OneDrive, and more. A sync task copies files between a folder on your phone and a remote.\n\nOn the Remotes tab, tap Add cloud account to connect a provider, then create a sync task. You can also import an existing rclone.conf file from your desktop.\n\nTap Add your first remote to connect one now, or Get started to head to the dashboard.</string>
 
     <!-- Navigation tab labels (ui-09) -->
     <string name="nav_tab_home">Home</string>
@@ -37,9 +42,13 @@
     <string name="nav_tab_remotes">Remotes</string>
     <string name="nav_tab_settings">Settings</string>
 
+    <!-- OnboardingScreen — CTA on final page -->
+    <string name="onboarding_btn_add_first_remote">Add your first remote</string>
+
     <!-- OnboardingScreen — accessibility labels for permission action buttons (a11y-05) -->
     <string name="onboarding_btn_open_storage_settings">Open storage settings</string>
     <string name="onboarding_btn_open_battery_settings">Open battery settings</string>
+    <string name="onboarding_btn_open_notif_settings">Allow notifications</string>
 
     <!-- OnboardingScreen — page indicator accessibility (a11y-04) -->
     <string name="onboarding_page_indicator">Page %1$d of %2$d</string>

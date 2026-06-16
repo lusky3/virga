@@ -1,12 +1,6 @@
 package app.lusk.virga.onboarding
 
-import android.Manifest
-import android.content.Context
-import android.content.Intent
-import androidx.core.net.toUri
 import android.os.Build
-import android.os.Environment
-import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
@@ -52,7 +46,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -64,15 +57,27 @@ import app.lusk.virga.core.designsystem.theme.rememberReduceMotion
 import kotlinx.coroutines.launch
 
 /**
- * 4-step onboarding pager: welcome → storage permission → battery hint → done.
+ * Onboarding pager: welcome → storage → battery → (API 33+) notifications → first-remote.
  * Completing the final step persists the flag and navigates into the main app.
+ *
+ * @param onFinished Called when the user finishes onboarding via "Get started".
+ * @param onAddFirstRemote Called when the user taps "Add your first remote" on the final
+ *   page.  Caller should navigate to [AddRemoteRoute] via the pending-route mechanism.
+ *   Defaults to no-op so callers that don't need it (e.g. tests) compile unchanged.
  */
 @Composable
 fun OnboardingScreen(
     onFinished: () -> Unit,
+    onAddFirstRemote: () -> Unit = {},
     viewModel: OnboardingViewModel = hiltViewModel(),
 ) {
     val pages = buildOnboardingPages()
+    val pageIndices = PageIndices(
+        storage = 1,
+        battery = 2,
+        notif = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) 3 else -1,
+    )
+
     val pagerState = rememberPagerState(pageCount = { pages.size })
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -81,10 +86,11 @@ fun OnboardingScreen(
     val storageSettingsError = stringResource(R.string.onboarding_storage_settings_error)
     val batterySettingsError = stringResource(R.string.onboarding_battery_settings_error)
 
-    // Track whether storage permission is currently granted so we can reflect
+    // Track whether permissions are currently granted so we can reflect
     // granted vs still-needed after the user returns from system settings.
     var storageGranted by remember { mutableStateOf(isStorageGranted(context)) }
     var batteryExempt by remember { mutableStateOf(isBatteryExempt(context)) }
+    var notifGranted by remember { mutableStateOf(isNotifGranted(context)) }
     // Permission pages whose system intent we've already launched. Lets the user
     // return and see the status update instead of the page auto-advancing past
     // it; a second tap still proceeds so they're never trapped if they decline.
@@ -97,6 +103,7 @@ fun OnboardingScreen(
             if (event == Lifecycle.Event.ON_RESUME) {
                 storageGranted = isStorageGranted(context)
                 batteryExempt = isBatteryExempt(context)
+                notifGranted = isNotifGranted(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -107,9 +114,12 @@ fun OnboardingScreen(
     // 30+ MES is not a runtime grant, so we hand the user to the system page.
     val readPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        storageGranted = granted
-    }
+    ) { granted -> storageGranted = granted }
+
+    // POST_NOTIFICATIONS runtime permission (API 33+).
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted -> notifGranted = granted }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         // safeDrawingPadding keeps the pager content, page indicator, and the
@@ -125,11 +135,22 @@ fun OnboardingScreen(
             ) { pageIndex ->
                 val page = pages[pageIndex]
                 // Show a status hint on permission pages when already granted or still needed.
-                val statusHint = when {
-                    pageIndex == 1 && storageGranted -> stringResource(R.string.onboarding_storage_granted)
-                    pageIndex == 1 && !storageGranted -> stringResource(R.string.onboarding_storage_needed)
-                    pageIndex == 2 && batteryExempt -> stringResource(R.string.onboarding_battery_exempt)
-                    pageIndex == 2 && !batteryExempt -> stringResource(R.string.onboarding_battery_needed)
+                val statusHint = when (pageIndex) {
+                    pageIndices.storage -> if (storageGranted) {
+                        stringResource(R.string.onboarding_storage_granted)
+                    } else {
+                        stringResource(R.string.onboarding_storage_needed)
+                    }
+                    pageIndices.battery -> if (batteryExempt) {
+                        stringResource(R.string.onboarding_battery_exempt)
+                    } else {
+                        stringResource(R.string.onboarding_battery_needed)
+                    }
+                    pageIndices.notif -> if (notifGranted) {
+                        stringResource(R.string.onboarding_notif_granted)
+                    } else {
+                        stringResource(R.string.onboarding_notif_needed)
+                    }
                     else -> null
                 }
                 PageContent(title = page.title, body = page.body, statusHint = statusHint)
@@ -137,64 +158,60 @@ fun OnboardingScreen(
 
             PageIndicator(pageCount = pages.size, current = pagerState.currentPage)
 
+            val page = pagerState.currentPage
+            val isLastPage = page == pages.lastIndex
+            val pageSatisfied = pageIsSatisfied(page, pageIndices,
+                storageGranted, batteryExempt, notifGranted)
+            // a11y-05: on permission pages, the first tap on an unsatisfied page
+            // launches a system permission request instead of advancing — override the
+            // semantic onClick label to say so.
+            val willLaunchIntent = !pageSatisfied &&
+                page !in intentLaunchedPages &&
+                pageIndices.isPermissionPage(page)
+            val actionLabel = permissionActionLabel(willLaunchIntent, page, pageIndices)
+
             Row(
                 Modifier.fillMaxWidth().padding(top = VirgaSpacing.md),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 // Back button hidden on first page.
-                if (pagerState.currentPage > 0) {
+                if (page > 0) {
                     TextButton(onClick = {
-                        scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
+                        scope.launch { pagerState.animateScrollToPage(page - 1) }
                     }) { Text(stringResource(R.string.onboarding_btn_back)) }
                 } else {
                     TextButton(onClick = {
-                        viewModel.completeOnboarding()
-                        onFinished()
+                        viewModel.completeOnboarding(); onFinished()
                     }) { Text(stringResource(R.string.onboarding_btn_skip)) }
                 }
 
-                // Hoist the next-button's derived state to single locals shared by
-                // both the click handler and the a11y label, rather than computing
-                // page/satisfied/willLaunchIntent twice. These read snapshot state
-                // (currentPage, the permission flags, intentLaunchedPages) so the
-                // Button recomposes and the lambda captures fresh values on change.
-                val page = pagerState.currentPage
-                val pageSatisfied = when (page) {
-                    1 -> storageGranted
-                    2 -> batteryExempt
-                    else -> true
-                }
-                // a11y-05: on the two permission pages, the first tap on an
-                // unsatisfied page launches a system settings intent instead of
-                // advancing — override the semantic onClick label to say so.
-                val willLaunchIntent = !pageSatisfied && page !in intentLaunchedPages && (page == 1 || page == 2)
-                val actionLabel = when {
-                    willLaunchIntent && page == 1 -> stringResource(R.string.onboarding_btn_open_storage_settings)
-                    willLaunchIntent && page == 2 -> stringResource(R.string.onboarding_btn_open_battery_settings)
-                    else -> null
+                // On the final page: secondary "Get started" TextButton + primary CTA.
+                if (isLastPage) {
+                    TextButton(onClick = { viewModel.completeOnboarding(); onFinished() }) {
+                        Text(stringResource(R.string.onboarding_btn_get_started))
+                    }
                 }
 
                 Button(
                     onClick = {
                         if (willLaunchIntent) {
-                            val ok = when (page) {
-                                1 -> requestStorageAccess(context, readPermissionLauncher::launch)
-                                else -> openBatterySettings(context)
-                            }
+                            val ok = launchPermissionRequest(page, pageIndices,
+                                context, readPermissionLauncher::launch,
+                                notifPermissionLauncher::launch)
                             if (!ok) {
                                 scope.launch {
                                     snackbar.showSnackbar(
-                                        if (page == 1) storageSettingsError else batterySettingsError,
+                                        if (page == pageIndices.storage) storageSettingsError
+                                        else batterySettingsError,
                                     )
                                 }
                             }
                             intentLaunchedPages = intentLaunchedPages + page
                             return@Button
                         }
-                        if (page == pages.lastIndex) {
-                            viewModel.completeOnboarding()
-                            onFinished()
+                        if (isLastPage) {
+                            viewModel.completeOnboarding(); onAddFirstRemote()
                         } else {
                             scope.launch { pagerState.animateScrollToPage(page + 1) }
                         }
@@ -206,11 +223,8 @@ fun OnboardingScreen(
                     },
                 ) {
                     Text(
-                        if (page == pages.lastIndex) {
-                            stringResource(R.string.onboarding_btn_get_started)
-                        } else {
-                            stringResource(R.string.onboarding_btn_next)
-                        },
+                        if (isLastPage) stringResource(R.string.onboarding_btn_add_first_remote)
+                        else stringResource(R.string.onboarding_btn_next),
                     )
                 }
             }
@@ -222,78 +236,6 @@ fun OnboardingScreen(
         }
     }
 }
-
-/** Returns true when storage access is considered granted for this device/API. */
-private fun isStorageGranted(context: Context): Boolean =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        Environment.isExternalStorageManager()
-    } else {
-        ContextCompat.checkSelfPermission(
-            context, Manifest.permission.READ_EXTERNAL_STORAGE,
-        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-    }
-
-/** Returns true if Virga is exempt from battery optimization. */
-private fun isBatteryExempt(context: Context): Boolean {
-    val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
-    return pm.isIgnoringBatteryOptimizations(context.packageName)
-}
-
-/**
- * Launches the appropriate storage settings page.
- * Returns true if the intent was dispatched successfully.
- */
-private fun requestStorageAccess(
-    context: Context,
-    requestRuntimePermission: (String) -> Unit,
-): Boolean {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        val result = runCatching {
-            context.startActivity(
-                Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-                    data = "package:${context.packageName}".toUri()
-                },
-            )
-        }
-        if (result.isSuccess) return true
-        return runCatching {
-            context.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
-        }.isSuccess
-    } else {
-        requestRuntimePermission(Manifest.permission.READ_EXTERNAL_STORAGE)
-        return true
-    }
-}
-
-/**
- * Opens battery optimization settings.
- * Returns true if the intent was dispatched successfully.
- */
-// BatteryLife: the direct ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS is gated to the
-// FOSS/sideload flavor (allowed there); the Play flavor strips the permission
-// (play/AndroidManifest.xml) and only opens the general settings list, so the Play APK
-// is policy-compliant. Lint can't model the runtime flavor branch, hence the suppression.
-@Suppress("BatteryLife")
-private fun openBatterySettings(context: Context): Boolean =
-    runCatching {
-        // The targeted "Allow <app> to ignore battery optimizations?" dialog
-        // (ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS + its permission) is restricted
-        // by Play policy to app categories a general sync app doesn't qualify for, so
-        // only the FOSS/sideload build uses it. The Play build (and the fallback for
-        // both) opens the general optimization-settings list, which is always allowed.
-        if (app.lusk.virga.BuildConfig.DISTRIBUTION == "foss") {
-            context.startActivity(
-                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                    data = "package:${context.packageName}".toUri()
-                },
-            )
-        } else {
-            context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-        }
-    }.recoverCatching {
-        // Fall back to the optimization list if the targeted dialog is unavailable.
-        context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-    }.isSuccess
 
 @Composable
 private fun PageContent(title: String, body: String, statusHint: String? = null) {
@@ -346,7 +288,6 @@ private fun PageIndicator(pageCount: Int, current: Int) {
         val reduceMotion = rememberReduceMotion()
         repeat(pageCount) { i ->
             val isActive = i == current
-
             val dotWidth by animateDpAsState(
                 targetValue = if (isActive) 20.dp else 8.dp,
                 // Use the shared list-enter token (220 ms, decelerate) so dot transitions
@@ -360,7 +301,6 @@ private fun PageIndicator(pageCount: Int, current: Int) {
                 animationSpec = if (reduceMotion) snap() else VirgaMotion.listEnterTween(),
                 label = "dotColor",
             )
-
             Box(
                 Modifier
                     .clearAndSetSemantics {}
@@ -402,6 +342,14 @@ private fun buildOnboardingPages(): List<Page> = buildList {
             body = stringResource(R.string.onboarding_battery_body),
         ),
     )
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        add(
+            Page(
+                title = stringResource(R.string.onboarding_notif_title),
+                body = stringResource(R.string.onboarding_notif_body),
+            ),
+        )
+    }
     add(
         Page(
             title = stringResource(R.string.onboarding_first_remote_title),
