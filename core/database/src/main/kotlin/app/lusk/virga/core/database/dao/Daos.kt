@@ -1,5 +1,6 @@
 package app.lusk.virga.core.database.dao
 
+import androidx.paging.PagingSource
 import androidx.room.Dao
 import androidx.room.Transaction
 import androidx.room.Delete
@@ -108,6 +109,25 @@ interface SyncTaskDao {
     suspend fun repointRemoteName(oldName: String, newName: String)
 }
 
+/** Paging row joining a run with its task's display name. */
+data class SyncRunWithTaskName(
+    val id: Long,
+    val taskId: Long,
+    val startedAtEpochMs: Long,
+    val endedAtEpochMs: Long?,
+    val status: SyncStatus,
+    val filesTransferred: Int,
+    val bytesTransferred: Long,
+    val errorCount: Int,
+    val errorMessage: String?,
+    val logPath: String?,
+    val failedFiles: String,
+    val remoteName: String,
+    val direction: String,
+    val durationMs: Long,
+    val taskName: String?,
+)
+
 @Dao
 interface SyncRunDao {
     @Query("SELECT * FROM sync_runs ORDER BY startedAtEpochMs DESC LIMIT :limit")
@@ -197,6 +217,48 @@ interface SyncRunDao {
 
     @Query("DELETE FROM sync_runs")
     suspend fun deleteAll()
+
+    /** All distinct taskIds referenced by sync_runs — used for filter-chip derivation. */
+    @Query("SELECT DISTINCT taskId FROM sync_runs")
+    fun observeDistinctTaskIds(): Flow<List<Long>>
+
+    @Query(
+        "SELECT r.id, r.taskId, r.startedAtEpochMs, r.endedAtEpochMs, r.status, " +
+            "r.filesTransferred, r.bytesTransferred, r.errorCount, r.errorMessage, " +
+            "r.logPath, r.failedFiles, r.remoteName, r.direction, r.durationMs, " +
+            "t.name AS taskName " +
+            "FROM sync_runs r LEFT JOIN sync_tasks t ON r.taskId = t.id " +
+            "WHERE (:taskId IS NULL OR r.taskId = :taskId) " +
+            "AND (:status IS NULL OR r.status = :status) " +
+            "AND (:query = '' OR t.name LIKE '%' || :query || '%' " +
+            "OR r.remoteName LIKE '%' || :query || '%' " +
+            "OR r.errorMessage LIKE '%' || :query || '%') " +
+            "ORDER BY r.startedAtEpochMs DESC, r.id DESC",
+    )
+    fun pagedRunsWithTask(
+        taskId: Long?,
+        status: SyncStatus?,
+        query: String,
+    ): PagingSource<Int, SyncRunWithTaskName>
+
+    @Query(
+        "SELECT r.id, r.taskId, r.startedAtEpochMs, r.endedAtEpochMs, r.status, " +
+            "r.filesTransferred, r.bytesTransferred, r.errorCount, r.errorMessage, " +
+            "r.logPath, r.failedFiles, r.remoteName, r.direction, r.durationMs, " +
+            "t.name AS taskName " +
+            "FROM sync_runs r LEFT JOIN sync_tasks t ON r.taskId = t.id " +
+            "WHERE (:taskId IS NULL OR r.taskId = :taskId) " +
+            "AND (:status IS NULL OR r.status = :status) " +
+            "AND (:query = '' OR t.name LIKE '%' || :query || '%' " +
+            "OR r.remoteName LIKE '%' || :query || '%' " +
+            "OR r.errorMessage LIKE '%' || :query || '%') " +
+            "ORDER BY r.startedAtEpochMs DESC, r.id DESC",
+    )
+    suspend fun exportRunsWithTask(
+        taskId: Long?,
+        status: SyncStatus?,
+        query: String,
+    ): List<SyncRunWithTaskName>
 }
 
 @Dao

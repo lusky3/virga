@@ -34,7 +34,10 @@ dependencies {
     // (compose BOM is added by the virga.android.compose convention plugin)
     implementation(libs.compose.material3.adaptive.navigation)
     implementation(libs.androidx.navigation3.ui)
+    implementation(libs.paging.runtime)
+    implementation(libs.paging.compose)
 
+    testImplementation(libs.paging.testing)
     testImplementation(libs.junit4)
     testImplementation(libs.robolectric)
     testImplementation(platform(libs.compose.bom))

@@ -15,6 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -55,6 +56,14 @@ class VirgaApplication : Application(), Configuration.Provider {
             // delete a config in active use. The next daemon start re-decrypts anyway.
             runCatching { rcloneEngine.cleanupStaleConfigIfIdle() }
                 .onFailure { Log.w(TAG, "Failed to clean stale decrypted config on startup", it) }
+            val retentionDays = runCatching {
+                preferences.preferences.first().runRetentionDays
+            }.getOrDefault(0)
+            if (retentionDays > 0) {
+                val cutoffMs = System.currentTimeMillis() - retentionDays * 86_400_000L
+                runCatching { syncHistory.pruneOlderThan(cutoffMs) }
+                    .onFailure { Log.w(TAG, "Failed to prune history on startup", it) }
+            }
         }
         // Keep the persistent watchdog in sync with its preference. Runs for the
         // app's lifetime: applies the saved state on every launch and reacts to

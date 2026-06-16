@@ -2,18 +2,25 @@ package app.lusk.virga.feature.sync
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
+import androidx.paging.map
+import app.lusk.virga.core.common.model.NamedSyncRun
+import app.lusk.virga.core.common.model.SyncRun
 import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
-import app.lusk.virga.core.common.model.SyncRun
 import app.lusk.virga.sync.SyncScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -30,13 +37,14 @@ data class HistoryTaskFilter(
 )
 
 data class SyncHistoryUiState(
-    val rows: List<SyncRunRow> = emptyList(),
     val tasks: List<HistoryTaskFilter> = emptyList(),
     val selectedTaskId: Long? = null,
     val statusFilter: SyncStatus? = null,
+    val searchQuery: String = "",
     val loading: Boolean = true,
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class SyncHistoryViewModel @Inject constructor(
     private val historyRepository: SyncHistoryRepository,
@@ -46,25 +54,25 @@ class SyncHistoryViewModel @Inject constructor(
 
     private val selectedTaskId = MutableStateFlow<Long?>(null)
     private val statusFilter = MutableStateFlow<SyncStatus?>(null)
+    private val searchQuery = MutableStateFlow("")
 
     val uiState: StateFlow<SyncHistoryUiState> =
         combine(
-            historyRepository.recentRuns,
+            historyRepository.distinctTaskIds,
             taskRepository.tasks,
             selectedTaskId,
             statusFilter,
-        ) { runs, tasks, filterId, statusF ->
-            val names = tasks.associate { it.id to it.name }
-            val taskIdsInHistory = runs.mapTo(mutableSetOf()) { it.taskId }
-            val filtered = runs
-                .let { if (filterId == null) it else it.filter { r -> r.taskId == filterId } }
-                .let { if (statusF == null) it else it.filter { r -> r.status == statusF } }
+            searchQuery,
+        ) { taskIdsInHistory, tasks, filterId, statusF, query ->
+            // The list itself is driven by [pagedRuns] (DB-level filter/search); this
+            // state only carries the filter-chip options + current selections + loading.
+            val idSet = taskIdsInHistory.toHashSet()
             SyncHistoryUiState(
-                rows = filtered.map { SyncRunRow(it, names[it.taskId] ?: "(deleted task)") },
-                tasks = tasks.filter { it.id in taskIdsInHistory }
+                tasks = tasks.filter { it.id in idSet }
                     .map { HistoryTaskFilter(it.id, it.name) },
                 selectedTaskId = filterId,
                 statusFilter = statusF,
+                searchQuery = query,
                 loading = false,
             )
         }.stateIn(
@@ -73,9 +81,19 @@ class SyncHistoryViewModel @Inject constructor(
             SyncHistoryUiState(),
         )
 
+    val pagedRuns: Flow<PagingData<SyncRunRow>> =
+        combine(selectedTaskId, statusFilter, searchQuery) { taskId, status, query ->
+            Triple(taskId, status, query)
+        }.flatMapLatest { (taskId, status, query) ->
+            historyRepository.pagedRuns(taskId, status, query.trim())
+                .map { page -> page.map { it.toSyncRunRow() } }
+        }.cachedIn(viewModelScope)
+
     fun setFilter(taskId: Long?) { selectedTaskId.value = taskId }
 
     fun setStatusFilter(status: SyncStatus?) { statusFilter.value = status }
+
+    fun setSearchQuery(query: String) { searchQuery.value = query }
 
     fun clearHistory() = viewModelScope.launch {
         historyRepository.clearAll()
@@ -85,9 +103,17 @@ class SyncHistoryViewModel @Inject constructor(
         scheduler.syncNow(run.taskId)
     }
 
+    suspend fun exportRows(): List<SyncRunRow> =
+        historyRepository.exportRows(selectedTaskId.value, statusFilter.value, searchQuery.value.trim())
+            .map { it.toSyncRunRow() }
+
     companion object {
         fun isTerminal(status: SyncStatus): Boolean =
             status == SyncStatus.SUCCESS || status == SyncStatus.FAILED || status == SyncStatus.CANCELLED
     }
 }
 
+private fun NamedSyncRun.toSyncRunRow() = SyncRunRow(
+    run = run,
+    taskName = taskName ?: "(deleted task)",
+)

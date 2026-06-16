@@ -36,4 +36,6 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { preferences.setQuietHoursStart(minutes) }
     fun setQuietHoursEnd(minutes: Int) =
         viewModelScope.launch { preferences.setQuietHoursEnd(minutes) }
+    fun setRunRetentionDays(days: Int) =
+        viewModelScope.launch { preferences.setRunRetentionDays(days) }
 }

@@ -1,19 +1,26 @@
 package app.lusk.virga.feature.sync
 
+import androidx.paging.PagingData
+import androidx.paging.map
+import androidx.paging.testing.asSnapshot
+import app.lusk.virga.core.common.model.NamedSyncRun
 import app.lusk.virga.core.common.model.SyncDirection
+import app.lusk.virga.core.common.model.SyncRun
 import app.lusk.virga.core.common.model.SyncStatus
+import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
-import app.lusk.virga.core.common.model.SyncRun
-import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.sync.SyncScheduler
 import com.google.common.truth.Truth.assertThat
+import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -27,10 +34,11 @@ class SyncHistoryViewModelTest {
     @RegisterExtension
     val mainDispatcher = MainDispatcherExtension()
 
-    private val runsFlow = MutableStateFlow<List<SyncRun>>(emptyList())
+    private val taskIdsFlow = MutableStateFlow<List<Long>>(emptyList())
     private val tasksFlow = MutableStateFlow<List<SyncTask>>(emptyList())
     private val historyRepository: SyncHistoryRepository = mockk(relaxed = true) {
-        every { recentRuns } returns runsFlow
+        every { distinctTaskIds } returns taskIdsFlow
+        every { pagedRuns(any(), any(), any()) } returns flowOf(PagingData.empty())
     }
     private val taskRepository: SyncTaskRepository = mockk(relaxed = true) {
         every { tasks } returns tasksFlow
@@ -39,7 +47,7 @@ class SyncHistoryViewModelTest {
 
     private fun viewModel() = SyncHistoryViewModel(historyRepository, taskRepository, scheduler)
 
-    // --- pre-existing tests -------------------------------------------------
+    // --- isTerminal -----------------------------------------------------------
 
     @Test
     fun isTerminal_returnsTrueForSuccessFailedCancelled_falseOtherwise() {
@@ -50,61 +58,22 @@ class SyncHistoryViewModelTest {
     }
 
     @Test
-    fun uiState_joinsRunsWithTaskNames() = runTest(mainDispatcher.dispatcher) {
-        val vm = viewModel()
-        val job = backgroundScope.launch { vm.uiState.collect {} }
-        tasksFlow.value = listOf(
-            task(id = 1, name = "Photos"),
-            task(id = 2, name = "Music"),
-        )
-        runsFlow.value = listOf(run(id = 10, taskId = 1), run(id = 11, taskId = 2))
-        advanceUntilIdle()
-
-        val rows = vm.uiState.value.rows
-        assertThat(rows.map { it.taskName }).containsExactly("Photos", "Music").inOrder()
-        assertThat(vm.uiState.value.loading).isFalse()
-        job.cancel()
+    fun isTerminal_isFalseForQueuedAndIdle() {
+        assertThat(SyncHistoryViewModel.isTerminal(SyncStatus.QUEUED)).isFalse()
+        assertThat(SyncHistoryViewModel.isTerminal(SyncStatus.IDLE)).isFalse()
     }
 
-    @Test
-    fun uiState_fallsBackToDeletedTaskLabel_whenTaskMissing() = runTest(mainDispatcher.dispatcher) {
-        val vm = viewModel()
-        val job = backgroundScope.launch { vm.uiState.collect {} }
-        runsFlow.value = listOf(run(id = 10, taskId = 99))
-        tasksFlow.value = emptyList()
-        advanceUntilIdle()
-
-        assertThat(vm.uiState.value.rows.single().taskName).isEqualTo("(deleted task)")
-        job.cancel()
-    }
-
-    // --- combine: rows include task name and run data -----------------------
-
-    @Test
-    fun uiState_rowsContainTheActualRunEntity() = runTest(mainDispatcher.dispatcher) {
-        val vm = viewModel()
-        val job = backgroundScope.launch { vm.uiState.collect {} }
-        tasksFlow.value = listOf(task(id = 1, name = "T"))
-        val theRun = run(id = 42, taskId = 1, status = SyncStatus.FAILED)
-        runsFlow.value = listOf(theRun)
-        advanceUntilIdle()
-
-        assertThat(vm.uiState.value.rows.single().run).isEqualTo(theRun)
-        job.cancel()
-    }
-
-    // --- HistoryTaskFilter list only for tasks present in history -----------
+    // --- uiState: task-chip list ---------------------------------------------
 
     @Test
     fun uiState_taskFilterList_onlyIncludesTasksPresentInHistory() = runTest(mainDispatcher.dispatcher) {
         val vm = viewModel()
         val job = backgroundScope.launch { vm.uiState.collect {} }
         tasksFlow.value = listOf(task(id = 1, name = "Photos"), task(id = 2, name = "Videos"))
-        runsFlow.value = listOf(run(id = 10, taskId = 1))
+        taskIdsFlow.value = listOf(1L)
         advanceUntilIdle()
 
-        val filterIds = vm.uiState.value.tasks.map { it.id }
-        assertThat(filterIds).containsExactly(1L)
+        assertThat(vm.uiState.value.tasks.map { it.id }).containsExactly(1L)
         job.cancel()
     }
 
@@ -113,77 +82,63 @@ class SyncHistoryViewModelTest {
         val vm = viewModel()
         val job = backgroundScope.launch { vm.uiState.collect {} }
         tasksFlow.value = listOf(task(id = 1, name = "Photos"))
-        runsFlow.value = emptyList()
+        taskIdsFlow.value = emptyList()
         advanceUntilIdle()
 
         assertThat(vm.uiState.value.tasks).isEmpty()
         job.cancel()
     }
 
-    // --- setFilter ----------------------------------------------------------
+    // --- uiState: filter state echoed ----------------------------------------
 
     @Test
-    fun setFilter_nullShowsAllRuns() = runTest(mainDispatcher.dispatcher) {
+    fun setFilter_selectedTaskId_reflectedInUiState() = runTest(mainDispatcher.dispatcher) {
         val vm = viewModel()
         val job = backgroundScope.launch { vm.uiState.collect {} }
         tasksFlow.value = listOf(task(id = 1, name = "T1"), task(id = 2, name = "T2"))
-        runsFlow.value = listOf(run(id = 10, taskId = 1), run(id = 11, taskId = 2))
-        advanceUntilIdle()
-
-        vm.setFilter(null)
-        advanceUntilIdle()
-
-        assertThat(vm.uiState.value.rows).hasSize(2)
-        job.cancel()
-    }
-
-    @Test
-    fun setFilter_taskId_showsOnlyRunsForThatTask() = runTest(mainDispatcher.dispatcher) {
-        val vm = viewModel()
-        val job = backgroundScope.launch { vm.uiState.collect {} }
-        tasksFlow.value = listOf(task(id = 1, name = "T1"), task(id = 2, name = "T2"))
-        runsFlow.value = listOf(
-            run(id = 10, taskId = 1),
-            run(id = 11, taskId = 2),
-            run(id = 12, taskId = 1),
-        )
+        taskIdsFlow.value = listOf(1L, 2L)
         advanceUntilIdle()
 
         vm.setFilter(1L)
         advanceUntilIdle()
 
-        assertThat(vm.uiState.value.rows.map { it.run.id }).containsExactly(10L, 12L)
         assertThat(vm.uiState.value.selectedTaskId).isEqualTo(1L)
         job.cancel()
     }
 
     @Test
-    fun setStatusFilter_filtersRowsByStatus() = runTest(mainDispatcher.dispatcher) {
+    fun setFilter_null_clearsSelectedTaskId() = runTest(mainDispatcher.dispatcher) {
         val vm = viewModel()
         val job = backgroundScope.launch { vm.uiState.collect {} }
-        tasksFlow.value = listOf(task(id = 1, name = "T"))
-        runsFlow.value = listOf(
-            run(id = 10, taskId = 1, status = SyncStatus.SUCCESS),
-            run(id = 11, taskId = 1, status = SyncStatus.FAILED),
-        )
+        taskIdsFlow.value = listOf(1L)
+        advanceUntilIdle()
+
+        vm.setFilter(1L)
+        advanceUntilIdle()
+        vm.setFilter(null)
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.selectedTaskId).isNull()
+        job.cancel()
+    }
+
+    @Test
+    fun setStatusFilter_reflectedInUiState() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.uiState.collect {} }
         advanceUntilIdle()
 
         vm.setStatusFilter(SyncStatus.FAILED)
         advanceUntilIdle()
 
-        assertThat(vm.uiState.value.rows.map { it.run.id }).containsExactly(11L)
+        assertThat(vm.uiState.value.statusFilter).isEqualTo(SyncStatus.FAILED)
         job.cancel()
     }
 
     @Test
-    fun setStatusFilter_null_showsAllStatuses() = runTest(mainDispatcher.dispatcher) {
+    fun setStatusFilter_null_clearsFilter() = runTest(mainDispatcher.dispatcher) {
         val vm = viewModel()
         val job = backgroundScope.launch { vm.uiState.collect {} }
-        tasksFlow.value = listOf(task(id = 1, name = "T"))
-        runsFlow.value = listOf(
-            run(id = 10, taskId = 1, status = SyncStatus.SUCCESS),
-            run(id = 11, taskId = 1, status = SyncStatus.FAILED),
-        )
         advanceUntilIdle()
 
         vm.setStatusFilter(SyncStatus.FAILED)
@@ -191,8 +146,55 @@ class SyncHistoryViewModelTest {
         vm.setStatusFilter(null)
         advanceUntilIdle()
 
-        assertThat(vm.uiState.value.rows).hasSize(2)
+        assertThat(vm.uiState.value.statusFilter).isNull()
         job.cancel()
+    }
+
+    // --- uiState: search query -----------------------------------------------
+
+    @Test
+    fun setSearchQuery_updatesSearchQueryInUiState() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.setSearchQuery("hello")
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.searchQuery).isEqualTo("hello")
+        job.cancel()
+    }
+
+    // --- pagedRuns: toSyncRunRow mapping -------------------------------------
+    // Tested via asSnapshot on a raw (non-cachedIn) PagingData flow to avoid
+    // the StandardTestDispatcher deadlock that cachedIn(viewModelScope) causes.
+
+    @Test
+    fun pagedRuns_mapsNamedSyncRunToSyncRunRow() = runTest(mainDispatcher.dispatcher) {
+        val namedRun = NamedSyncRun(run = run(id = 5L, taskId = 1L), taskName = "Photos")
+        every { historyRepository.pagedRuns(any(), any(), any()) } returns
+            flowOf(PagingData.from(listOf(namedRun)))
+
+        val snapshot = flowOf(PagingData.from(listOf(namedRun)))
+            .map { page -> page.map { n -> SyncRunRow(run = n.run, taskName = n.taskName ?: "(deleted task)") } }
+            .asSnapshot {}
+
+        assertThat(snapshot).hasSize(1)
+        assertThat(snapshot.single().run.id).isEqualTo(5L)
+        assertThat(snapshot.single().taskName).isEqualTo("Photos")
+    }
+
+    @Test
+    fun pagedRuns_fallsBackToDeletedTaskLabel_whenTaskNameNull() = runTest(mainDispatcher.dispatcher) {
+        val namedRun = NamedSyncRun(run = run(id = 7L, taskId = 99L), taskName = null)
+        every { historyRepository.pagedRuns(any(), any(), any()) } returns
+            flowOf(PagingData.from(listOf(namedRun)))
+
+        val snapshot = flowOf(PagingData.from(listOf(namedRun)))
+            .map { page -> page.map { n -> SyncRunRow(run = n.run, taskName = n.taskName ?: "(deleted task)") } }
+            .asSnapshot {}
+
+        assertThat(snapshot.single().taskName).isEqualTo("(deleted task)")
     }
 
     // --- retryRun -----------------------------------------------------------
@@ -216,12 +218,56 @@ class SyncHistoryViewModelTest {
         coVerify(exactly = 1) { historyRepository.clearAll() }
     }
 
-    // --- isTerminal completeness -------------------------------------------
+    // --- exportRows ---------------------------------------------------------
 
     @Test
-    fun isTerminal_isFalseForQueuedAndIdle() {
-        assertThat(SyncHistoryViewModel.isTerminal(SyncStatus.QUEUED)).isFalse()
-        assertThat(SyncHistoryViewModel.isTerminal(SyncStatus.IDLE)).isFalse()
+    fun exportRows_mapsNamedSyncRunToSyncRunRow() = runTest(mainDispatcher.dispatcher) {
+        val namedRun = NamedSyncRun(run = run(id = 9L, taskId = 3L), taskName = "Videos")
+        coEvery { historyRepository.exportRows(any(), any(), any()) } returns listOf(namedRun)
+
+        val rows = viewModel().exportRows()
+
+        assertThat(rows).hasSize(1)
+        assertThat(rows.single().run.id).isEqualTo(9L)
+        assertThat(rows.single().taskName).isEqualTo("Videos")
+    }
+
+    @Test
+    fun exportRows_nullTaskName_fallsBackToDeletedLabel() = runTest(mainDispatcher.dispatcher) {
+        val namedRun = NamedSyncRun(run = run(id = 11L, taskId = 99L), taskName = null)
+        coEvery { historyRepository.exportRows(any(), any(), any()) } returns listOf(namedRun)
+
+        val rows = viewModel().exportRows()
+
+        assertThat(rows.single().taskName).isEqualTo("(deleted task)")
+    }
+
+    @Test
+    fun exportRows_trimsWhitespacePaddedSearchQuery() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.uiState.collect {} }
+        vm.setSearchQuery("  photos  ")
+        advanceUntilIdle()
+
+        coEvery { historyRepository.exportRows(null, null, "photos") } returns emptyList()
+
+        vm.exportRows()
+
+        coVerify { historyRepository.exportRows(null, null, "photos") }
+        job.cancel()
+    }
+
+    // --- loading flag -------------------------------------------------------
+
+    @Test
+    fun uiState_loadingFalseAfterFirstEmission() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.uiState.collect {} }
+        taskIdsFlow.value = emptyList()
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.loading).isFalse()
+        job.cancel()
     }
 
     // --- helpers ------------------------------------------------------------

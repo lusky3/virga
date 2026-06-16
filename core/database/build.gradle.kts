@@ -28,6 +28,7 @@ dependencies {
     implementation(project(":core:common"))
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
+    implementation(libs.room.paging)
     ksp(libs.room.compiler)
     implementation(libs.bundles.coroutines)
 
@@ -35,6 +36,7 @@ dependencies {
     testImplementation(libs.room.testing)
     testImplementation(libs.androidx.junit)
     testImplementation(libs.androidx.test.core)
+    testImplementation(libs.paging.testing)
     // Robolectric is a JUnit4 runner; run it under the JUnit Platform via the
     // vintage engine alongside the project's JUnit5 setup.
     testImplementation(libs.junit4)

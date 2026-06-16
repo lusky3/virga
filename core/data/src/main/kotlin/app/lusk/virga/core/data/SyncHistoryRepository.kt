@@ -1,8 +1,14 @@
 package app.lusk.virga.core.data
 
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
+import androidx.paging.map
+import app.lusk.virga.core.common.model.NamedSyncRun
 import app.lusk.virga.core.common.model.SyncRun
 import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.database.dao.SyncRunDao
+import app.lusk.virga.core.database.dao.SyncRunWithTaskName
 import app.lusk.virga.core.database.entity.SyncRunEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -14,6 +20,9 @@ class SyncHistoryRepository @Inject constructor(
     private val runDao: SyncRunDao,
 ) {
     val recentRuns: Flow<List<SyncRun>> = runDao.observeRecent().map { rows -> rows.map { it.toDomain() } }
+
+    /** Distinct taskIds present in sync_runs — drives filter-chip derivation without LIMIT 100. */
+    val distinctTaskIds: Flow<List<Long>> = runDao.observeDistinctTaskIds()
 
     fun observeRun(id: Long): Flow<SyncRun?> = runDao.observeById(id).map { it?.toDomain() }
 
@@ -95,4 +104,31 @@ class SyncHistoryRepository @Inject constructor(
         )
 
     suspend fun clearAll() = runDao.deleteAll()
+
+    fun pagedRuns(
+        taskId: Long?,
+        status: SyncStatus?,
+        query: String,
+    ): Flow<PagingData<NamedSyncRun>> = Pager(
+        config = PagingConfig(pageSize = 30, enablePlaceholders = false),
+        pagingSourceFactory = { runDao.pagedRunsWithTask(taskId, status, query) },
+    ).flow.map { page -> page.map { it.toNamedSyncRun() } }
+
+    suspend fun exportRows(
+        taskId: Long?,
+        status: SyncStatus?,
+        query: String,
+    ): List<NamedSyncRun> = runDao.exportRunsWithTask(taskId, status, query).map { it.toNamedSyncRun() }
 }
+
+private fun SyncRunWithTaskName.toNamedSyncRun() = NamedSyncRun(
+    run = SyncRun(
+        id = id, taskId = taskId, startedAtEpochMs = startedAtEpochMs,
+        endedAtEpochMs = endedAtEpochMs, status = status,
+        filesTransferred = filesTransferred, bytesTransferred = bytesTransferred,
+        errorCount = errorCount, errorMessage = errorMessage, logPath = logPath,
+        failedFiles = failedFiles, remoteName = remoteName, direction = direction,
+        durationMs = durationMs,
+    ),
+    taskName = taskName,
+)

@@ -162,6 +162,15 @@ data class SyncRun(
 )
 
 /**
+ * A [SyncRun] paired with the display name of its task.
+ * The name may be null when the task was deleted after the run was recorded.
+ */
+data class NamedSyncRun(
+    val run: SyncRun,
+    val taskName: String?,
+)
+
+/**
  * A bisync conflict: two variants of the same logical file kept by rclone.
  * Domain model; mirrors `ConflictEntity`.
  */
