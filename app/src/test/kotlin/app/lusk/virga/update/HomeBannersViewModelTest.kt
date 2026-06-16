@@ -58,7 +58,7 @@ class HomeBannersViewModelTest {
         every { getString(R.string.release_version_0_3_0) } returns "0.3.0"
         every { getStringArray(R.array.release_notes_0_3_0) } returns arrayOf(
             "Create a new destination folder right from the folder picker",
-            "Test a remote’s connectivity on demand from its card menu",
+            "Test a remote's connectivity on demand from its card menu",
             "Importing a config now warns you before it replaces your remotes",
             "Old per-run sync logs are pruned automatically, so they no longer grow without bound",
         )

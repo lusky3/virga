@@ -347,4 +347,59 @@ class PreferencesRepositoryTest {
             cancelAndIgnoreRemainingEvents()
         }
     }
+
+    // --- setAppLanguageTag ---
+
+    @Test fun `appLanguageTag defaults to null`() = testScope.runTest {
+        val repo = createRepo()
+
+        repo.preferences.test {
+            assertThat(awaitItem().appLanguageTag).isNull()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `setAppLanguageTag persists a valid BCP-47 tag`() = testScope.runTest {
+        val repo = createRepo()
+
+        repo.setAppLanguageTag("fr")
+
+        repo.preferences.test {
+            assertThat(awaitItem().appLanguageTag).isEqualTo("fr")
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `setAppLanguageTag with null removes the key so tag reads back as null`() = testScope.runTest {
+        val repo = createRepo()
+        repo.setAppLanguageTag("de")
+        repo.setAppLanguageTag(null)
+
+        repo.preferences.test {
+            assertThat(awaitItem().appLanguageTag).isNull()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `setAppLanguageTag with blank string removes the key so tag reads back as null`() = testScope.runTest {
+        val repo = createRepo()
+        repo.setAppLanguageTag("es")
+        repo.setAppLanguageTag("")
+
+        repo.preferences.test {
+            assertThat(awaitItem().appLanguageTag).isNull()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `setAppLanguageTag overwrites a previous tag`() = testScope.runTest {
+        val repo = createRepo()
+        repo.setAppLanguageTag("fr")
+        repo.setAppLanguageTag("de")
+
+        repo.preferences.test {
+            assertThat(awaitItem().appLanguageTag).isEqualTo("de")
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
 }

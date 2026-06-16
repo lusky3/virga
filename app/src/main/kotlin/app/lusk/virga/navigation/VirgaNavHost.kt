@@ -46,7 +46,6 @@ import app.lusk.virga.feature.remotes.AddRemoteScreen
 import app.lusk.virga.feature.remotes.RemotesScreen
 import app.lusk.virga.feature.settings.AboutScreen
 import app.lusk.virga.feature.settings.SettingsScreen
-import app.lusk.virga.locale.LocaleManager
 import app.lusk.virga.feature.stats.StatsScreen
 import app.lusk.virga.feature.sync.ConflictsScreen
 import app.lusk.virga.feature.sync.FirstSyncWizardScreen
@@ -57,6 +56,7 @@ import app.lusk.virga.feature.sync.SyncTaskEditScreen
 import app.lusk.virga.feature.sync.SyncTaskSummaryScreen
 import app.lusk.virga.feature.sync.HomeScreen
 import app.lusk.virga.feature.sync.SyncTasksAdaptiveScreen
+import app.lusk.virga.locale.LocaleManager
 import app.lusk.virga.update.HomeBannersViewModel
 import app.lusk.virga.update.WhatsNewScreen
 import kotlinx.serialization.Serializable
