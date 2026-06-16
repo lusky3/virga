@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -53,7 +54,8 @@ class VirgaApplication : Application(), Configuration.Provider {
         appScope.launch {
             runCatching {
                 val tag = preferences.preferences.first().appLanguageTag
-                LocaleManager.apply(tag)
+                // setApplicationLocales must run on the main thread; the pref read above is IO.
+                withContext(Dispatchers.Main) { LocaleManager.apply(tag) }
             }.onFailure { Log.w(TAG, "Failed to apply persisted locale on startup", it) }
         }
         appScope.launch {
