@@ -115,7 +115,7 @@ internal fun DestinationDialog(
             )
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(dest.trim()) }) {
+            TextButton(onClick = { onConfirm(dest.trim().trim('/')) }) {
                 Text(stringResource(confirmRes))
             }
         },

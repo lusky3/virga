@@ -12,6 +12,7 @@ import app.lusk.virga.core.data.FileBrowserRepository
 import app.lusk.virga.core.data.RemoteFolderPickStore
 import app.lusk.virga.core.data.RemoteRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -125,6 +126,15 @@ class FileBrowserViewModel @Inject constructor(
     /** Name is non-empty, not `.`/`..`, within length, and free of separators/control chars. */
     private fun isStructurallyValidFolderName(trimmed: String): Boolean = isValidFolderName(trimmed)
 
+    /** Collision check for rename — excludes the item being renamed from the sibling list. */
+    @StringRes
+    private fun checkRenameCollision(name: String, excludePath: String): Int? {
+        val exists = _state.value.rawEntries.any {
+            it.name.equals(name, ignoreCase = true) && it.path != excludePath
+        }
+        return if (exists) R.string.explorer_new_folder_exists else null
+    }
+
     /** L3: the in-flight folder creation, cancelled on dismiss/relaunch. */
     private var createFolderJob: kotlinx.coroutines.Job? = null
 
@@ -156,7 +166,7 @@ class FileBrowserViewModel @Inject constructor(
             } catch (e: VirgaError) {
                 _state.update { it.copy(creatingFolder = false, createFolderError = R.string.explorer_new_folder_failed) }
             } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
+                if (e is CancellationException) throw e
                 _state.update { it.copy(creatingFolder = false, createFolderError = R.string.explorer_new_folder_failed) }
             }
         }
@@ -266,37 +276,33 @@ class FileBrowserViewModel @Inject constructor(
         _state.update { it.copy(showDeleteConfirmDialog = false) }
     }
 
-    /**
-     * Deletes all selected items: files via `deleteFile`, directories via `purge`
-     * (recursive). Refreshes the listing on success. Never throws — failure surfaces
-     * via [FileBrowserUiState.statusMessage].
-     */
+    /** Deletes selected items per-item. Always refreshes afterward; partial failures surface via statusMessage. */
     fun deleteSelected() {
         val remote = _state.value.remoteName ?: return
         val paths = _state.value.selectedPaths
-        val entries = _state.value.rawEntries
+        val rawEntries = _state.value.rawEntries
         if (paths.isEmpty()) return
 
         viewModelScope.launch {
             _state.update { it.copy(fileOpInProgress = true, showDeleteConfirmDialog = false) }
-            val result = runCatching {
-                withContext(dispatchers.io) {
-                    for (path in paths) {
-                        val isDir = entries.find { it.path == path }?.isDir ?: false
-                        if (isDir) {
-                            fileBrowser.purge(remote, path)
-                        } else {
-                            fileBrowser.deleteFile(remote, path)
-                        }
+            val failed = mutableListOf<String>()
+            withContext(dispatchers.io) {
+                for (path in paths) {
+                    try {
+                        val isDir = rawEntries.find { it.path == path }?.isDir ?: false
+                        if (isDir) fileBrowser.purge(remote, path)
+                        else fileBrowser.deleteFile(remote, path)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        failed.add(path)
                     }
                 }
             }
-            val message = if (result.isSuccess) null else result.exceptionOrNull()?.toUserMessage()
+            val message = buildPartialFailureMessage(paths.size - failed.size, failed.size)
             _state.update { it.copy(fileOpInProgress = false, statusMessage = message) }
-            if (result.isSuccess) {
-                clearSelection()
-                load(remote, _state.value.path)
-            }
+            clearSelection()
+            load(remote, _state.value.path)
         }
     }
 
@@ -312,16 +318,16 @@ class FileBrowserViewModel @Inject constructor(
         _state.update { it.copy(showRenameDialog = false, renamePath = null, renameError = null) }
     }
 
-    /**
-     * Renames the item at [path] to [newName] within the same parent directory.
-     * Validates the new name using the same rules as [createFolder]. Refreshes
-     * the listing on success. Invalid name surfaces [FileBrowserUiState.statusMessage]
-     * using [R.string.explorer_rename_invalid_name].
-     */
+    /** Renames [path] to [newName] in the same parent dir. Validates structure + collision (self excluded). */
     fun rename(path: String, newName: String) {
         val trimmed = newName.trim()
         if (!isStructurallyValidFolderName(trimmed)) {
             _state.update { it.copy(renameError = R.string.explorer_rename_invalid_name) }
+            return
+        }
+        val collisionError = checkRenameCollision(trimmed, excludePath = path)
+        if (collisionError != null) {
+            _state.update { it.copy(renameError = collisionError) }
             return
         }
         val remote = _state.value.remoteName ?: return
@@ -329,13 +335,19 @@ class FileBrowserViewModel @Inject constructor(
         val destPath = if (parent.isEmpty()) trimmed else "$parent/$trimmed"
 
         viewModelScope.launch {
-            _state.update { it.copy(fileOpInProgress = true, showRenameDialog = false, renamePath = null, renameError = null) }
-            val result = runCatching {
-                withContext(dispatchers.io) { fileBrowser.moveFile(remote, path, destPath) }
+            _state.update {
+                it.copy(fileOpInProgress = true, showRenameDialog = false, renamePath = null, renameError = null)
             }
-            val message = if (result.isSuccess) null else result.exceptionOrNull()?.toUserMessage()
+            var message: String? = null
+            try {
+                withContext(dispatchers.io) { fileBrowser.moveFile(remote, path, destPath) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                message = e.toUserMessage()
+            }
             _state.update { it.copy(fileOpInProgress = false, statusMessage = message) }
-            if (result.isSuccess) {
+            if (message == null) {
                 clearSelection()
                 load(remote, _state.value.path)
             }
@@ -366,63 +378,67 @@ class FileBrowserViewModel @Inject constructor(
         _state.update { it.copy(showCopyDialog = false) }
     }
 
-    /**
-     * Moves each selected item into [destDir] within the same remote. The
-     * destination filename is the item's own name. Refreshes on success.
-     */
+    /** Moves selected items into [destDir] per-item. Slashes normalized; empty = root. Always refreshes. */
     fun moveSelected(destDir: String) {
         val remote = _state.value.remoteName ?: return
         val paths = _state.value.selectedPaths
-        val entries = _state.value.rawEntries
+        val rawEntries = _state.value.rawEntries
         if (paths.isEmpty()) return
+        val normalizedDest = destDir.trim().trim('/')
 
         viewModelScope.launch {
             _state.update { it.copy(fileOpInProgress = true, showMoveDialog = false) }
-            val result = runCatching {
-                withContext(dispatchers.io) {
-                    for (path in paths) {
-                        val name = entries.find { it.path == path }?.name ?: path.substringAfterLast('/')
-                        val destPath = if (destDir.isEmpty()) name else "$destDir/$name"
+            val failed = mutableListOf<String>()
+            withContext(dispatchers.io) {
+                for (path in paths) {
+                    try {
+                        val name = rawEntries.find { it.path == path }?.name
+                            ?: path.substringAfterLast('/')
+                        val destPath = if (normalizedDest.isEmpty()) name else "$normalizedDest/$name"
                         fileBrowser.moveFile(remote, path, destPath)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        failed.add(path)
                     }
                 }
             }
-            val message = if (result.isSuccess) null else result.exceptionOrNull()?.toUserMessage()
+            val message = buildPartialFailureMessage(paths.size - failed.size, failed.size)
             _state.update { it.copy(fileOpInProgress = false, statusMessage = message) }
-            if (result.isSuccess) {
-                clearSelection()
-                load(remote, _state.value.path)
-            }
+            clearSelection()
+            load(remote, _state.value.path)
         }
     }
 
-    /**
-     * Copies each selected item into [destDir] within the same remote. The
-     * destination filename is the item's own name. Refreshes on success.
-     */
+    /** Copies selected items into [destDir] per-item. Slashes normalized; empty = root. Always refreshes. */
     fun copySelected(destDir: String) {
         val remote = _state.value.remoteName ?: return
         val paths = _state.value.selectedPaths
-        val entries = _state.value.rawEntries
+        val rawEntries = _state.value.rawEntries
         if (paths.isEmpty()) return
+        val normalizedDest = destDir.trim().trim('/')
 
         viewModelScope.launch {
             _state.update { it.copy(fileOpInProgress = true, showCopyDialog = false) }
-            val result = runCatching {
-                withContext(dispatchers.io) {
-                    for (path in paths) {
-                        val name = entries.find { it.path == path }?.name ?: path.substringAfterLast('/')
-                        val destPath = if (destDir.isEmpty()) name else "$destDir/$name"
+            val failed = mutableListOf<String>()
+            withContext(dispatchers.io) {
+                for (path in paths) {
+                    try {
+                        val name = rawEntries.find { it.path == path }?.name
+                            ?: path.substringAfterLast('/')
+                        val destPath = if (normalizedDest.isEmpty()) name else "$normalizedDest/$name"
                         fileBrowser.copyFile(remote, path, destPath)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        failed.add(path)
                     }
                 }
             }
-            val message = if (result.isSuccess) null else result.exceptionOrNull()?.toUserMessage()
+            val message = buildPartialFailureMessage(paths.size - failed.size, failed.size)
             _state.update { it.copy(fileOpInProgress = false, statusMessage = message) }
-            if (result.isSuccess) {
-                clearSelection()
-                load(remote, _state.value.path)
-            }
+            clearSelection()
+            load(remote, _state.value.path)
         }
     }
 
@@ -446,7 +462,7 @@ class FileBrowserViewModel @Inject constructor(
             } catch (e: Exception) {
                 // Navigating away cancels this load; a CancellationException is
                 // normal flow control, not an error to surface to the user.
-                if (e is kotlinx.coroutines.CancellationException) throw e
+                if (e is CancellationException) throw e
                 _state.update { it.copy(loading = false, error = e.toUserMessage()) }
             }
         }
@@ -460,6 +476,12 @@ class FileBrowserViewModel @Inject constructor(
         CoroutineScope(dispatchers.io + SupervisorJob()).launch {
             runCatching { fileBrowser.releaseDaemon() }
         }
+    }
+
+    /** Null when all succeeded; a brief count summary when some or all failed. */
+    private fun buildPartialFailureMessage(succeeded: Int, failCount: Int): String? {
+        if (failCount == 0) return null
+        return "Succeeded: $succeeded, failed: $failCount"
     }
 
     private companion object {

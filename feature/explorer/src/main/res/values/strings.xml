@@ -43,6 +43,11 @@
     <string name="explorer_new_folder_failed">Couldn\'t create the folder. Please try again.</string>
 
     <!-- File operations — selection action bar -->
+    <!-- %1$d = number of selected items -->
+    <plurals name="explorer_selection_count">
+        <item quantity="one">1 selected</item>
+        <item quantity="other">%1$d selected</item>
+    </plurals>
     <string name="explorer_action_delete">Delete</string>
     <string name="explorer_action_rename">Rename</string>
     <string name="explorer_action_move">Move</string>

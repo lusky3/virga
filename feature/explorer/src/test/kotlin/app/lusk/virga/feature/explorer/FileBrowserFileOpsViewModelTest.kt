@@ -121,6 +121,34 @@ class FileBrowserFileOpsViewModelTest {
         assertThat(vm.state.value.statusMessage).isNotNull()
         // fileOpInProgress must be cleared even on failure.
         assertThat(vm.state.value.fileOpInProgress).isFalse()
+        // listing must refresh and selection must clear even after a failure.
+        assertThat(vm.state.value.selectionMode).isFalse()
+        coVerify(exactly = 2) { engine.listDir(any(), any()) }
+    }
+
+    @Test
+    fun `deleteSelected partial failure reports count and still refreshes listing`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { engine.listDir(any(), any()) } returns listOf(file("ok.txt"), file("locked.txt"))
+        coEvery { engine.deleteFile("gdrive:", "ok.txt") } returns Unit
+        coEvery { engine.deleteFile("gdrive:", "locked.txt") } throws VirgaError.Rclone(message = "denied")
+        val vm = viewModel()
+        vm.selectRemote("gdrive")
+        advanceUntilIdle()
+        vm.enterSelectionMode("ok.txt")
+        vm.toggleSelection("locked.txt")
+
+        vm.deleteSelected()
+        advanceUntilIdle()
+
+        // Both items were attempted.
+        coVerify { engine.deleteFile("gdrive:", "ok.txt") }
+        coVerify { engine.deleteFile("gdrive:", "locked.txt") }
+        // Partial failure message is set.
+        assertThat(vm.state.value.statusMessage).isNotNull()
+        // Listing is always refreshed.
+        coVerify(exactly = 2) { engine.listDir(any(), any()) }
+        // Selection is always cleared.
+        assertThat(vm.state.value.selectionMode).isFalse()
     }
 
     @Test
@@ -202,6 +230,39 @@ class FileBrowserFileOpsViewModelTest {
 
         assertThat(vm.state.value.renameError).isEqualTo(R.string.explorer_rename_invalid_name)
         coVerify(exactly = 0) { engine.moveFile(any(), any()) }
+    }
+
+    @Test
+    fun `rename rejects a name that collides with an existing sibling`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { engine.listDir(any(), any()) } returns listOf(
+            file("existing.txt", "existing.txt"),
+            file("old.txt", "old.txt"),
+        )
+        val vm = viewModel()
+        vm.selectRemote("gdrive")
+        advanceUntilIdle()
+
+        // Attempt to rename old.txt -> existing.txt (collision).
+        vm.rename("old.txt", "existing.txt")
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.renameError).isEqualTo(R.string.explorer_new_folder_exists)
+        coVerify(exactly = 0) { engine.moveFile(any(), any()) }
+    }
+
+    @Test
+    fun `rename allows keeping the same name (excludes self from collision check)`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { engine.listDir(any(), any()) } returns listOf(file("photo.jpg", "photo.jpg"))
+        val vm = viewModel()
+        vm.selectRemote("gdrive")
+        advanceUntilIdle()
+
+        // "Renaming" to the exact same name should not be blocked by collision.
+        vm.rename("photo.jpg", "photo.jpg")
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.renameError).isNull()
+        coVerify { engine.moveFile(any(), any()) }
     }
 
     @Test
@@ -311,7 +372,7 @@ class FileBrowserFileOpsViewModelTest {
     }
 
     @Test
-    fun `moveSelected surfaces statusMessage on failure`() = runTest(mainDispatcher.dispatcher) {
+    fun `moveSelected surfaces statusMessage on failure and still refreshes listing`() = runTest(mainDispatcher.dispatcher) {
         coEvery { engine.listDir(any(), any()) } returns listOf(file("note.txt"))
         coEvery { engine.moveFile(any(), any()) } throws VirgaError.Rclone(message = "quota exceeded")
         val vm = viewModel()
@@ -324,6 +385,23 @@ class FileBrowserFileOpsViewModelTest {
 
         assertThat(vm.state.value.statusMessage).isNotNull()
         assertThat(vm.state.value.fileOpInProgress).isFalse()
+        // Listing is always refreshed even on failure.
+        coVerify(exactly = 2) { engine.listDir(any(), any()) }
+        assertThat(vm.state.value.selectionMode).isFalse()
+    }
+
+    @Test
+    fun `moveSelected strips leading and trailing slashes from destDir`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { engine.listDir(any(), any()) } returns listOf(file("img.jpg"))
+        val vm = viewModel()
+        vm.selectRemote("gdrive")
+        advanceUntilIdle()
+        vm.enterSelectionMode("img.jpg")
+
+        vm.moveSelected("/Photos/2024/")
+        advanceUntilIdle()
+
+        coVerify { engine.moveFile("gdrive:img.jpg", "gdrive:Photos/2024/img.jpg") }
     }
 
     // -------------------------------------------------------------------------
@@ -375,7 +453,7 @@ class FileBrowserFileOpsViewModelTest {
     }
 
     @Test
-    fun `copySelected surfaces statusMessage on failure`() = runTest(mainDispatcher.dispatcher) {
+    fun `copySelected surfaces statusMessage on failure and still refreshes listing`() = runTest(mainDispatcher.dispatcher) {
         coEvery { engine.listDir(any(), any()) } returns listOf(file("file.txt"))
         coEvery { engine.copyFile(any(), any()) } throws VirgaError.Rclone(message = "insufficient storage")
         val vm = viewModel()
@@ -388,6 +466,23 @@ class FileBrowserFileOpsViewModelTest {
 
         assertThat(vm.state.value.statusMessage).isNotNull()
         assertThat(vm.state.value.fileOpInProgress).isFalse()
+        // Listing is always refreshed even on failure.
+        coVerify(exactly = 2) { engine.listDir(any(), any()) }
+        assertThat(vm.state.value.selectionMode).isFalse()
+    }
+
+    @Test
+    fun `copySelected strips leading and trailing slashes from destDir`() = runTest(mainDispatcher.dispatcher) {
+        coEvery { engine.listDir(any(), any()) } returns listOf(file("doc.txt"))
+        val vm = viewModel()
+        vm.selectRemote("gdrive")
+        advanceUntilIdle()
+        vm.enterSelectionMode("doc.txt")
+
+        vm.copySelected("Backup/")
+        advanceUntilIdle()
+
+        coVerify { engine.copyFile("gdrive:doc.txt", "gdrive:Backup/doc.txt") }
     }
 
     // -------------------------------------------------------------------------

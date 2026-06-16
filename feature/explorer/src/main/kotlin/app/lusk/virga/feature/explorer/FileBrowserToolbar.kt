@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import app.lusk.virga.core.designsystem.component.EmptyState
@@ -190,7 +191,7 @@ internal fun SelectionActionBar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "$selectionCount selected",
+                text = pluralStringResource(R.plurals.explorer_selection_count, selectionCount, selectionCount),
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.weight(1f),
             )

@@ -119,8 +119,8 @@ fun FileBrowserScreen(
     val selectionActions = SelectionActions(
         onDelete = viewModel::openDeleteConfirmDialog,
         onRename = {
-            val path = state.selectedPaths.singleOrNull() ?: return@SelectionActions
-            viewModel.openRenameDialog(path)
+            val path = state.selectedPaths.singleOrNull()
+            if (path != null) viewModel.openRenameDialog(path)
         },
         onMove = viewModel::openMoveDialog,
         onCopy = viewModel::openCopyDialog,
