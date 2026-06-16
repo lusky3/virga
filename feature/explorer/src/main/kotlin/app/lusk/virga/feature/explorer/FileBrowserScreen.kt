@@ -20,9 +20,8 @@ import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.CreateNewFolder
-import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -42,6 +41,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -66,7 +66,6 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.common.util.formatFileSize
-import app.lusk.virga.core.designsystem.component.EmptyState
 import app.lusk.virga.core.designsystem.component.rememberLongPressHaptic
 import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import java.time.Instant
@@ -227,17 +226,24 @@ fun FileBrowserScreen(
                                 .semantics { liveRegion = LiveRegionMode.Polite },
                         )
                     }
-                    if (entries.isEmpty()) {
-                        EmptyFolder()
-                    } else {
-                        FileList(
-                            entries = entries,
-                            selectedPaths = state.selectedPaths,
-                            selectionMode = state.selectionMode,
-                            onOpen = viewModel::open,
-                            onLongPress = viewModel::enterSelectionMode,
-                            onToggleSelect = viewModel::toggleSelection,
-                        )
+                    PullToRefreshBox(
+                        isRefreshing = state.isRefreshing,
+                        onRefresh = viewModel::refresh,
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        if (entries.isEmpty()) {
+                            EmptyFolder()
+                        } else {
+                            FileList(
+                                entries = entries,
+                                selectedPaths = state.selectedPaths,
+                                selectionMode = state.selectionMode,
+                                onOpen = viewModel::open,
+                                onLongPress = viewModel::enterSelectionMode,
+                                onToggleSelect = viewModel::toggleSelection,
+                                onShowProperties = viewModel::showProperties,
+                            )
+                        }
                     }
                 }
             }
@@ -286,6 +292,14 @@ fun FileBrowserScreen(
             confirmRes = R.string.explorer_dest_confirm_copy,
             onConfirm = viewModel::copySelected,
             onDismiss = viewModel::dismissCopyDialog,
+        )
+    }
+
+    val propertiesItem = state.propertiesItem
+    if (propertiesItem != null) {
+        FileBrowserPropertiesSheet(
+            item = propertiesItem,
+            onDismiss = viewModel::dismissProperties,
         )
     }
 }
@@ -380,8 +394,10 @@ private fun FileList(
     onOpen: (FileItem) -> Unit,
     onLongPress: (String) -> Unit,
     onToggleSelect: (String) -> Unit,
+    onShowProperties: (FileItem) -> Unit,
 ) {
     val longPressHaptic = rememberLongPressHaptic()
+    val infoDesc = stringResource(R.string.explorer_cd_properties)
     LazyColumn(Modifier.fillMaxSize()) {
         // Drive (and other backends) can hold multiple files with the SAME name
         // in one folder, so path alone isn't a unique LazyColumn key — collisions
@@ -408,6 +424,11 @@ private fun FileList(
                             else Icons.AutoMirrored.Filled.InsertDriveFile,
                             contentDescription = null,
                         )
+                    }
+                },
+                trailingContent = {
+                    IconButton(onClick = { onShowProperties(item) }) {
+                        Icon(Icons.Filled.Info, contentDescription = infoDesc)
                     }
                 },
                 modifier = Modifier
@@ -459,24 +480,3 @@ private fun ItemSupportingText(item: FileItem) {
     }
 }
 
-@Composable
-private fun EmptyFolder() {
-    EmptyState(
-        title = stringResource(R.string.explorer_empty_folder),
-        body = stringResource(R.string.explorer_empty_folder_body),
-        icon = Icons.Filled.FolderOpen,
-    )
-}
-
-@Composable
-private fun ErrorState(message: String, onRetry: () -> Unit) {
-    val errDesc = stringResource(R.string.explorer_error_label)
-    EmptyState(
-        title = message,
-        icon = Icons.Filled.Error,
-        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive; contentDescription = "$errDesc $message" },
-        action = {
-            TextButton(onClick = onRetry) { Text(stringResource(R.string.explorer_btn_retry)) }
-        },
-    )
-}

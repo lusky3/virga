@@ -84,4 +84,19 @@
     <string name="explorer_a11y_file">File, %1$s</string>
     <!-- click label for folder items -->
     <string name="explorer_cd_open_folder">Open folder</string>
+    <!-- Properties info button a11y -->
+    <string name="explorer_cd_properties">Properties</string>
+
+    <!-- Properties sheet labels -->
+    <string name="explorer_properties_name">Name</string>
+    <string name="explorer_properties_path">Path</string>
+    <string name="explorer_properties_type">Type</string>
+    <string name="explorer_properties_size">Size</string>
+    <string name="explorer_properties_modified">Modified</string>
+    <string name="explorer_properties_type_folder">Folder</string>
+    <string name="explorer_properties_type_file">File</string>
+    <!-- %1$s = MIME type -->
+    <string name="explorer_properties_type_file_mime">File (%1$s)</string>
+    <!-- Placeholder for missing values -->
+    <string name="explorer_properties_dash">—</string>
 </resources>
