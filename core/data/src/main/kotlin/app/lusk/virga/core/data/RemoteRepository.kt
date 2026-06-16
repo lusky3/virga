@@ -11,6 +11,7 @@ import app.lusk.virga.core.database.dao.RemoteDao
 import app.lusk.virga.core.database.dao.SyncTaskDao
 import app.lusk.virga.core.database.entity.RemoteEntity
 import app.lusk.virga.core.rclone.RcloneEngine
+import app.lusk.virga.core.rclone.config.RcloneConfigIni
 import app.lusk.virga.core.rclone.config.RcloneConfigManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -149,6 +150,43 @@ class RemoteRepository @Inject constructor(
     }
 
     suspend fun exportConfig(): String = configManager.exportPlaintext()
+
+    /**
+     * Merges [incoming] into the current config: reads the current config via
+     * [exportConfig], merges (overwriteExisting=true for name collisions), and
+     * writes the result through the lease-guarded [importConfig] path.
+     * Never calls [RcloneConfigManager.import] directly.
+     */
+    suspend fun importConfigMerged(incoming: String): Result<Unit> {
+        if (incoming.isBlank()) return Result.failure(VirgaError.Rclone(message = "Empty config"))
+        return runCatching {
+            val current = configManager.exportPlaintext()
+            val baseSections = RcloneConfigIni.parse(current)
+            val incomingSections = RcloneConfigIni.parse(incoming)
+            val merged = RcloneConfigIni.merge(baseSections, incomingSections, overwriteExisting = true)
+            val mergedText = RcloneConfigIni.serialize(merged)
+            engine.importConfig(mergedText)
+        }.mapCatching { refresh().getOrThrow() }
+    }
+
+    /** Exports a single remote's section as a .conf snippet (plaintext). */
+    suspend fun exportConfigSection(remoteName: String): String {
+        val full = configManager.exportPlaintext()
+        val sections = RcloneConfigIni.parse(full)
+        val single = RcloneConfigIni.extractSection(sections, remoteName)
+        return RcloneConfigIni.serialize(single)
+    }
+
+    /** Exports the full config with sensitive values replaced by placeholders. */
+    suspend fun exportConfigRedacted(): String = RcloneConfigIni.redactText(configManager.exportPlaintext())
+
+    /** Exports a single remote's section with sensitive values redacted. */
+    suspend fun exportConfigSectionRedacted(remoteName: String): String {
+        val full = configManager.exportPlaintext()
+        val sections = RcloneConfigIni.parse(full)
+        val single = RcloneConfigIni.extractSection(sections, remoteName)
+        return RcloneConfigIni.serialize(RcloneConfigIni.redact(single))
+    }
 
     /** Tests connectivity to [remoteName]. Returns [Result.failure] when unreachable. */
     suspend fun testConnectivity(remoteName: String): Result<Unit> =

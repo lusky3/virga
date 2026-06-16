@@ -19,6 +19,7 @@ import app.lusk.virga.core.rclone.oauth.OAuthStore
 import app.lusk.virga.core.rclone.oauth.OAuthTokenExchanger
 import app.lusk.virga.core.rclone.RcloneDaemon
 import app.lusk.virga.core.rclone.SetupKind
+import app.lusk.virga.core.rclone.crypto.ConfigCrypto
 import com.google.common.truth.Truth.assertThat
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -491,6 +492,57 @@ class RemotesViewModelTest {
         assertThat(vm.uiState.value.message).isEqualTo("parse error")
         collector.cancel()
     }
+
+    /**
+     * Verifies that mergeMode is threaded through the encrypted-import path.
+     *
+     * When importConfigFromUri(uri, mergeMode=true) is called with an encrypted container,
+     * the VM must store pendingEncryptedImportMerge=true. When the passphrase is then
+     * supplied via importConfigFromUri(uri, passphrase), the VM reads that flag and calls
+     * importConfigMerged (not importConfig), so the Merge choice is honoured.
+     */
+    @Test
+    fun `encrypted import with mergeMode true calls importConfigMerged after passphrase`() =
+        runTest(mainDispatcher.dispatcher) {
+            val confText = "[newremote]\ntype = s3\n"
+            val passphrase = "hunter2".toCharArray()
+            val encryptedBytes = ConfigCrypto.encrypt(confText, passphrase.copyOf())
+            val uri = uriReturning(encryptedBytes)
+            coEvery { repository.importConfigMerged(any()) } returns Result.success(Unit)
+            every { context.getString(R.string.remotes_msg_config_imported_merged) } returns "Config merged."
+            val vm = viewModel()
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            // Step 1: pick the encrypted file with mergeMode=true.
+            // ConfigTransferFlow detects the encrypted container and sets pendingEncryptedImport
+            // + pendingEncryptedImportMerge=true without importing yet.
+            vm.importConfigFromUri(uri, mergeMode = true)
+            advanceUntilIdle()
+
+            assertThat(vm.uiState.value.pendingEncryptedImport).isEqualTo(uri)
+            assertThat(vm.uiState.value.pendingEncryptedImportMerge).isTrue()
+            coVerify(exactly = 0) { repository.importConfig(any()) }
+            coVerify(exactly = 0) { repository.importConfigMerged(any()) }
+
+            // Step 2: user supplies the passphrase. VM reads pendingEncryptedImportMerge=true
+            // and calls importConfigMerged (not importConfig).
+            // Re-open the stream for the second read.
+            val encryptedStream = ByteArrayInputStream(encryptedBytes)
+            val resolver2: ContentResolver = mockk {
+                every { openInputStream(any()) } returns encryptedStream
+            }
+            every { context.contentResolver } returns resolver2
+
+            vm.importConfigFromUri(uri, "hunter2".toCharArray())
+            advanceUntilIdle()
+
+            coVerify(exactly = 1) { repository.importConfigMerged(confText) }
+            coVerify(exactly = 0) { repository.importConfig(any()) }
+            assertThat(vm.uiState.value.pendingEncryptedImport).isNull()
+            assertThat(vm.uiState.value.message).isEqualTo("Config merged.")
+            collector.cancel()
+        }
 
     // --- startOAuth with getString vararg pattern ----------------------------
 

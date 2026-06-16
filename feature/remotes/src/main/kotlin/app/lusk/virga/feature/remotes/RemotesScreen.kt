@@ -77,7 +77,11 @@ fun RemotesScreen(
     // Passphrase stashed between the export-dialog confirm and the launcher callback.
     // Null → raw export; non-null → encrypted. Zeroed in the launcher callback.
     var stagedExportPassphrase by remember { mutableStateOf<CharArray?>(null) }
+    var stagedExportRedacted by remember { mutableStateOf(false) }
     var uriToImport by remember { mutableStateOf<Uri?>(null) }
+    // Name and redacted flag staged between single-export dialog confirm and launcher callback.
+    var stagedSingleExportRemote by remember { mutableStateOf<String?>(null) }
+    var stagedSingleExportRedacted by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
     val fabExpanded by remember { derivedStateOf { !listState.canScrollBackward } }
@@ -103,11 +107,29 @@ fun RemotesScreen(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
     ) { uri ->
         if (uri != null) {
-            viewModel.exportConfigToUri(uri, stagedExportPassphrase)
+            if (stagedExportRedacted) {
+                viewModel.exportConfigToUri(uri, redacted = true)
+            } else {
+                viewModel.exportConfigToUri(uri, stagedExportPassphrase)
+            }
         } else {
             stagedExportPassphrase?.fill(' ')
         }
         stagedExportPassphrase = null
+        stagedExportRedacted = false
+    }
+
+    // Single-remote export launcher: writes one remote's section to a user-chosen document.
+    val singleRemoteExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream"),
+    ) { uri ->
+        val name = stagedSingleExportRemote
+        val redacted = stagedSingleExportRedacted
+        if (uri != null && name != null) {
+            viewModel.exportRemoteSectionToUri(name, uri, redacted)
+        }
+        stagedSingleExportRemote = null
+        stagedSingleExportRedacted = false
     }
 
     LaunchedEffect(state.message) {
@@ -222,6 +244,7 @@ fun RemotesScreen(
                                 onRename = { viewModel.beginRenameRemote(remote.name) },
                                 onReauth = { viewModel.reauthRemote(remote.name) },
                                 onSignOut = { viewModel.signOutRemote(remote.name) },
+                                onExport = { viewModel.beginSingleRemoteExport(remote.name) },
                                 quota = state.quotas[remote.name],
                                 quotaLoading = remote.name in state.quotaLoading,
                                 connectivity = state.connectivityResults[remote.name],
@@ -276,21 +299,33 @@ fun RemotesScreen(
             onConfirmEncrypted = { passphrase ->
                 showExportDialog = false
                 stagedExportPassphrase = passphrase
+                stagedExportRedacted = false
                 exportLauncher.launch("virga-config.virgaenc")
             },
             onConfirmRaw = {
                 showExportDialog = false
                 stagedExportPassphrase = null
+                stagedExportRedacted = false
                 exportLauncher.launch("rclone.conf")
+            },
+            onConfirmRedacted = {
+                showExportDialog = false
+                stagedExportPassphrase = null
+                stagedExportRedacted = true
+                exportLauncher.launch("rclone-redacted.conf")
             },
             onDismiss = { showExportDialog = false },
         )
     }
 
     uriToImport?.let { uri ->
-        ImportConfirmDialog(
-            onConfirm = {
-                viewModel.importConfigFromUri(uri)
+        ImportModeDialog(
+            onConfirmReplace = {
+                viewModel.importConfigFromUri(uri, mergeMode = false)
+                uriToImport = null
+            },
+            onConfirmMerge = {
+                viewModel.importConfigFromUri(uri, mergeMode = true)
                 uriToImport = null
             },
             onDismiss = { uriToImport = null },
@@ -304,6 +339,29 @@ fun RemotesScreen(
         ImportPassphraseDialog(
             onConfirm = { passphrase -> viewModel.importConfigFromUri(uri, passphrase) },
             onDismiss = { viewModel.dismissImportPassphrase() },
+        )
+    }
+
+    // Single-remote export dialog — shown when the overflow menu "Export this remote" is tapped.
+    state.singleExportRemote?.let { remoteName ->
+        // rclone allows ':' and other chars that are invalid in SAF document names;
+        // sanitize for the suggested filename only (the dialog still shows the real name).
+        val safeName = remoteName.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        SingleRemoteExportDialog(
+            remoteName = remoteName,
+            onConfirmRaw = {
+                viewModel.dismissSingleRemoteExport()
+                stagedSingleExportRemote = remoteName
+                stagedSingleExportRedacted = false
+                singleRemoteExportLauncher.launch("$safeName.conf")
+            },
+            onConfirmRedacted = {
+                viewModel.dismissSingleRemoteExport()
+                stagedSingleExportRemote = remoteName
+                stagedSingleExportRedacted = true
+                singleRemoteExportLauncher.launch("$safeName-redacted.conf")
+            },
+            onDismiss = { viewModel.dismissSingleRemoteExport() },
         )
     }
 

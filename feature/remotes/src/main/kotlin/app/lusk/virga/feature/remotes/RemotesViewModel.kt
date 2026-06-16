@@ -360,15 +360,24 @@ class RemotesViewModel @Inject constructor(
         transient = transient,
     )
 
-    /** Imports an existing rclone.conf selected via the storage picker. */
+    /** Imports an existing rclone.conf selected via the storage picker (replace mode). */
     fun importConfigFromUri(uri: Uri) = configTransfer.importFromUri(uri)
 
     /**
      * Imports with an explicit [passphrase] for an encrypted container. The crypto
-     * layer zeroes [passphrase] before returning.
+     * layer zeroes [passphrase] before returning. The merge flag is read from transient
+     * state so the user's Replace vs Merge choice is honoured even for encrypted files.
      */
     fun importConfigFromUri(uri: Uri, passphrase: CharArray?) =
-        configTransfer.importFromUri(uri, passphrase)
+        configTransfer.importFromUri(uri, passphrase, transient.value.pendingEncryptedImportMerge)
+
+    /** Imports with merge or replace mode for plain files. */
+    fun importConfigFromUri(uri: Uri, mergeMode: Boolean) =
+        configTransfer.importFromUri(uri, mergeMode = mergeMode)
+
+    /** Imports with [passphrase] and explicit [mergeMode]. */
+    fun importConfigFromUri(uri: Uri, passphrase: CharArray?, mergeMode: Boolean) =
+        configTransfer.importFromUri(uri, passphrase, mergeMode)
 
     /** Clears the passphrase prompt without importing (user dismissed the dialog). */
     fun dismissImportPassphrase() {
@@ -380,10 +389,32 @@ class RemotesViewModel @Inject constructor(
 
     /**
      * Exports with an optional [passphrase]. Non-null → encrypted container;
-     * null → existing raw-plaintext path unchanged.
+     * null → existing raw-plaintext path unchanged. [redacted]=true exports with
+     * sensitive values masked (ignores passphrase).
      */
     fun exportConfigToUri(uri: Uri, passphrase: CharArray?) =
         configTransfer.exportToUri(uri, passphrase)
+
+    /** Exports the config with [redacted]=true (secrets masked) or raw. */
+    fun exportConfigToUri(uri: Uri, redacted: Boolean) =
+        configTransfer.exportToUri(uri, redacted = redacted)
+
+    // --- Single-remote export ---
+
+    /** Opens the single-remote export dialog for [remoteName]. */
+    fun beginSingleRemoteExport(remoteName: String) {
+        transient.update { it.copy(singleExportRemote = remoteName) }
+    }
+
+    /** Dismisses the single-remote export dialog without action. */
+    fun dismissSingleRemoteExport() {
+        transient.update { it.copy(singleExportRemote = null) }
+    }
+
+    /** Exports [remoteName]'s config section to [uri], optionally redacted. */
+    fun exportRemoteSectionToUri(remoteName: String, uri: Uri, redacted: Boolean = false) {
+        configTransfer.exportSectionToUri(remoteName, uri, redacted = redacted)
+    }
 
     /**
      * Creates a `crypt:` remote.
@@ -664,11 +695,13 @@ class RemotesViewModel @Inject constructor(
                 connectivityResults = connectivity.results,
                 connectivityTesting = connectivity.testing,
                 pendingEncryptedImport = t.pendingEncryptedImport,
+                pendingEncryptedImportMerge = t.pendingEncryptedImportMerge,
                 editMode = t.editMode,
                 editLoading = t.editLoading,
                 renameTarget = t.renameTarget,
                 renameInFlight = t.renameInFlight,
                 reauthInProgress = t.reauthInProgress,
+                singleExportRemote = t.singleExportRemote,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RemotesUiState())
 
