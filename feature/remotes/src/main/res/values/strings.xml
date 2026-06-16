@@ -193,12 +193,12 @@
     <string name="remotes_import_mode_confirm">Import</string>
     <!-- Export config — redacted option -->
     <string name="remotes_export_redacted_label">Redacted — structure only, secrets hidden</string>
-    <string name="remotes_export_redacted_info">Passwords, tokens, and other secrets will be replaced with a placeholder. The exported file is safe to share for troubleshooting.</string>
+    <string name="remotes_export_redacted_info">Passwords, tokens, and other secrets will be replaced with a placeholder. This makes the file safer to share for troubleshooting — review it before sending.</string>
     <!-- Single-remote export dialog -->
     <string name="remotes_single_export_title">Export \"%1$s\"</string>
     <string name="remotes_single_export_raw_label">Raw — include credentials</string>
     <string name="remotes_single_export_redacted_label">Redacted — structure only, secrets hidden</string>
-    <string name="remotes_single_export_redacted_info">Passwords, tokens, and secrets will be replaced with a placeholder. Safe for sharing.</string>
+    <string name="remotes_single_export_redacted_info">Passwords, tokens, and secrets will be replaced with a placeholder. Safer to share — review before sending.</string>
     <!-- Per-remote export menu item -->
     <string name="remotes_card_menu_export">Export this remote</string>
     <!-- Messages -->

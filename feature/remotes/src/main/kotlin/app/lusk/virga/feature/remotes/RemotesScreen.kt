@@ -344,19 +344,22 @@ fun RemotesScreen(
 
     // Single-remote export dialog — shown when the overflow menu "Export this remote" is tapped.
     state.singleExportRemote?.let { remoteName ->
+        // rclone allows ':' and other chars that are invalid in SAF document names;
+        // sanitize for the suggested filename only (the dialog still shows the real name).
+        val safeName = remoteName.replace(Regex("[^A-Za-z0-9._-]"), "_")
         SingleRemoteExportDialog(
             remoteName = remoteName,
             onConfirmRaw = {
                 viewModel.dismissSingleRemoteExport()
                 stagedSingleExportRemote = remoteName
                 stagedSingleExportRedacted = false
-                singleRemoteExportLauncher.launch("$remoteName.conf")
+                singleRemoteExportLauncher.launch("$safeName.conf")
             },
             onConfirmRedacted = {
                 viewModel.dismissSingleRemoteExport()
                 stagedSingleExportRemote = remoteName
                 stagedSingleExportRedacted = true
-                singleRemoteExportLauncher.launch("$remoteName-redacted.conf")
+                singleRemoteExportLauncher.launch("$safeName-redacted.conf")
             },
             onDismiss = { viewModel.dismissSingleRemoteExport() },
         )
