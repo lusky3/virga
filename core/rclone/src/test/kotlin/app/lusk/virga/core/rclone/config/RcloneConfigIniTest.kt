@@ -118,7 +118,7 @@ class RcloneConfigIniTest {
 
     // --- redact ---
 
-    @Test fun `redact_masksOnlySensitiveKeys`() {
+    @Test fun `redact_masksOnlySensitiveKeys - type, client_id, region visible and pass, token masked`() {
         val text = "[remote]\ntype = drive\nclient_id = myid\npass = secret\ntoken = tok\n"
         val sections = RcloneConfigIni.parse(text)
         val redacted = RcloneConfigIni.redact(sections)
@@ -157,6 +157,56 @@ class RcloneConfigIniTest {
         assertThat(redacted["s3"]!!["region"]).isEqualTo("us-east-1")
         assertThat(redacted["s3"]!!["secret_access_key"]).isEqualTo(RcloneConfigIni.REDACTED_PLACEHOLDER)
         assertThat(redacted["gdrive"]!!["client_id"]).isEqualTo("gid")
+    }
+
+    /**
+     * Verify the substring heuristic catches additional real rclone IsPassword fields
+     * that the old fixed set missed, and that structural keys stay visible.
+     */
+    @Test fun `redact_substringHeuristic - masks extended rclone secret keys`() {
+        val text = """
+            [myremote]
+            type = swift
+            password2 = p2
+            api_key = k
+            api_password = ap
+            secret = s
+            plex_password = pp
+            application_credential_secret = acs
+            otp_secret_key = osk
+            client_certificate_password = ccp
+            library_key = lk
+            auth = https://identity.example.com/v3
+            region = RegionOne
+            endpoint = https://storage.example.com
+            provider = Rackspace
+            url = https://remote.example.com
+            host = sftp.example.com
+            port = 22
+        """.trimIndent()
+        val sections = RcloneConfigIni.parse(text)
+        val redacted = RcloneConfigIni.redact(sections)["myremote"]!!
+
+        // Must be masked (contain pass/secret/token/key/credential)
+        assertThat(redacted["password2"]).isEqualTo(RcloneConfigIni.REDACTED_PLACEHOLDER)
+        assertThat(redacted["api_key"]).isEqualTo(RcloneConfigIni.REDACTED_PLACEHOLDER)
+        assertThat(redacted["api_password"]).isEqualTo(RcloneConfigIni.REDACTED_PLACEHOLDER)
+        assertThat(redacted["secret"]).isEqualTo(RcloneConfigIni.REDACTED_PLACEHOLDER)
+        assertThat(redacted["plex_password"]).isEqualTo(RcloneConfigIni.REDACTED_PLACEHOLDER)
+        assertThat(redacted["application_credential_secret"]).isEqualTo(RcloneConfigIni.REDACTED_PLACEHOLDER)
+        assertThat(redacted["otp_secret_key"]).isEqualTo(RcloneConfigIni.REDACTED_PLACEHOLDER)
+        assertThat(redacted["client_certificate_password"]).isEqualTo(RcloneConfigIni.REDACTED_PLACEHOLDER)
+        assertThat(redacted["library_key"]).isEqualTo(RcloneConfigIni.REDACTED_PLACEHOLDER)
+
+        // Must stay visible (auth is a URL, not a secret; structural config keys)
+        assertThat(redacted["auth"]).isEqualTo("https://identity.example.com/v3")
+        assertThat(redacted["region"]).isEqualTo("RegionOne")
+        assertThat(redacted["endpoint"]).isEqualTo("https://storage.example.com")
+        assertThat(redacted["provider"]).isEqualTo("Rackspace")
+        assertThat(redacted["url"]).isEqualTo("https://remote.example.com")
+        assertThat(redacted["host"]).isEqualTo("sftp.example.com")
+        assertThat(redacted["port"]).isEqualTo("22")
+        assertThat(redacted["type"]).isEqualTo("swift")
     }
 
     @Test fun `malformedInput_doesNotThrow - lines without = in section body are skipped`() {

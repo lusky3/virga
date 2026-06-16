@@ -63,6 +63,8 @@ data class RemotesUiState(
     /** Non-null while the UI is waiting for the user to supply a passphrase to
      *  decrypt the encrypted config at this [Uri]. Cleared on success or dismiss. */
     val pendingEncryptedImport: Uri? = null,
+    /** True when [pendingEncryptedImport] should be imported in merge mode; false = replace. */
+    val pendingEncryptedImportMerge: Boolean = false,
     /** Non-null while the user is editing an existing remote. */
     val editMode: EditModeState? = null,
     /** True while [editMode] is being loaded via getRemoteParams. */
@@ -73,8 +75,6 @@ data class RemotesUiState(
     val renameInFlight: Boolean = false,
     /** Remotes currently running a re-auth OAuth flow. */
     val reauthInProgress: Set<String> = emptySet(),
-    /** Non-null while the user is choosing replace vs merge import for this URI. */
-    val pendingImportUri: Uri? = null,
     /** Name of the remote selected for single-remote export (non-null = dialog open). */
     val singleExportRemote: String? = null,
 )
@@ -96,6 +96,8 @@ internal data class RemotesTransientState(
     /** Non-null while awaiting a passphrase to decrypt an encrypted import. Cleared
      *  on successful decrypt, dismiss, or when a non-encrypted file is imported. */
     val pendingEncryptedImport: Uri? = null,
+    /** True when [pendingEncryptedImport] should be imported in merge mode; false = replace. */
+    val pendingEncryptedImportMerge: Boolean = false,
     /** Non-null while the user is editing an existing remote. */
     val editMode: EditModeState? = null,
     /** True while [editMode] is being loaded via getRemoteParams. */
@@ -106,8 +108,6 @@ internal data class RemotesTransientState(
     val renameInFlight: Boolean = false,
     /** Remotes currently running a re-auth OAuth flow. */
     val reauthInProgress: Set<String> = emptySet(),
-    /** Non-null while the user is choosing replace vs merge import for this URI. */
-    val pendingImportUri: Uri? = null,
     /** Name of the remote selected for single-remote export (non-null = dialog open). */
     val singleExportRemote: String? = null,
 )

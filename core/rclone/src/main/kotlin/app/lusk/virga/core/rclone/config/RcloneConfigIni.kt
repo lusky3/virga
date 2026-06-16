@@ -13,11 +13,29 @@ object RcloneConfigIni {
 
     const val REDACTED_PLACEHOLDER = "***REDACTED***"
 
-    /** Lowercase keys whose values are redacted by [redact]. Case-insensitive matching. */
-    val SENSITIVE_KEYS: Set<String> = setOf(
-        "pass", "password", "token", "client_secret", "secret_access_key",
-        "key", "key_file_pass", "sa_credentials", "service_account_credentials", "auth",
+    /**
+     * Substrings (lowercase) used to identify secret keys via [isSensitiveKey].
+     *
+     * A key is redacted when its lowercased name CONTAINS any of these substrings.
+     * This catches real rclone `IsPassword` fields across all backends without
+     * requiring an exhaustive fixed list, including: `pass`, `password`, `password2`,
+     * `token`, `client_secret`, `secret_access_key`, `key`, `key_file_pass`,
+     * `service_account_credentials`, `sa_credentials`, `api_key`, `api_password`,
+     * `secret`, `plex_password`, `file_password`, `folder_password`,
+     * `mailbox_password`, `library_key`, `client_certificate_password`,
+     * `otp_secret_key`, `application_credential_secret`.
+     *
+     * Structural keys that do NOT match: `type`, `region`, `endpoint`, `provider`,
+     * `client_id`, `url`, `host`, `port`, `auth` (swift auth-endpoint URL).
+     */
+    private val SENSITIVE_SUBSTRINGS: List<String> = listOf(
+        "pass", "secret", "token", "key", "credential",
     )
+
+    private fun isSensitiveKey(key: String): Boolean {
+        val lower = key.lowercase()
+        return SENSITIVE_SUBSTRINGS.any { lower.contains(it) }
+    }
 
     /**
      * Parses rclone.conf text into an ordered map of sectionName → ordered key→value.
@@ -112,9 +130,13 @@ object RcloneConfigIni {
     }
 
     /**
-     * Returns a new map where any key (case-insensitive) in [SENSITIVE_KEYS] has its
-     * value replaced with [REDACTED_PLACEHOLDER]. Section structure and non-sensitive
-     * keys are preserved unchanged.
+     * Returns a new map where any key whose lowercased name contains a substring
+     * from [SENSITIVE_SUBSTRINGS] has its value replaced with [REDACTED_PLACEHOLDER].
+     * Section structure and non-sensitive keys are preserved unchanged.
+     *
+     * Note: importing a redacted export will write [REDACTED_PLACEHOLDER] as a literal
+     * credential value. This is acceptable for skeleton/troubleshooting exports — users
+     * must supply real values before a redacted config is usable.
      */
     fun redact(
         sections: LinkedHashMap<String, LinkedHashMap<String, String>>,
@@ -123,7 +145,7 @@ object RcloneConfigIni {
         for ((name, keys) in sections) {
             val redacted = LinkedHashMap<String, String>()
             for ((k, v) in keys) {
-                redacted[k] = if (SENSITIVE_KEYS.contains(k.lowercase())) REDACTED_PLACEHOLDER else v
+                redacted[k] = if (isSensitiveKey(k)) REDACTED_PLACEHOLDER else v
             }
             result[name] = redacted
         }

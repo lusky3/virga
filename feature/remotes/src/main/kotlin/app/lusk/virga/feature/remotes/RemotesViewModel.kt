@@ -365,10 +365,11 @@ class RemotesViewModel @Inject constructor(
 
     /**
      * Imports with an explicit [passphrase] for an encrypted container. The crypto
-     * layer zeroes [passphrase] before returning.
+     * layer zeroes [passphrase] before returning. The merge flag is read from transient
+     * state so the user's Replace vs Merge choice is honoured even for encrypted files.
      */
     fun importConfigFromUri(uri: Uri, passphrase: CharArray?) =
-        configTransfer.importFromUri(uri, passphrase)
+        configTransfer.importFromUri(uri, passphrase, transient.value.pendingEncryptedImportMerge)
 
     /** Imports with merge or replace mode for plain files. */
     fun importConfigFromUri(uri: Uri, mergeMode: Boolean) =
@@ -694,12 +695,12 @@ class RemotesViewModel @Inject constructor(
                 connectivityResults = connectivity.results,
                 connectivityTesting = connectivity.testing,
                 pendingEncryptedImport = t.pendingEncryptedImport,
+                pendingEncryptedImportMerge = t.pendingEncryptedImportMerge,
                 editMode = t.editMode,
                 editLoading = t.editLoading,
                 renameTarget = t.renameTarget,
                 renameInFlight = t.renameInFlight,
                 reauthInProgress = t.reauthInProgress,
-                pendingImportUri = t.pendingImportUri,
                 singleExportRemote = t.singleExportRemote,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RemotesUiState())

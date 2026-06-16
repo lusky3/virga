@@ -86,8 +86,11 @@ internal class ConfigTransferFlow(
     ) {
         if (ConfigCrypto.isEncryptedContainer(bytes)) {
             if (passphrase == null) {
-                // Signal UI to prompt for passphrase; do not import yet.
-                transient.value = transient.value.copy(pendingEncryptedImport = uri)
+                // Signal UI to prompt for passphrase; preserve the mergeMode choice.
+                transient.value = transient.value.copy(
+                    pendingEncryptedImport = uri,
+                    pendingEncryptedImportMerge = mergeMode,
+                )
                 return
             }
             val text = try {
@@ -95,16 +98,17 @@ internal class ConfigTransferFlow(
                     ConfigCrypto.decrypt(bytes, passphrase)
                 }
             } catch (e: BadPassphraseException) {
-                // Keep pendingEncryptedImport set so the dialog stays open for retry.
+                // Keep pendingEncryptedImport (and its mergeMode) set for retry.
                 transient.value = transient.value.copy(
                     pendingEncryptedImport = uri,
+                    pendingEncryptedImportMerge = mergeMode,
                     message = context.getString(R.string.remotes_msg_import_wrong_passphrase),
                 )
                 return
             } finally {
                 passphrase.fill(' ')
             }
-            finishImport(text, clearPassphrasePrompt = true, mergeMode = false)
+            finishImport(text, clearPassphrasePrompt = true, mergeMode = mergeMode)
         } else {
             // Plain UTF-8 — merge or replace based on caller's choice.
             finishImport(bytes.toString(Charsets.UTF_8), clearPassphrasePrompt = true, mergeMode = mergeMode)
@@ -152,27 +156,7 @@ internal class ConfigTransferFlow(
                 return@launch
             }
             val encryptWith: CharArray? = if (redacted) null else passphrase
-            val written = withContext(dispatchers.io) {
-                try {
-                    // "wt" truncates: SAF can hand back an existing document, and
-                    // the default "w" mode would leave stale bytes past the end.
-                    val stream = context.contentResolver.openOutputStream(uri, "wt")
-                        ?: return@withContext false
-                    val payload = if (encryptWith != null) {
-                        try {
-                            ConfigCrypto.encrypt(text, encryptWith)
-                        } finally {
-                            encryptWith.fill(' ')
-                        }
-                    } else {
-                        text.toByteArray(Charsets.UTF_8)
-                    }
-                    stream.use { it.write(payload) }
-                    true
-                } catch (e: IOException) {
-                    false
-                }
-            }
+            val written = writeConfigPayload(uri, text, encryptWith)
             val msgRes = when {
                 !written -> R.string.remotes_msg_export_failed
                 encryptWith != null -> R.string.remotes_msg_config_exported_encrypted
@@ -212,25 +196,7 @@ internal class ConfigTransferFlow(
                 return@launch
             }
             val encryptSectionWith: CharArray? = if (redacted) null else passphrase
-            val written = withContext(dispatchers.io) {
-                try {
-                    val stream = context.contentResolver.openOutputStream(uri, "wt")
-                        ?: return@withContext false
-                    val payload = if (encryptSectionWith != null) {
-                        try {
-                            ConfigCrypto.encrypt(text, encryptSectionWith)
-                        } finally {
-                            encryptSectionWith.fill(' ')
-                        }
-                    } else {
-                        text.toByteArray(Charsets.UTF_8)
-                    }
-                    stream.use { it.write(payload) }
-                    true
-                } catch (e: IOException) {
-                    false
-                }
-            }
+            val written = writeConfigPayload(uri, text, encryptSectionWith)
             val msg = if (written) {
                 context.getString(R.string.remotes_msg_section_exported, remoteName)
             } else {
@@ -239,6 +205,32 @@ internal class ConfigTransferFlow(
             transient.value = transient.value.copy(message = msg)
         }
     }
+
+    /**
+     * Writes [text] to [uri], encrypting with [encryptWith] when non-null (the array is
+     * zeroed afterwards). Uses "wt" so SAF truncates any existing document. Returns false
+     * on a null output stream or an [IOException]. Config text / key bytes are NEVER logged.
+     */
+    private suspend fun writeConfigPayload(uri: Uri, text: String, encryptWith: CharArray?): Boolean =
+        withContext(dispatchers.io) {
+            try {
+                val stream = context.contentResolver.openOutputStream(uri, "wt")
+                    ?: return@withContext false
+                val payload = if (encryptWith != null) {
+                    try {
+                        ConfigCrypto.encrypt(text, encryptWith)
+                    } finally {
+                        encryptWith.fill(' ')
+                    }
+                } else {
+                    text.toByteArray(Charsets.UTF_8)
+                }
+                stream.use { it.write(payload) }
+                true
+            } catch (e: IOException) {
+                false
+            }
+        }
 
     private companion object {
         const val MAX_IMPORT_BYTES = 256 * 1024
