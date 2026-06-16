@@ -16,6 +16,13 @@ object NotificationDeepLinks {
     /** [EXTRA_OPEN_ROUTE] value: open a task's summary; pair with [EXTRA_TASK_ID]. */
     const val ROUTE_TASK = "task"
 
+    /**
+     * [EXTRA_OPEN_ROUTE] value: navigate to Remotes tab then push [AddRemoteRoute],
+     * so Back from Add-Remote lands on the Remotes list.  Used by the onboarding
+     * "Add your first remote" CTA.
+     */
+    const val ROUTE_ADD_REMOTE = "add_remote"
+
     /** Long extra carrying the task id for [ROUTE_TASK]. */
     const val EXTRA_TASK_ID = "app.lusk.virga.OPEN_TASK_ID"
 }

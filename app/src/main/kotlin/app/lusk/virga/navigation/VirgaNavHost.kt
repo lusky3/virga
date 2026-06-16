@@ -172,6 +172,12 @@ fun VirgaNavHost(
                 navigator.navigate(TaskSummaryRoute(openTaskId))
                 onOpenRouteConsumed()
             }
+            NotificationDeepLinks.ROUTE_ADD_REMOTE -> {
+                // Navigate to Remotes tab first so Back from Add-Remote lands there.
+                navigator.navigate(RemotesRoute)
+                navigator.navigate(AddRemoteRoute)
+                onOpenRouteConsumed()
+            }
         }
     }
 
