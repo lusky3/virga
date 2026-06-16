@@ -123,10 +123,10 @@ data class SyncTaskEntity(
      */
     val groupTag: String = "",
     /**
-     * Relative ordering within a syncAll run. Tasks are sorted by
-     * (sortOrder ASC, id ASC) before enqueuing so execution order is deterministic.
-     * Lower values run first. Default 0 = unordered (same position as all others
-     * with the same sortOrder, tie-broken by id).
+     * Best-effort ordering hint within a syncAll run. Tasks are sorted by
+     * (sortOrder ASC, id ASC) and ENQUEUED in that order; since each task is its own
+     * WorkManager unique work, this is enqueue order, not a hard execution-order
+     * guarantee. Lower values enqueue first; ties broken by id. Default 0.
      */
     val sortOrder: Int = 0,
 )

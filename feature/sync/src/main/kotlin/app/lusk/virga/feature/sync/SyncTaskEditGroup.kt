@@ -45,9 +45,13 @@ internal fun GroupSection(form: SyncTaskForm, viewModel: SyncTaskEditViewModel) 
         OutlinedTextField(
             value = form.sortOrderText,
             onValueChange = { raw ->
-                val n = raw.filter { it.isDigit() || it == '-' }
+                // Allow an optional leading '-' followed by digits only, so the shown
+                // text never diverges from the parsed value ("1-2"/"--5" can't form).
+                val digits = raw.filter { it.isDigit() }
+                val n = if (raw.startsWith("-")) "-$digits" else digits
                 viewModel.update { f ->
-                    f.copy(sortOrderText = n, sortOrder = n.toIntOrNull() ?: f.sortOrder)
+                    // Empty or lone "-" parse to 0 so display and stored value agree.
+                    f.copy(sortOrderText = n, sortOrder = n.toIntOrNull() ?: 0)
                 }
             },
             label = { Text(stringResource(R.string.sync_edit_field_sort_order)) },
