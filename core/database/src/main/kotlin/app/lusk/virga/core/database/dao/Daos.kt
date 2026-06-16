@@ -233,7 +233,7 @@ interface SyncRunDao {
             "AND (:query = '' OR t.name LIKE '%' || :query || '%' " +
             "OR r.remoteName LIKE '%' || :query || '%' " +
             "OR r.errorMessage LIKE '%' || :query || '%') " +
-            "ORDER BY r.startedAtEpochMs DESC",
+            "ORDER BY r.startedAtEpochMs DESC, r.id DESC",
     )
     fun pagedRunsWithTask(
         taskId: Long?,
@@ -252,7 +252,7 @@ interface SyncRunDao {
             "AND (:query = '' OR t.name LIKE '%' || :query || '%' " +
             "OR r.remoteName LIKE '%' || :query || '%' " +
             "OR r.errorMessage LIKE '%' || :query || '%') " +
-            "ORDER BY r.startedAtEpochMs DESC",
+            "ORDER BY r.startedAtEpochMs DESC, r.id DESC",
     )
     suspend fun exportRunsWithTask(
         taskId: Long?,

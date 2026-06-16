@@ -64,7 +64,8 @@ object SyncHistoryExporter {
         } else {
             field
         }
-        val needsQuoting = sanitized.contains(',') || sanitized.contains('"') || sanitized.contains('\n')
+        val needsQuoting = sanitized.contains(',') || sanitized.contains('"') ||
+            sanitized.contains('\n') || sanitized.contains('\r')
         if (!needsQuoting) return sanitized
         return "\"${sanitized.replace("\"", "\"\"")}\""
     }

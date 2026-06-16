@@ -85,7 +85,7 @@ class SyncHistoryViewModel @Inject constructor(
         combine(selectedTaskId, statusFilter, searchQuery) { taskId, status, query ->
             Triple(taskId, status, query)
         }.flatMapLatest { (taskId, status, query) ->
-            historyRepository.pagedRuns(taskId, status, query)
+            historyRepository.pagedRuns(taskId, status, query.trim())
                 .map { page -> page.map { it.toSyncRunRow() } }
         }.cachedIn(viewModelScope)
 
@@ -104,7 +104,7 @@ class SyncHistoryViewModel @Inject constructor(
     }
 
     suspend fun exportRows(): List<SyncRunRow> =
-        historyRepository.exportRows(selectedTaskId.value, statusFilter.value, searchQuery.value)
+        historyRepository.exportRows(selectedTaskId.value, statusFilter.value, searchQuery.value.trim())
             .map { it.toSyncRunRow() }
 
     companion object {

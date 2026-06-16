@@ -3,6 +3,7 @@ package app.lusk.virga.feature.sync
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
+import android.widget.Toast
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -50,6 +51,7 @@ import app.lusk.virga.core.designsystem.component.VirgaCard
 import app.lusk.virga.core.designsystem.theme.LocalSharedTransitionScope
 import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import app.lusk.virga.core.designsystem.theme.rememberReduceMotion
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -163,22 +165,29 @@ fun SyncHistoryScreen(
 }
 
 private suspend fun shareExport(context: Context, viewModel: SyncHistoryViewModel, csv: Boolean) {
-    val ext = if (csv) "csv" else "json"
-    val mimeType = if (csv) "text/csv" else "application/json"
-    val uri = withContext(Dispatchers.IO) {
-        val rows = viewModel.exportRows()
-        val content = if (csv) SyncHistoryExporter.toCsv(rows) else SyncHistoryExporter.toJson(rows)
-        val dir = File(context.cacheDir, "shared").also { it.mkdirs() }
-        val file = File(dir, "history_export.$ext")
-        file.writeText(content)
-        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    val outcome = runCatching {
+        val ext = if (csv) "csv" else "json"
+        val mimeType = if (csv) "text/csv" else "application/json"
+        val uri = withContext(Dispatchers.IO) {
+            val rows = viewModel.exportRows()
+            val content = if (csv) SyncHistoryExporter.toCsv(rows) else SyncHistoryExporter.toJson(rows)
+            val dir = File(context.cacheDir, "shared").also { it.mkdirs() }
+            val file = File(dir, "history_export.$ext")
+            file.writeText(content)
+            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        }
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = mimeType
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, null))
     }
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = mimeType
-        putExtra(Intent.EXTRA_STREAM, uri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    // Surface failures instead of crashing the launched coroutine; never swallow cancellation.
+    outcome.exceptionOrNull()?.let { e ->
+        if (e is CancellationException) throw e
+        Toast.makeText(context, context.getString(R.string.sync_history_export_failed), Toast.LENGTH_LONG).show()
     }
-    context.startActivity(Intent.createChooser(intent, null))
 }
 
 @OptIn(ExperimentalSharedTransitionApi::class)

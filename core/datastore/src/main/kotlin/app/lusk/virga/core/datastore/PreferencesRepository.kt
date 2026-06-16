@@ -41,7 +41,8 @@ class PreferencesRepository @Inject constructor(
     suspend fun setQuietHoursEnabled(enabled: Boolean) = edit { it[Keys.QUIET_HOURS_ENABLED] = enabled }
     suspend fun setQuietHoursStart(minutes: Int) = edit { it[Keys.QUIET_HOURS_START] = minutes.coerceIn(0, 1439) }
     suspend fun setQuietHoursEnd(minutes: Int) = edit { it[Keys.QUIET_HOURS_END] = minutes.coerceIn(0, 1439) }
-    suspend fun setRunRetentionDays(days: Int) = edit { it[Keys.RUN_RETENTION_DAYS] = days.coerceAtLeast(0) }
+    suspend fun setRunRetentionDays(days: Int) =
+        edit { it[Keys.RUN_RETENTION_DAYS] = normalizeRetention(days) }
 
     suspend fun setDefaultBwLimits(wifi: String?, metered: String?) = edit { prefs ->
         if (wifi.isNullOrBlank()) prefs.remove(Keys.BW_WIFI) else prefs[Keys.BW_WIFI] = wifi
@@ -69,8 +70,13 @@ class PreferencesRepository @Inject constructor(
         quietHoursEnabled = this[Keys.QUIET_HOURS_ENABLED] ?: false,
         quietHoursStartMinutes = this[Keys.QUIET_HOURS_START] ?: 0,
         quietHoursEndMinutes = this[Keys.QUIET_HOURS_END] ?: 0,
-        runRetentionDays = this[Keys.RUN_RETENTION_DAYS] ?: 0,
+        runRetentionDays = normalizeRetention(this[Keys.RUN_RETENTION_DAYS] ?: 0),
     )
+
+    /** Clamp a stored/incoming retention value to a value the UI knows how to render
+     *  (0 = keep forever). Guards against a stale/garbage pref crashing the picker. */
+    private fun normalizeRetention(days: Int): Int =
+        if (days in RETENTION_OPTIONS) days else 0
 
     private object Keys {
         val THEME_MODE = stringPreferencesKey("theme_mode")
@@ -89,5 +95,10 @@ class PreferencesRepository @Inject constructor(
         val QUIET_HOURS_START = intPreferencesKey("quiet_hours_start_minutes")
         val QUIET_HOURS_END = intPreferencesKey("quiet_hours_end_minutes")
         val RUN_RETENTION_DAYS = intPreferencesKey("run_retention_days")
+    }
+
+    private companion object {
+        /** Retention values the Settings picker can render (0 = keep forever). */
+        val RETENTION_OPTIONS = setOf(0, 30, 90, 180, 365)
     }
 }
