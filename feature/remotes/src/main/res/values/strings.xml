@@ -183,4 +183,25 @@
     <string name="remotes_dedupe_cancel">Cancel</string>
     <string name="remotes_dedupe_success">Dedupe complete on \"%1$s\".</string>
     <string name="remotes_dedupe_failed">Dedupe failed on \"%1$s\": %2$s</string>
+
+    <!-- Import mode dialog (Replace vs Merge) -->
+    <string name="remotes_import_mode_title">Import config</string>
+    <string name="remotes_import_mode_replace_label">Replace — remove existing remotes</string>
+    <string name="remotes_import_mode_merge_label">Merge — keep existing, add new</string>
+    <string name="remotes_import_mode_replace_warning">All current remotes will be replaced by the ones in this file. Remotes not in the file will be removed. This can\'t be undone.</string>
+    <string name="remotes_import_mode_merge_info">Remotes in this file will be added to your existing list. If a remote has the same name, the imported version replaces the existing one.</string>
+    <string name="remotes_import_mode_confirm">Import</string>
+    <!-- Export config — redacted option -->
+    <string name="remotes_export_redacted_label">Redacted — structure only, secrets hidden</string>
+    <string name="remotes_export_redacted_info">Passwords, tokens, and other secrets will be replaced with a placeholder. The exported file is safe to share for troubleshooting.</string>
+    <!-- Single-remote export dialog -->
+    <string name="remotes_single_export_title">Export \"%1$s\"</string>
+    <string name="remotes_single_export_raw_label">Raw — include credentials</string>
+    <string name="remotes_single_export_redacted_label">Redacted — structure only, secrets hidden</string>
+    <string name="remotes_single_export_redacted_info">Passwords, tokens, and secrets will be replaced with a placeholder. Safe for sharing.</string>
+    <!-- Per-remote export menu item -->
+    <string name="remotes_card_menu_export">Export this remote</string>
+    <!-- Messages -->
+    <string name="remotes_msg_config_imported_merged">Config merged successfully.</string>
+    <string name="remotes_msg_section_exported">Remote \"%1$s\" exported.</string>
 </resources>

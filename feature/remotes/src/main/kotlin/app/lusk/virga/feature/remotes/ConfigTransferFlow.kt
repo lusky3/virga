@@ -44,11 +44,15 @@ internal class ConfigTransferFlow(
      * [RemotesTransientState.pendingEncryptedImport]. When [passphrase] is supplied the
      * container is decrypted; a wrong passphrase surfaces a snackbar and leaves the
      * prompt open so the user can retry. A non-encrypted file is imported as
-     * plain UTF-8 (the existing behaviour, unchanged).
+     * plain UTF-8.
+     *
+     * When [mergeMode] is true the incoming sections are merged into the current config
+     * via [RemoteRepository.importConfigMerged]; when false the config is replaced
+     * outright via [RemoteRepository.importConfig].
      *
      * The caller is responsible for zeroing [passphrase] after this returns.
      */
-    fun importFromUri(uri: Uri, passphrase: CharArray? = null) {
+    fun importFromUri(uri: Uri, passphrase: CharArray? = null, mergeMode: Boolean = false) {
         scope.launch {
             val read = withContext(dispatchers.io) {
                 val stream = context.contentResolver.openInputStream(uri)
@@ -69,12 +73,17 @@ internal class ConfigTransferFlow(
                 ImportBytes.TooLarge -> transient.value = transient.value.copy(
                     message = context.getString(R.string.remotes_msg_import_too_large),
                 )
-                is ImportBytes.Ok -> handleImportBytes(uri, read.bytes, passphrase)
+                is ImportBytes.Ok -> handleImportBytes(uri, read.bytes, passphrase, mergeMode)
             }
         }
     }
 
-    private suspend fun handleImportBytes(uri: Uri, bytes: ByteArray, passphrase: CharArray?) {
+    private suspend fun handleImportBytes(
+        uri: Uri,
+        bytes: ByteArray,
+        passphrase: CharArray?,
+        mergeMode: Boolean,
+    ) {
         if (ConfigCrypto.isEncryptedContainer(bytes)) {
             if (passphrase == null) {
                 // Signal UI to prompt for passphrase; do not import yet.
@@ -95,59 +104,65 @@ internal class ConfigTransferFlow(
             } finally {
                 passphrase.fill(' ')
             }
-            finishImport(text, clearPassphrasePrompt = true)
+            finishImport(text, clearPassphrasePrompt = true, mergeMode = false)
         } else {
-            // Plain UTF-8 — existing behaviour unchanged.
-            finishImport(bytes.toString(Charsets.UTF_8), clearPassphrasePrompt = true)
+            // Plain UTF-8 — merge or replace based on caller's choice.
+            finishImport(bytes.toString(Charsets.UTF_8), clearPassphrasePrompt = true, mergeMode = mergeMode)
         }
     }
 
-    private suspend fun finishImport(text: String, clearPassphrasePrompt: Boolean) {
-        val result = repository.importConfig(text)
+    private suspend fun finishImport(text: String, clearPassphrasePrompt: Boolean, mergeMode: Boolean) {
+        val result = if (mergeMode) repository.importConfigMerged(text) else repository.importConfig(text)
+        val successMsg = if (mergeMode) {
+            context.getString(R.string.remotes_msg_config_imported_merged)
+        } else {
+            context.getString(R.string.remotes_msg_config_imported)
+        }
         transient.value = transient.value.copy(
             pendingEncryptedImport = if (clearPassphrasePrompt) null else transient.value.pendingEncryptedImport,
-            message = if (result.isSuccess) {
-                context.getString(R.string.remotes_msg_config_imported)
-            } else {
-                result.exceptionOrNull()?.toUserMessage()
-            },
+            message = if (result.isSuccess) successMsg else result.exceptionOrNull()?.toUserMessage(),
         )
     }
 
     /**
      * Writes the rclone.conf to [uri] (a document created via the storage picker).
      *
-     * When [passphrase] is null the existing raw plaintext path is used unchanged.
-     * When [passphrase] is non-null the config is encrypted via [ConfigCrypto.encrypt]
-     * before writing. The passphrase CharArray is zeroed in a `finally` block.
+     * When [redacted]=true the config is written with sensitive values replaced by
+     * placeholders (ignores [passphrase], zeroes it). When [passphrase] is non-null
+     * and [redacted]=false the config is encrypted via [ConfigCrypto.encrypt]. When
+     * both are absent the raw plaintext path is used.
      *
      * An empty config is reported without touching the file; a null output stream or
      * an [IOException] surfaces the failure message. Config text / derived key bytes
      * are NEVER logged.
      */
-    fun exportToUri(uri: Uri, passphrase: CharArray? = null) {
+    fun exportToUri(uri: Uri, passphrase: CharArray? = null, redacted: Boolean = false) {
         scope.launch {
-            val text = repository.exportConfig()
-            if (text.isEmpty()) {
-                // Zero the passphrase on this early-out too, so the no-remotes path
-                // doesn't leave the caller's secret lingering in the heap.
+            val text = if (redacted) {
                 passphrase?.fill(' ')
+                repository.exportConfigRedacted()
+            } else {
+                repository.exportConfig()
+            }
+            if (text.isEmpty()) {
+                if (!redacted) passphrase?.fill(' ')
                 transient.value = transient.value.copy(
                     message = context.getString(R.string.remotes_msg_export_nothing),
                 )
                 return@launch
             }
+            val encryptWith: CharArray? = if (redacted) null else passphrase
             val written = withContext(dispatchers.io) {
                 try {
                     // "wt" truncates: SAF can hand back an existing document, and
                     // the default "w" mode would leave stale bytes past the end.
                     val stream = context.contentResolver.openOutputStream(uri, "wt")
                         ?: return@withContext false
-                    val payload = if (passphrase != null) {
+                    val payload = if (encryptWith != null) {
                         try {
-                            ConfigCrypto.encrypt(text, passphrase)
+                            ConfigCrypto.encrypt(text, encryptWith)
                         } finally {
-                            passphrase.fill(' ')
+                            encryptWith.fill(' ')
                         }
                     } else {
                         text.toByteArray(Charsets.UTF_8)
@@ -160,12 +175,68 @@ internal class ConfigTransferFlow(
             }
             val msgRes = when {
                 !written -> R.string.remotes_msg_export_failed
-                passphrase != null -> R.string.remotes_msg_config_exported_encrypted
+                encryptWith != null -> R.string.remotes_msg_config_exported_encrypted
                 else -> R.string.remotes_msg_config_exported
             }
             transient.value = transient.value.copy(
                 message = context.getString(msgRes),
             )
+        }
+    }
+
+    /**
+     * Exports a single remote's section to [uri].
+     *
+     * When [redacted]=true sensitive values are masked (ignores [passphrase]).
+     * When [passphrase] is non-null and [redacted]=false the section text is encrypted.
+     * When both are absent the raw section plaintext is written.
+     */
+    fun exportSectionToUri(
+        remoteName: String,
+        uri: Uri,
+        passphrase: CharArray? = null,
+        redacted: Boolean = false,
+    ) {
+        scope.launch {
+            val text = if (redacted) {
+                passphrase?.fill(' ')
+                repository.exportConfigSectionRedacted(remoteName)
+            } else {
+                repository.exportConfigSection(remoteName)
+            }
+            if (text.isBlank()) {
+                if (!redacted) passphrase?.fill(' ')
+                transient.value = transient.value.copy(
+                    message = context.getString(R.string.remotes_msg_export_nothing),
+                )
+                return@launch
+            }
+            val encryptSectionWith: CharArray? = if (redacted) null else passphrase
+            val written = withContext(dispatchers.io) {
+                try {
+                    val stream = context.contentResolver.openOutputStream(uri, "wt")
+                        ?: return@withContext false
+                    val payload = if (encryptSectionWith != null) {
+                        try {
+                            ConfigCrypto.encrypt(text, encryptSectionWith)
+                        } finally {
+                            encryptSectionWith.fill(' ')
+                        }
+                    } else {
+                        text.toByteArray(Charsets.UTF_8)
+                    }
+                    stream.use { it.write(payload) }
+                    true
+                } catch (e: IOException) {
+                    false
+                }
+            }
+            val msg = if (written) {
+                context.getString(R.string.remotes_msg_section_exported, remoteName)
+            } else {
+                context.getString(R.string.remotes_msg_export_failed)
+            }
+            transient.value = transient.value.copy(message = msg)
         }
     }
 

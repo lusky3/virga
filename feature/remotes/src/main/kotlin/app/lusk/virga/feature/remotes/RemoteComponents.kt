@@ -70,6 +70,7 @@ internal fun RemoteCard(
     onRename: () -> Unit = {},
     onReauth: () -> Unit = {},
     onSignOut: () -> Unit = {},
+    onExport: () -> Unit = {},
     quota: RemoteQuota? = null,
     quotaLoading: Boolean = false,
     connectivity: ConnectivityResult? = null,
@@ -155,6 +156,10 @@ internal fun RemoteCard(
                         onClick = { menuExpanded = false; onSignOut() },
                     )
                 }
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.remotes_card_menu_export)) },
+                    onClick = { menuExpanded = false; onExport() },
+                )
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.remotes_card_menu_delete)) },
                     leadingIcon = {

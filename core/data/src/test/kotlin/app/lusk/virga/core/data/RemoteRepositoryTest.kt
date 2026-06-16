@@ -328,4 +328,78 @@ class RemoteRepositoryTest {
 
         coVerify { conflictDao.repointRemoteName("gdrive", "gdrive2") }
     }
+
+    // --- importConfigMerged ---
+
+    @Test fun `importConfigMerged_blankInput_returnsFailure`() = runTest {
+        val result = repo.importConfigMerged("   ")
+
+        assertThat(result.isFailure).isTrue()
+        assertThat(result.exceptionOrNull()).isInstanceOf(VirgaError.Rclone::class.java)
+        coVerify(exactly = 0) { engine.importConfig(any()) }
+    }
+
+    @Test fun `importConfigMerged_mergesIntoExistingConfig`() = runTest {
+        val existing = "[existing]\ntype = drive\n"
+        val incoming = "[new]\ntype = s3\n"
+        coEvery { configManager.exportPlaintext() } returns existing
+        coEvery { engine.importConfig(any()) } returns Unit
+        coEvery { engine.listRemotes() } returns listOf(Remote("existing", "drive"), Remote("new", "s3"))
+
+        val result = repo.importConfigMerged(incoming)
+
+        assertThat(result.isSuccess).isTrue()
+        coVerify {
+            engine.importConfig(match { text ->
+                text.contains("[existing]") && text.contains("[new]")
+            })
+        }
+    }
+
+    @Test fun `importConfigMerged_callsRefreshOnSuccess`() = runTest {
+        coEvery { configManager.exportPlaintext() } returns "[a]\ntype = drive\n"
+        coEvery { engine.importConfig(any()) } returns Unit
+        coEvery { engine.listRemotes() } returns listOf(Remote("a", "drive"), Remote("b", "s3"))
+
+        repo.importConfigMerged("[b]\ntype = s3\n")
+
+        coVerify { remoteDao.replaceAll(any()) }
+    }
+
+    // --- exportConfigSection ---
+
+    @Test fun `exportConfigSection_returnsSingleSection`() = runTest {
+        coEvery { configManager.exportPlaintext() } returns "[alpha]\ntype = drive\n\n[beta]\ntype = s3\n"
+
+        val result = repo.exportConfigSection("beta")
+
+        assertThat(result).contains("[beta]")
+        assertThat(result).doesNotContain("[alpha]")
+    }
+
+    // --- exportConfigRedacted ---
+
+    @Test fun `exportConfigRedacted_masksSecrets`() = runTest {
+        coEvery { configManager.exportPlaintext() } returns "[r]\ntype = drive\ntoken = mysecret\nclient_id = pub\n"
+
+        val result = repo.exportConfigRedacted()
+
+        assertThat(result).contains("***REDACTED***")
+        assertThat(result).doesNotContain("mysecret")
+        assertThat(result).contains("client_id = pub")
+    }
+
+    // --- exportConfigSectionRedacted ---
+
+    @Test fun `exportConfigSectionRedacted_masksSingleSection`() = runTest {
+        val full = "[safe]\ntype = drive\nclient_id = pub\n\n[secret]\ntype = s3\npass = topsecret\n"
+        coEvery { configManager.exportPlaintext() } returns full
+
+        val result = repo.exportConfigSectionRedacted("secret")
+
+        assertThat(result).contains("[secret]")
+        assertThat(result).doesNotContain("[safe]")
+        assertThat(result).contains("***REDACTED***")
+        assertThat(result).doesNotContain("topsecret")
+    }
 }

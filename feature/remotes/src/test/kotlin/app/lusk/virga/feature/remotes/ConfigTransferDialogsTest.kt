@@ -240,6 +240,7 @@ class ConfigTransferDialogsTest {
                     ExportConfigDialog(
                         onConfirmEncrypted = {},
                         onConfirmRaw = {},
+                        onConfirmRedacted = {},
                         onDismiss = {},
                     )
                 }

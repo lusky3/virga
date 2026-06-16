@@ -35,7 +35,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 
-private enum class ExportMethod { ENCRYPTED, RAW }
+private enum class ExportMethod { ENCRYPTED, RAW, REDACTED }
 
 /** Holds the encrypted-export passphrase fields so callers pass one object, not many. */
 private class ExportPassphraseState {
@@ -64,6 +64,7 @@ private class ExportPassphraseState {
 internal fun ExportConfigDialog(
     onConfirmEncrypted: (passphrase: CharArray) -> Unit,
     onConfirmRaw: () -> Unit,
+    onConfirmRedacted: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var method by remember { mutableStateOf(ExportMethod.ENCRYPTED) }
@@ -73,7 +74,7 @@ internal fun ExportConfigDialog(
     } else {
         null
     }
-    val canConfirm = method == ExportMethod.RAW || state.canConfirm
+    val canConfirm = method == ExportMethod.RAW || method == ExportMethod.REDACTED || state.canConfirm
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -89,10 +90,10 @@ internal fun ExportConfigDialog(
             TextButton(
                 enabled = canConfirm,
                 onClick = {
-                    if (method == ExportMethod.ENCRYPTED) {
-                        onConfirmEncrypted(state.passphrase.toCharArray())
-                    } else {
-                        onConfirmRaw()
+                    when (method) {
+                        ExportMethod.ENCRYPTED -> onConfirmEncrypted(state.passphrase.toCharArray())
+                        ExportMethod.RAW -> onConfirmRaw()
+                        ExportMethod.REDACTED -> onConfirmRedacted()
                     }
                 },
             ) { Text(stringResource(R.string.remotes_export_dialog_confirm)) }
@@ -105,12 +106,20 @@ internal fun ExportConfigDialog(
     )
 }
 
-/** Encrypted choice → passphrase + confirm fields; raw choice → the plaintext warning. */
+/** Encrypted choice → passphrase + confirm fields; raw/redacted → descriptive text. */
 @Composable
 private fun ExportMethodFields(method: ExportMethod, state: ExportPassphraseState, errorText: String?) {
     if (method == ExportMethod.RAW) {
         Text(
             text = stringResource(R.string.remotes_export_raw_warning),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+    if (method == ExportMethod.REDACTED) {
+        Text(
+            text = stringResource(R.string.remotes_export_redacted_info),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -179,7 +188,7 @@ private fun ShowHideToggle(show: Boolean, onToggle: () -> Unit) {
     }
 }
 
-/** The Encrypted/Raw radio group at the top of [ExportConfigDialog]. */
+/** The Encrypted/Raw/Redacted radio group at the top of [ExportConfigDialog]. */
 @Composable
 private fun ExportMethodSelector(method: ExportMethod, onSelect: (ExportMethod) -> Unit) {
     Column(Modifier.selectableGroup()) {
@@ -192,6 +201,11 @@ private fun ExportMethodSelector(method: ExportMethod, onSelect: (ExportMethod) 
             label = stringResource(R.string.remotes_export_raw_label),
             selected = method == ExportMethod.RAW,
             onClick = { onSelect(ExportMethod.RAW) },
+        )
+        ExportMethodRow(
+            label = stringResource(R.string.remotes_export_redacted_label),
+            selected = method == ExportMethod.REDACTED,
+            onClick = { onSelect(ExportMethod.REDACTED) },
         )
     }
 }
