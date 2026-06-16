@@ -70,6 +70,9 @@ class SyncWorkerNotifyOnFailureOnlyTest {
     fun setUp() {
         context = RuntimeEnvironment.getApplication()
         notificationManager = context.getSystemService<NotificationManager>()!!
+        // Tests reuse TASK_ID; clear any leftover result notification so presence/absence
+        // assertions can't be made order-dependent by a prior test's post.
+        notificationManager.cancelAll()
         androidx.work.testing.WorkManagerTestInitHelper.initializeTestWorkManager(
             context,
             androidx.work.Configuration.Builder()
