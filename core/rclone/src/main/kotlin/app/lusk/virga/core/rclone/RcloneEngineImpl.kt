@@ -487,6 +487,22 @@ class RcloneEngineImpl @Inject constructor(
         })
     }
 
+    override suspend fun copyFile(source: String, dest: String): Unit = withLease { d ->
+        val (srcFs, srcRemote) = splitFs(source)
+        val (dstFs, dstRemote) = splitFs(dest)
+        rc(d, "operations/copyfile", buildJsonObject {
+            put("srcFs", srcFs); put("srcRemote", srcRemote)
+            put("dstFs", dstFs); put("dstRemote", dstRemote)
+        })
+    }
+
+    override suspend fun purge(remote: String, path: String): Unit = withLease { d ->
+        rc(d, "operations/purge", buildJsonObject {
+            put("fs", remote)
+            put(KEY_REMOTE, path)
+        })
+    }
+
     override suspend fun testConnectivity(remoteName: String): Result<Unit> = withLease { d ->
         val fs = "$remoteName:"
         try {

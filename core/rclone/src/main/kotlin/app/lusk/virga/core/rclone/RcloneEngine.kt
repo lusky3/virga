@@ -164,6 +164,20 @@ interface RcloneEngine {
     suspend fun mkdir(remote: String, path: String)
 
     /**
+     * Copies a single file from [source] to [dest] using `operations/copyfile`.
+     * Both paths use rclone "remote:path" syntax. The destination filename is taken
+     * from the last segment of [dest]. Throws [VirgaError] on failure.
+     */
+    suspend fun copyFile(source: String, dest: String)
+
+    /**
+     * Recursively deletes [path] (directory and all contents) within [remote] via
+     * `operations/purge`. This is the correct operation for removing a directory;
+     * use [deleteFile] for single files. Throws [VirgaError] on failure.
+     */
+    suspend fun purge(remote: String, path: String)
+
+    /**
      * Fetches storage quota for [remoteName] via `operations/about`.
      * Throws [VirgaError] on failure; any field in the result may be null
      * when the backend does not report it.
