@@ -29,20 +29,19 @@ class FileBrowserActionSheetTest {
 
     private fun setContent(
         onDismiss: () -> Unit = {},
-        onOpen: () -> Unit = {},
-        onShare: () -> Unit = {},
-        onSave: () -> Unit = {},
-        onUpload: () -> Unit = {},
+        actions: FileActionCallbacks = FileActionCallbacks(
+            onOpen = {},
+            onShare = {},
+            onSave = {},
+            onUpload = {},
+        ),
     ) {
         composeRule.setContent {
             VirgaTheme {
                 ActionSheetContent(
                     item = item,
                     onDismiss = onDismiss,
-                    onOpen = onOpen,
-                    onShare = onShare,
-                    onSave = onSave,
-                    onUpload = onUpload,
+                    actions = actions,
                 )
             }
         }
@@ -69,7 +68,10 @@ class FileBrowserActionSheetTest {
     fun `clicking Open invokes onOpen and onDismiss`() {
         var openCalled = false
         var dismissCalled = false
-        setContent(onDismiss = { dismissCalled = true }, onOpen = { openCalled = true })
+        setContent(
+            onDismiss = { dismissCalled = true },
+            actions = FileActionCallbacks(onOpen = { openCalled = true }, onShare = {}, onSave = {}, onUpload = {}),
+        )
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Open").performClick()
         composeRule.waitForIdle()
@@ -81,7 +83,10 @@ class FileBrowserActionSheetTest {
     fun `clicking Share invokes onShare and onDismiss`() {
         var shareCalled = false
         var dismissCalled = false
-        setContent(onDismiss = { dismissCalled = true }, onShare = { shareCalled = true })
+        setContent(
+            onDismiss = { dismissCalled = true },
+            actions = FileActionCallbacks(onOpen = {}, onShare = { shareCalled = true }, onSave = {}, onUpload = {}),
+        )
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Share").performClick()
         composeRule.waitForIdle()
@@ -93,7 +98,10 @@ class FileBrowserActionSheetTest {
     fun `clicking Save invokes onSave and onDismiss`() {
         var saveCalled = false
         var dismissCalled = false
-        setContent(onDismiss = { dismissCalled = true }, onSave = { saveCalled = true })
+        setContent(
+            onDismiss = { dismissCalled = true },
+            actions = FileActionCallbacks(onOpen = {}, onShare = {}, onSave = { saveCalled = true }, onUpload = {}),
+        )
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Save to device").performClick()
         composeRule.waitForIdle()
@@ -105,7 +113,10 @@ class FileBrowserActionSheetTest {
     fun `clicking Upload invokes onUpload and onDismiss`() {
         var uploadCalled = false
         var dismissCalled = false
-        setContent(onDismiss = { dismissCalled = true }, onUpload = { uploadCalled = true })
+        setContent(
+            onDismiss = { dismissCalled = true },
+            actions = FileActionCallbacks(onOpen = {}, onShare = {}, onSave = {}, onUpload = { uploadCalled = true }),
+        )
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Upload file here").performClick()
         composeRule.waitForIdle()

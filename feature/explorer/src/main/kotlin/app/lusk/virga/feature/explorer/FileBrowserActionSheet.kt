@@ -25,32 +25,31 @@ import androidx.compose.ui.semantics.semantics
 import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 
+/** Action callbacks for the per-file action sheet. */
+data class FileActionCallbacks(
+    val onOpen: () -> Unit,
+    val onShare: () -> Unit,
+    val onSave: () -> Unit,
+    val onUpload: () -> Unit,
+)
+
 /**
  * Per-file action sheet: Open, Share, Save to device, Upload file here.
  *
  * Owns no network logic — all actions are delegated to the caller ([FileBrowserScreen]).
- * Preview (ACTION_VIEW) is covered by [onOpen]; no dedicated in-app viewer this release.
+ * Preview (ACTION_VIEW) is covered by [FileActionCallbacks.onOpen]; no dedicated
+ * in-app viewer this release.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun FileBrowserActionSheet(
     item: FileItem,
     onDismiss: () -> Unit,
-    onOpen: () -> Unit,
-    onShare: () -> Unit,
-    onSave: () -> Unit,
-    onUpload: () -> Unit,
+    actions: FileActionCallbacks,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        ActionSheetContent(
-            item = item,
-            onDismiss = onDismiss,
-            onOpen = onOpen,
-            onShare = onShare,
-            onSave = onSave,
-            onUpload = onUpload,
-        )
+        ActionSheetContent(item = item, onDismiss = onDismiss, actions = actions)
     }
 }
 
@@ -58,10 +57,7 @@ internal fun FileBrowserActionSheet(
 internal fun ActionSheetContent(
     item: FileItem,
     onDismiss: () -> Unit,
-    onOpen: () -> Unit,
-    onShare: () -> Unit,
-    onSave: () -> Unit,
-    onUpload: () -> Unit,
+    actions: FileActionCallbacks,
 ) {
     Column(
         modifier = Modifier
@@ -76,25 +72,25 @@ internal fun ActionSheetContent(
         ActionItem(
             label = stringResource(R.string.explorer_action_open),
             icon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null) },
-            onClick = { onDismiss(); onOpen() },
+            onClick = { onDismiss(); actions.onOpen() },
         )
         HorizontalDivider()
         ActionItem(
             label = stringResource(R.string.explorer_action_share),
             icon = { Icon(Icons.Filled.Share, contentDescription = null) },
-            onClick = { onDismiss(); onShare() },
+            onClick = { onDismiss(); actions.onShare() },
         )
         HorizontalDivider()
         ActionItem(
             label = stringResource(R.string.explorer_action_save),
             icon = { Icon(Icons.Filled.Download, contentDescription = null) },
-            onClick = { onDismiss(); onSave() },
+            onClick = { onDismiss(); actions.onSave() },
         )
         HorizontalDivider()
         ActionItem(
             label = stringResource(R.string.explorer_action_upload),
             icon = { Icon(Icons.Filled.Upload, contentDescription = null) },
-            onClick = { onDismiss(); onUpload() },
+            onClick = { onDismiss(); actions.onUpload() },
         )
     }
 }

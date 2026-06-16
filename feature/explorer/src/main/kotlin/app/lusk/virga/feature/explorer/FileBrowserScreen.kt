@@ -90,9 +90,6 @@ fun FileBrowserScreen(
     onBack: () -> Unit,
     onNavigateToRemotes: () -> Unit = {},
     onSyncFolder: (remote: String, path: String) -> Unit = { _, _ -> },
-    /** When true, the browser acts as a destination-folder picker: the action
-     *  records the current folder (via the ViewModel) and returns instead of
-     *  creating a sync task. */
     pickMode: Boolean = false,
     initialRemote: String? = null,
     viewModel: FileBrowserViewModel = hiltViewModel(),
@@ -164,7 +161,10 @@ fun FileBrowserScreen(
                     }
                     pickMode -> {
                         val newFolderDesc = stringResource(R.string.explorer_cd_new_folder)
-                        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
+                        Column(
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
+                        ) {
                             FloatingActionButton(
                                 onClick = viewModel::openCreateFolderDialog,
                                 modifier = Modifier.semantics { contentDescription = newFolderDesc },
@@ -299,36 +299,47 @@ fun FileBrowserScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var pendingFile by remember { mutableStateOf<File?>(null) }
-    val transferErrorMsg = context.getString(R.string.explorer_transfer_in_progress)
+    val transferInProgressMsg = context.getString(R.string.explorer_transfer_in_progress)
+    val transferFailedMsg = context.getString(R.string.explorer_transfer_failed)
     val launchers = rememberTransferLaunchers(
         onSaveUri = { destUri ->
-            val src = pendingFile ?: return@rememberTransferLaunchers
-            scope.launch {
-                runCatching { withContext(Dispatchers.IO) { copyToSafUri(context, src, destUri) } }
-                    .onFailure { snackbar.showSnackbar(transferErrorMsg) }
+            pendingFile?.let { src ->
+                scope.launch {
+                    runCatching { withContext(Dispatchers.IO) { copyToSafUri(context, src, destUri) } }
+                        .onFailure { e -> snackbar.showSnackbar(e.message ?: transferFailedMsg) }
+                }
             }
         },
         onPickUri = { srcUri ->
             scope.launch {
                 val name = sanitizeSafName(safDisplayName(context, srcUri))
-                val tmp = File(context.cacheDir, "shared/$name")
-                val result = runCatching { withContext(Dispatchers.IO) { copyFromSafUri(context, srcUri, tmp) } }
-                result.fold(onSuccess = { viewModel.uploadLocalFile(tmp) }, onFailure = { snackbar.showSnackbar(it.message ?: transferErrorMsg) })
+                val tmp = File(File(context.cacheDir, "shared").also { it.mkdirs() }, name)
+                runCatching { withContext(Dispatchers.IO) { copyFromSafUri(context, srcUri, tmp) } }
+                    .fold(
+                        onSuccess = { viewModel.uploadLocalFile(tmp) },
+                        onFailure = { e -> snackbar.showSnackbar(e.message ?: transferInProgressMsg) },
+                    )
             }
         },
     )
     val actionSheetItem = state.actionSheetItem
     if (actionSheetItem != null) {
+        val dlDir = context.cacheDir
+        val mimeType = actionSheetItem.mimeType
         FileBrowserActionSheet(
             item = actionSheetItem,
             onDismiss = viewModel::dismissActionSheet,
-            onOpen = { viewModel.downloadForAction(actionSheetItem, context.cacheDir) { openFile(context, it, actionSheetItem.mimeType) } },
-            onShare = { viewModel.downloadForAction(actionSheetItem, context.cacheDir) { shareFile(context, it, actionSheetItem.mimeType) } },
-            onSave = {
-                val title = context.getString(R.string.explorer_save_document_title, actionSheetItem.name)
-                viewModel.downloadForAction(actionSheetItem, context.cacheDir) { pendingFile = it; launchers.createDocument.launch(title) }
-            },
-            onUpload = { launchers.openDocument.launch(arrayOf("*/*")) },
+            actions = FileActionCallbacks(
+                onOpen = { viewModel.downloadForAction(actionSheetItem, dlDir) { openFile(context, it, mimeType) } },
+                onShare = { viewModel.downloadForAction(actionSheetItem, dlDir) { shareFile(context, it, mimeType) } },
+                onSave = {
+                    val title = context.getString(R.string.explorer_save_document_title, actionSheetItem.name)
+                    viewModel.downloadForAction(actionSheetItem, dlDir) {
+                        pendingFile = it; launchers.createDocument.launch(title)
+                    }
+                },
+                onUpload = { launchers.openDocument.launch(arrayOf("*/*")) },
+            ),
         )
     }
 }
@@ -387,12 +398,7 @@ private fun FileBrowserTopBar(
     onClearSelection: () -> Unit,
 ) {
     TopAppBar(
-        title = {
-            FileBrowserTitle(
-                state = state,
-                onSearchQuery = onSearchQuery,
-            )
-        },
+        title = { FileBrowserTitle(state = state, onSearchQuery = onSearchQuery) },
         navigationIcon = {
             IconButton(onClick = if (state.selectionMode) onClearSelection else onBack) {
                 Icon(
@@ -401,13 +407,7 @@ private fun FileBrowserTopBar(
                 )
             }
         },
-        actions = {
-            FileBrowserActions(
-                state = state,
-                onToggleSearch = onToggleSearch,
-                onSort = onSort,
-            )
-        },
+        actions = { FileBrowserActions(state = state, onToggleSearch = onToggleSearch, onSort = onSort) },
         scrollBehavior = scrollBehavior,
     )
 }

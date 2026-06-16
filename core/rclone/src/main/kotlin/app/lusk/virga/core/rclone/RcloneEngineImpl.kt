@@ -475,8 +475,8 @@ class RcloneEngineImpl @Inject constructor(
         val (srcFs, srcRemote) = splitFs(source)
         val (dstFs, dstRemote) = splitFs(dest)
         rc(d, "operations/movefile", buildJsonObject {
-            put("srcFs", srcFs); put("srcRemote", srcRemote)
-            put("dstFs", dstFs); put("dstRemote", dstRemote)
+            put(KEY_SRC_FS, srcFs); put(KEY_SRC_REMOTE, srcRemote)
+            put(KEY_DST_FS, dstFs); put(KEY_DST_REMOTE, dstRemote)
         })
     }
 
@@ -491,8 +491,8 @@ class RcloneEngineImpl @Inject constructor(
         val (srcFs, srcRemote) = splitFs(source)
         val (dstFs, dstRemote) = splitFs(dest)
         rc(d, "operations/copyfile", buildJsonObject {
-            put("srcFs", srcFs); put("srcRemote", srcRemote)
-            put("dstFs", dstFs); put("dstRemote", dstRemote)
+            put(KEY_SRC_FS, srcFs); put(KEY_SRC_REMOTE, srcRemote)
+            put(KEY_DST_FS, dstFs); put(KEY_DST_REMOTE, dstRemote)
         })
     }
 
@@ -503,8 +503,8 @@ class RcloneEngineImpl @Inject constructor(
         destName: String,
     ): Unit = withLease { d ->
         rc(d, "operations/copyfile", buildJsonObject {
-            put("srcFs", "$remoteName:"); put("srcRemote", remotePath)
-            put("dstFs", destDir); put("dstRemote", destName)
+            put(KEY_SRC_FS, "$remoteName:"); put(KEY_SRC_REMOTE, remotePath)
+            put(KEY_DST_FS, destDir); put(KEY_DST_REMOTE, destName)
         })
     }
 
@@ -515,8 +515,8 @@ class RcloneEngineImpl @Inject constructor(
         remotePath: String,
     ): Unit = withLease { d ->
         rc(d, "operations/copyfile", buildJsonObject {
-            put("srcFs", srcDir); put("srcRemote", srcName)
-            put("dstFs", "$remoteName:"); put("dstRemote", remotePath)
+            put(KEY_SRC_FS, srcDir); put(KEY_SRC_REMOTE, srcName)
+            put(KEY_DST_FS, "$remoteName:"); put(KEY_DST_REMOTE, remotePath)
         })
     }
 
@@ -887,5 +887,10 @@ class RcloneEngineImpl @Inject constructor(
         const val POLL_INTERVAL_MS = 750L
         // Max time an in-flight job may make zero progress before we abort it.
         const val STALL_TIMEOUT_MS = 120_000L
+        // operations/copyfile and operations/movefile parameter keys.
+        const val KEY_SRC_FS = "srcFs"
+        const val KEY_SRC_REMOTE = "srcRemote"
+        const val KEY_DST_FS = "dstFs"
+        const val KEY_DST_REMOTE = "dstRemote"
     }
 }

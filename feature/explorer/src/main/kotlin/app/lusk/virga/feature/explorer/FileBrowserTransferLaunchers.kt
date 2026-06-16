@@ -91,9 +91,10 @@ internal fun copyFromSafUri(context: Context, srcUri: Uri, destFile: File) {
     input.use { i -> destFile.outputStream().use { o -> i.copyTo(o) } }
 }
 
-/** Returns the raw display name for a content:// URI, or a fallback. Use [sanitizeSafName] before using as a filename. */
+/** Returns the raw display name for a content:// URI. Use [sanitizeSafName] before using as a filename. */
 internal fun safDisplayName(context: Context, uri: Uri): String {
-    val cursor = context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+    val cols = arrayOf(android.provider.OpenableColumns.DISPLAY_NAME)
+    val cursor = context.contentResolver.query(uri, cols, null, null, null)
     return cursor?.use { c ->
         if (c.moveToFirst()) c.getString(0) else null
     } ?: uri.lastPathSegment ?: "upload"

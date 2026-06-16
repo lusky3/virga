@@ -237,10 +237,6 @@ class FileBrowserViewModel @Inject constructor(
     fun showActionSheet(item: FileItem) { _state.update { it.copy(actionSheetItem = item) } }
     fun dismissActionSheet() { _state.update { it.copy(actionSheetItem = null) } }
 
-    /**
-     * Downloads [item] into [cacheDir]/shared and invokes [onReady] with the file on the
-     * main thread. [onReady] fires the intent; the ViewModel only manages transfer state.
-     */
     fun downloadForAction(item: FileItem, cacheDir: java.io.File, onReady: (java.io.File) -> Unit) {
         val remote = _state.value.remoteName ?: return
         if (_state.value.transferInProgress) return
@@ -249,12 +245,13 @@ class FileBrowserViewModel @Inject constructor(
             runTransfer(
                 io = { fileBrowser.downloadToCache(remote, item.path, java.io.File(cacheDir, "shared")) },
                 onSuccess = { file -> _state.update { it.copy(transferInProgress = false) }; onReady(file) },
-                onFailure = { e -> _state.update { it.copy(transferInProgress = false, statusMessage = e.toUserMessage()) } },
+                onFailure = { e ->
+                    _state.update { it.copy(transferInProgress = false, statusMessage = e.toUserMessage()) }
+                },
             )
         }
     }
 
-    /** Uploads [localFile] (plain fs file, not content://) into the current remote directory. */
     fun uploadLocalFile(localFile: java.io.File) {
         val remote = _state.value.remoteName ?: return
         val currentPath = _state.value.path
@@ -265,7 +262,9 @@ class FileBrowserViewModel @Inject constructor(
             runTransfer(
                 io = { fileBrowser.uploadFromLocal(localFile, remote, destPath) },
                 onSuccess = { _state.update { it.copy(transferInProgress = false) }; load(remote, currentPath) },
-                onFailure = { e -> _state.update { it.copy(transferInProgress = false, statusMessage = e.toUserMessage()) } },
+                onFailure = { e ->
+                    _state.update { it.copy(transferInProgress = false, statusMessage = e.toUserMessage()) }
+                },
             )
         }
     }
