@@ -2,9 +2,12 @@ package app.lusk.virga.feature.stats
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.lusk.virga.core.common.model.RemoteQuotaState
 import app.lusk.virga.core.common.model.TrendDay
 import app.lusk.virga.core.data.StatsRepository
+import app.lusk.virga.core.data.SyncTaskRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -15,21 +18,43 @@ import javax.inject.Inject
 @HiltViewModel
 class StatsViewModel @Inject constructor(
     private val repo: StatsRepository,
+    private val taskRepo: SyncTaskRepository,
 ) : ViewModel() {
 
+    private val quotasFlow = MutableStateFlow<List<RemoteQuotaState>>(emptyList())
+
     val state: StateFlow<StatsUiState> = combine(
-        repo.stats,
-        repo.remoteStats,
-        repo.taskStats,
-        repo.trendFlow(TREND_DAYS),
-    ) { lifetime, remotes, tasks, rawTrend ->
+        combine(repo.stats, repo.remoteStats, repo.trendFlow(TREND_DAYS)) { lifetime, remotes, rawTrend ->
+            Triple(lifetime, remotes, rawTrend)
+        },
+        combine(repo.taskStats, taskRepo.tasks) { taskStats, syncTasks ->
+            val nameById = syncTasks.associateBy { it.id }
+            taskStats.map { stat ->
+                val name = nameById[stat.taskId]?.name ?: "Task #${stat.taskId}"
+                TaskStatUi(
+                    name = name,
+                    totalRuns = stat.totalRuns,
+                    successRuns = stat.successRuns,
+                    bytes = stat.bytes,
+                )
+            }
+        },
+        quotasFlow,
+    ) { (lifetime, remotes, rawTrend), taskStatUis, quotas ->
         StatsUiState(
             lifetime = lifetime,
             remoteStats = remotes,
-            taskStats = tasks,
+            taskStats = taskStatUis,
             trendBytes = buildDenseTrend(rawTrend, TREND_DAYS),
+            quotas = quotas,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StatsUiState())
+
+    fun refreshQuotas(remoteNames: List<String>) {
+        viewModelScope.launch {
+            quotasFlow.value = repo.fetchQuota(remoteNames)
+        }
+    }
 
     fun resetAll() {
         viewModelScope.launch { repo.reset() }

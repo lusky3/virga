@@ -13,7 +13,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 
-/** Canvas sparkline for a 30-day bytes trend. [data] must be non-empty. */
+/** Canvas sparkline for a 30-day bytes trend. Empty [data] skips rendering. */
 @Composable
 fun SyncSparkline(
     data: List<Long>,

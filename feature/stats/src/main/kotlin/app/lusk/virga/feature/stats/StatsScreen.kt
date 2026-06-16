@@ -27,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,7 +35,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -42,7 +42,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.model.LifetimeStats
-import app.lusk.virga.core.common.model.RemoteStat
 import app.lusk.virga.core.common.util.formatFileSize
 import app.lusk.virga.core.designsystem.component.EmptyState
 import app.lusk.virga.core.designsystem.component.VirgaCard
@@ -65,6 +64,12 @@ fun StatsScreen(
     var showResetDialog by remember { mutableStateOf(false) }
     var resetScope by remember { mutableStateOf(ResetScope.ALL) }
     var showResetMenu by remember { mutableStateOf(false) }
+    var remoteToReset by remember { mutableStateOf<String?>(null) }
+
+    val remoteNames = remember(state.remoteStats) { state.remoteStats.map { it.remoteName } }
+    LaunchedEffect(remoteNames) {
+        if (remoteNames.isNotEmpty()) viewModel.refreshQuotas(remoteNames)
+    }
 
     if (showResetDialog) {
         ResetConfirmDialog(
@@ -77,6 +82,13 @@ fun StatsScreen(
                 showResetDialog = false
             },
             onDismiss = { showResetDialog = false },
+        )
+    }
+    remoteToReset?.let { remote ->
+        RemoteResetConfirmDialog(
+            remoteName = remote,
+            onConfirm = { viewModel.resetRemote(remote); remoteToReset = null },
+            onDismiss = { remoteToReset = null },
         )
     }
 
@@ -123,7 +135,12 @@ fun StatsScreen(
                 TimeCard(state.lifetime)
                 SpeedCard(state.lifetime)
                 FunCard(state.lifetime)
-                RemoteStatsSection(state.remoteStats)
+                TaskStatsSection(state.taskStats)
+                RemoteStatsSection(
+                    remoteStats = state.remoteStats,
+                    quotas = state.quotas,
+                    onResetRemote = { remoteToReset = it },
+                )
                 Box(modifier = Modifier.align(Alignment.CenterHorizontally)) {
                     TextButton(onClick = { showResetMenu = true }) {
                         Text(
@@ -159,7 +176,7 @@ fun StatsScreen(
 }
 
 // ---------------------------------------------------------------------------
-// New sections
+// Sections
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -174,31 +191,6 @@ private fun TrendSection(trendBytes: List<Long>) {
         )
         Spacer(Modifier.height(VirgaSpacing.xs))
         SyncSparkline(data = trendBytes)
-    }
-}
-
-@Composable
-private fun RemoteStatsSection(remoteStats: List<RemoteStat>) {
-    if (remoteStats.isEmpty()) return
-    SectionLabel(stringResource(R.string.stats_section_by_remote))
-    Column(modifier = Modifier.testTag("stats_remote_section")) {
-        remoteStats.filter { it.remoteName.isNotBlank() }.forEach { stat ->
-            VirgaCard {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(stat.remoteName, style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        formatFileSize(stat.bytes),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Text(
-                    stringResource(R.string.stats_remote_detail, stat.totalRuns, stat.successRuns),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
     }
 }
 
@@ -423,7 +415,7 @@ private fun StatCard(
 }
 
 @Composable
-private fun SectionLabel(text: String) {
+internal fun SectionLabel(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.titleMedium,
@@ -443,13 +435,17 @@ private fun ResetConfirmDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val titleRes = when (scope) {
+        ResetScope.ALL -> R.string.stats_reset_title
+        ResetScope.RUNS_ONLY -> R.string.stats_reset_runs_title
+    }
     val bodyRes = when (scope) {
         ResetScope.ALL -> R.string.stats_reset_body
         ResetScope.RUNS_ONLY -> R.string.stats_reset_runs_body
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.stats_reset_title)) },
+        title = { Text(stringResource(titleRes)) },
         text = { Text(stringResource(bodyRes)) },
         confirmButton = {
             TextButton(onClick = onConfirm) {

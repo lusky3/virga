@@ -1,11 +1,16 @@
 package app.lusk.virga.feature.stats
 
 import app.lusk.virga.core.common.model.LifetimeStats
+import app.lusk.virga.core.common.model.RemoteQuotaState
 import app.lusk.virga.core.common.model.RemoteStat
+import app.lusk.virga.core.common.model.SyncTask
+import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.common.model.TaskStat
 import app.lusk.virga.core.common.model.TrendDay
 import app.lusk.virga.core.data.StatsRepository
+import app.lusk.virga.core.data.SyncTaskRepository
 import com.google.common.truth.Truth.assertThat
+import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -36,14 +41,29 @@ class StatsViewModelTest {
         every { trendFlow(any()) } returns flowOf(trend)
     }
 
+    private fun taskRepo(syncTasks: List<SyncTask> = emptyList()): SyncTaskRepository =
+        mockk(relaxed = true) {
+            every { tasks } returns flowOf(syncTasks)
+        }
+
+    private fun syncTask(id: Long, name: String) = SyncTask(
+        id = id,
+        name = name,
+        sourcePath = "/src",
+        remoteName = "remote",
+        remotePath = "/dst",
+        direction = SyncDirection.UPLOAD,
+        intervalMinutes = null,
+    )
+
     @Test fun `initial state is empty StatsUiState`() {
-        val vm = StatsViewModel(repo())
+        val vm = StatsViewModel(repo(), taskRepo())
         assertThat(vm.state.value).isEqualTo(StatsUiState())
     }
 
     @Test fun `state collects lifetime stats`() = runTest(mainDispatcher.dispatcher) {
         val stats = LifetimeStats(totalRuns = 5, totalBytesTransferred = 1024)
-        val vm = StatsViewModel(repo(lifetime = stats))
+        val vm = StatsViewModel(repo(lifetime = stats), taskRepo())
         val job = backgroundScope.launch { vm.state.collect {} }
         advanceUntilIdle()
         assertThat(vm.state.value.lifetime.totalRuns).isEqualTo(5)
@@ -53,7 +73,7 @@ class StatsViewModelTest {
 
     @Test fun `state collects remote stats`() = runTest(mainDispatcher.dispatcher) {
         val remotes = listOf(RemoteStat("gdrive", 3, 2, 500, 10))
-        val vm = StatsViewModel(repo(remotes = remotes))
+        val vm = StatsViewModel(repo(remotes = remotes), taskRepo())
         val job = backgroundScope.launch { vm.state.collect {} }
         advanceUntilIdle()
         assertThat(vm.state.value.remoteStats).hasSize(1)
@@ -61,13 +81,40 @@ class StatsViewModelTest {
         job.cancel()
     }
 
-    @Test fun `state collects task stats`() = runTest(mainDispatcher.dispatcher) {
+    @Test fun `state resolves task names from SyncTaskRepository`() = runTest(mainDispatcher.dispatcher) {
         val tasks = listOf(TaskStat(1L, 4, 3, 200, 5))
-        val vm = StatsViewModel(repo(tasks = tasks))
+        val syncTasks = listOf(syncTask(1L, "My Backup"))
+        val vm = StatsViewModel(repo(tasks = tasks), taskRepo(syncTasks))
         val job = backgroundScope.launch { vm.state.collect {} }
         advanceUntilIdle()
         assertThat(vm.state.value.taskStats).hasSize(1)
-        assertThat(vm.state.value.taskStats[0].taskId).isEqualTo(1L)
+        assertThat(vm.state.value.taskStats[0].name).isEqualTo("My Backup")
+        assertThat(vm.state.value.taskStats[0].totalRuns).isEqualTo(4)
+        assertThat(vm.state.value.taskStats[0].successRuns).isEqualTo(3)
+        job.cancel()
+    }
+
+    @Test fun `state uses fallback name for orphaned task id`() = runTest(mainDispatcher.dispatcher) {
+        val tasks = listOf(TaskStat(99L, 2, 1, 100, 3))
+        val vm = StatsViewModel(repo(tasks = tasks), taskRepo(emptyList()))
+        val job = backgroundScope.launch { vm.state.collect {} }
+        advanceUntilIdle()
+        assertThat(vm.state.value.taskStats[0].name).isEqualTo("Task #99")
+        job.cancel()
+    }
+
+    @Test fun `refreshQuotas sets quotas in state`() = runTest(mainDispatcher.dispatcher) {
+        val r = repo()
+        val quotas = listOf(RemoteQuotaState("gdrive", used = 500L, total = 2000L, free = 1500L))
+        coEvery { r.fetchQuota(any()) } returns quotas
+        val vm = StatsViewModel(r, taskRepo())
+        val job = backgroundScope.launch { vm.state.collect {} }
+        advanceUntilIdle()
+        vm.refreshQuotas(listOf("gdrive"))
+        advanceUntilIdle()
+        assertThat(vm.state.value.quotas).hasSize(1)
+        assertThat(vm.state.value.quotas[0].remoteName).isEqualTo("gdrive")
+        assertThat(vm.state.value.quotas[0].free).isEqualTo(1500L)
         job.cancel()
     }
 
@@ -92,7 +139,7 @@ class StatsViewModelTest {
 
     @Test fun `resetAll delegates to repo reset`() = runTest(mainDispatcher.dispatcher) {
         val r = repo()
-        val vm = StatsViewModel(r)
+        val vm = StatsViewModel(r, taskRepo())
         vm.resetAll()
         advanceUntilIdle()
         coVerify { r.reset() }
@@ -100,7 +147,7 @@ class StatsViewModelTest {
 
     @Test fun `resetRuns delegates to repo resetAllRuns`() = runTest(mainDispatcher.dispatcher) {
         val r = repo()
-        val vm = StatsViewModel(r)
+        val vm = StatsViewModel(r, taskRepo())
         vm.resetRuns()
         advanceUntilIdle()
         coVerify { r.resetAllRuns() }
@@ -108,7 +155,7 @@ class StatsViewModelTest {
 
     @Test fun `resetRemote delegates to repo resetRemote with the given name`() = runTest(mainDispatcher.dispatcher) {
         val r = repo()
-        val vm = StatsViewModel(r)
+        val vm = StatsViewModel(r, taskRepo())
         vm.resetRemote("gdrive")
         advanceUntilIdle()
         coVerify { r.resetRemote("gdrive") }
