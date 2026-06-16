@@ -503,7 +503,7 @@ class RcloneEngineImpl @Inject constructor(
         destName: String,
     ): Unit = withLease { d ->
         rc(d, "operations/copyfile", buildJsonObject {
-            put(KEY_SRC_FS, "$remoteName:"); put(KEY_SRC_REMOTE, remotePath)
+            put(KEY_SRC_FS, rootFs(remoteName)); put(KEY_SRC_REMOTE, remotePath)
             put(KEY_DST_FS, destDir); put(KEY_DST_REMOTE, destName)
         })
     }
@@ -516,7 +516,7 @@ class RcloneEngineImpl @Inject constructor(
     ): Unit = withLease { d ->
         rc(d, "operations/copyfile", buildJsonObject {
             put(KEY_SRC_FS, srcDir); put(KEY_SRC_REMOTE, srcName)
-            put(KEY_DST_FS, "$remoteName:"); put(KEY_DST_REMOTE, remotePath)
+            put(KEY_DST_FS, rootFs(remoteName)); put(KEY_DST_REMOTE, remotePath)
         })
     }
 
@@ -528,7 +528,7 @@ class RcloneEngineImpl @Inject constructor(
     }
 
     override suspend fun testConnectivity(remoteName: String): Result<Unit> = withLease { d ->
-        val fs = "$remoteName:"
+        val fs = rootFs(remoteName)
         try {
             rc(d, "operations/about", buildJsonObject { put("fs", fs) })
             Result.success(Unit)
@@ -570,7 +570,7 @@ class RcloneEngineImpl @Inject constructor(
             // dedupe itself failed even though the HTTP call succeeded.
             val resp = rc(d, "core/command", buildJsonObject {
                 put("command", "dedupe")
-                putJsonArray("arg") { add("$remoteName:") }
+                putJsonArray("arg") { add(rootFs(remoteName)) }
                 putJsonObject("opt") { put("dedupe-mode", dedupeMode) }
                 put("returnType", "COMBINED_OUTPUT")
             })
@@ -625,7 +625,7 @@ class RcloneEngineImpl @Inject constructor(
 
     override suspend fun about(remoteName: String): RemoteQuota = withLease { d ->
         val result = rc(d, "operations/about", buildJsonObject {
-            put("fs", "$remoteName:")
+            put("fs", rootFs(remoteName))
         })
         RemoteQuota(
             total = result["total"]?.jsonPrimitive?.longOrNull,
@@ -892,5 +892,8 @@ class RcloneEngineImpl @Inject constructor(
         const val KEY_SRC_REMOTE = "srcRemote"
         const val KEY_DST_FS = "dstFs"
         const val KEY_DST_REMOTE = "dstRemote"
+
+        /** rclone fs spec for a remote's root: the remote name followed by ':'. */
+        fun rootFs(remoteName: String): String = "$remoteName:"
     }
 }
