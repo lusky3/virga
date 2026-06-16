@@ -31,8 +31,7 @@ import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 @Composable
 internal fun ConflictStrategySection(form: SyncTaskForm, viewModel: SyncTaskEditViewModel) {
     val isBisync = form.direction == SyncDirection.BISYNC
-    val isOneWay = form.direction != SyncDirection.BISYNC
-    if (!isBisync && !isOneWay) return
+    val isOneWay = !isBisync
     Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
         HorizontalDivider()
         Text(

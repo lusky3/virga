@@ -175,6 +175,27 @@ class ConflictRepositoryTest {
         assertThat(entity.conflictType).isEqualTo(ConflictType.ONE_WAY)
         assertThat(entity.taskId).isEqualTo(task().id)
         assertThat(entity.remoteName).isEqualTo(task().remoteName)
+        // Stable basePath + count carried in variant1Size (so re-runs UPSERT in place).
+        assertThat(entity.basePath).isEqualTo(ConflictType.ONE_WAY_ADVISORY_BASE)
+        assertThat(entity.variant1Size).isEqualTo(3L)
+    }
+
+    @Test fun `B7 recordOneWayAdvisory reuses the same natural key across runs with different counts`() = runTest {
+        val captured = mutableListOf<List<ConflictEntity>>()
+        coEvery { conflictDao.pruneResolvedAndUpsert(any(), capture(captured)) } just Runs
+
+        repo.recordOneWayAdvisory(task(), differences = 4)
+        repo.recordOneWayAdvisory(task(), differences = 7)
+
+        // Both runs target the SAME (taskId, remoteName, basePath) natural key, so the
+        // second upserts the first row instead of orphaning a new one; only the carried
+        // count changes (4 -> 7). This is the accumulation-bug regression guard.
+        val first = captured[0].single()
+        val second = captured[1].single()
+        assertThat(first.basePath).isEqualTo(second.basePath)
+        assertThat(first.basePath).isEqualTo(ConflictType.ONE_WAY_ADVISORY_BASE)
+        assertThat(first.variant1Size).isEqualTo(4L)
+        assertThat(second.variant1Size).isEqualTo(7L)
     }
 
     // --- resolve ---

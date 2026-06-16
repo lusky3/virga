@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 2,
-    "identityHash": "PLACEHOLDER_REGENERATED_BY_ROOM",
+    "identityHash": "0a2842148fe4d4aebffab239cf4fa220",
     "entities": [
       {
         "tableName": "remotes",
@@ -604,7 +604,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'PLACEHOLDER_REGENERATED_BY_ROOM')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '0a2842148fe4d4aebffab239cf4fa220')"
     ]
   }
 }

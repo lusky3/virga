@@ -14,6 +14,14 @@ import javax.inject.Singleton
 object ConflictType {
     const val BISYNC = "bisync"
     const val ONE_WAY = "one-way"
+
+    /**
+     * Stable, count-independent basePath for the single one-way advisory row per
+     * task. Keeping it constant means successive runs UPSERT the same natural-key
+     * row (the differing-file count lives in [ConflictEntity.variant1Size]) instead
+     * of orphaning a new unresolved row each time the count changes.
+     */
+    const val ONE_WAY_ADVISORY_BASE = "Files differ (advisory)"
 }
 
 /** Choices the user makes for resolving a [Conflict]. */
@@ -111,17 +119,19 @@ class ConflictRepository @Inject constructor(
 
     /**
      * Records an advisory one-way conflict for [task] with [differences] differing files.
-     * Stores a single row with basePath = "<differences> file(s) differ" so the user sees
-     * the count in ConflictsScreen. DETECTION-ONLY: does not affect sync outcome.
+     * Uses a STABLE basePath ([ConflictType.ONE_WAY_ADVISORY_BASE]) and carries the count in
+     * [ConflictEntity.variant1Size], so repeated runs update the single row in place rather
+     * than accumulating orphaned rows when the count changes. DETECTION-ONLY: does not affect
+     * sync outcome.
      */
     suspend fun recordOneWayAdvisory(task: SyncTask, differences: Int): Result<Unit> = runCatching {
         val entity = ConflictEntity(
             taskId = task.id,
             remoteName = task.remoteName,
-            basePath = "$differences file(s) differ (advisory)",
+            basePath = ConflictType.ONE_WAY_ADVISORY_BASE,
             variant1Path = "",
             variant2Path = "",
-            variant1Size = 0,
+            variant1Size = differences.toLong(),
             variant2Size = 0,
             conflictType = ConflictType.ONE_WAY,
         )
