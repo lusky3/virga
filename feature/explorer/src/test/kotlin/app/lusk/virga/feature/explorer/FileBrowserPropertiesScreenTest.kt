@@ -135,8 +135,8 @@ class FileBrowserPropertiesScreenTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithText("budget.xlsx").assertIsDisplayed()
         composeRule.onNodeWithText("docs/budget.xlsx").assertIsDisplayed()
-        // Size should be displayed (96.5 KB = 98765 / 1024)
-        composeRule.onNodeWithText("96.5 KB").assertIsDisplayed()
+        // Derive expected size text from the same formatter so the assertion isn't locale-fragile.
+        composeRule.onNodeWithText(app.lusk.virga.core.common.util.formatFileSize(item.size)).assertIsDisplayed()
     }
 
     // -------------------------------------------------------------------------
