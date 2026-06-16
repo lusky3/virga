@@ -105,7 +105,7 @@
     <string name="explorer_action_share">Share</string>
     <string name="explorer_action_save">Save to device</string>
     <string name="explorer_action_upload">Upload file here</string>
-    <string name="explorer_transfer_in_progress">Transfer in progress…</string>
     <string name="explorer_transfer_failed">Transfer failed</string>
+    <string name="explorer_no_app_to_open">No app found to open this file</string>
     <string name="explorer_save_document_title">Save %1$s</string>
 </resources>

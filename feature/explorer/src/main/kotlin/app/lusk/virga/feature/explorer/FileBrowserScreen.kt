@@ -299,7 +299,6 @@ fun FileBrowserScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var pendingFile by remember { mutableStateOf<File?>(null) }
-    val transferInProgressMsg = context.getString(R.string.explorer_transfer_in_progress)
     val transferFailedMsg = context.getString(R.string.explorer_transfer_failed)
     val launchers = rememberTransferLaunchers(
         onSaveUri = { destUri ->
@@ -317,7 +316,7 @@ fun FileBrowserScreen(
                 runCatching { withContext(Dispatchers.IO) { copyFromSafUri(context, srcUri, tmp) } }
                     .fold(
                         onSuccess = { viewModel.uploadLocalFile(tmp) },
-                        onFailure = { e -> snackbar.showSnackbar(e.message ?: transferInProgressMsg) },
+                        onFailure = { e -> snackbar.showSnackbar(e.message ?: transferFailedMsg) },
                     )
             }
         },

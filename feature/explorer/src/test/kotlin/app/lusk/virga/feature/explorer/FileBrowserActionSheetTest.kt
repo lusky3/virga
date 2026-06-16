@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.designsystem.theme.VirgaTheme
+import com.google.common.truth.Truth.assertThat
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -75,8 +76,8 @@ class FileBrowserActionSheetTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Open").performClick()
         composeRule.waitForIdle()
-        assert(openCalled) { "onOpen was not called" }
-        assert(dismissCalled) { "onDismiss was not called" }
+        assertThat(openCalled).isTrue()
+        assertThat(dismissCalled).isTrue()
     }
 
     @Test
@@ -90,8 +91,8 @@ class FileBrowserActionSheetTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Share").performClick()
         composeRule.waitForIdle()
-        assert(shareCalled) { "onShare was not called" }
-        assert(dismissCalled) { "onDismiss was not called" }
+        assertThat(shareCalled).isTrue()
+        assertThat(dismissCalled).isTrue()
     }
 
     @Test
@@ -105,8 +106,8 @@ class FileBrowserActionSheetTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Save to device").performClick()
         composeRule.waitForIdle()
-        assert(saveCalled) { "onSave was not called" }
-        assert(dismissCalled) { "onDismiss was not called" }
+        assertThat(saveCalled).isTrue()
+        assertThat(dismissCalled).isTrue()
     }
 
     @Test
@@ -120,7 +121,7 @@ class FileBrowserActionSheetTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Upload file here").performClick()
         composeRule.waitForIdle()
-        assert(uploadCalled) { "onUpload was not called" }
-        assert(dismissCalled) { "onDismiss was not called" }
+        assertThat(uploadCalled).isTrue()
+        assertThat(dismissCalled).isTrue()
     }
 }

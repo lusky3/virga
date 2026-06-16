@@ -76,12 +76,20 @@ class FileBrowserRepository @Inject constructor(
         localFile: java.io.File,
         remoteName: String,
         remotePath: String,
-    ) = engine.uploadFile(
-        srcDir = localFile.parent ?: localFile.absolutePath,
-        srcName = localFile.name,
-        remoteName = remoteName,
-        remotePath = remotePath,
-    )
+    ) {
+        // Resolve against the absolute path so a relative input (parent == null, e.g.
+        // File("notes.txt")) still yields a real directory as srcDir — passing the file's
+        // own path there would break operations/copyfile source resolution.
+        val absolute = localFile.absoluteFile
+        val srcDir = absolute.parent
+            ?: throw IllegalArgumentException("localFile must resolve to a parent directory: $localFile")
+        engine.uploadFile(
+            srcDir = srcDir,
+            srcName = absolute.name,
+            remoteName = remoteName,
+            remotePath = remotePath,
+        )
+    }
 
     /**
      * Releases the daemon when browsing closes — best-effort: stops it only if no

@@ -277,7 +277,11 @@ class FileBrowserViewModel @Inject constructor(
         val result = runCatching { withContext(dispatchers.io) { io() } }
         result.fold(
             onSuccess = { onSuccess(it) },
-            onFailure = { e -> if (e is CancellationException) throw e else onFailure(e as Exception) },
+            // Safe-cast: runCatching also traps Error subclasses (e.g. OutOfMemoryError); a
+            // forced `as Exception` would throw ClassCastException and mask the original.
+            onFailure = { e ->
+                if (e is CancellationException) throw e else onFailure(e as? Exception ?: RuntimeException(e))
+            },
         )
     }
 

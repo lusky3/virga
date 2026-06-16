@@ -1,8 +1,10 @@
 package app.lusk.virga.feature.explorer
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -56,7 +58,14 @@ internal fun openFile(context: Context, file: File, mimeType: String?) {
         setDataAndType(uri, mimeType ?: "*/*")
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    context.startActivity(intent)
+    // No installed app may handle ACTION_VIEW for this type (binary blobs, odd extensions);
+    // startActivity would otherwise crash the process. shareFile needs no guard because
+    // createChooser handles the empty-handler case itself.
+    try {
+        context.startActivity(intent)
+    } catch (_: ActivityNotFoundException) {
+        Toast.makeText(context, R.string.explorer_no_app_to_open, Toast.LENGTH_SHORT).show()
+    }
 }
 
 /** Fires ACTION_SEND chooser for [file] with a FileProvider URI + read grant. */
@@ -75,10 +84,13 @@ internal fun shareFile(context: Context, file: File, mimeType: String?) {
  * Must be called off the main thread.
  */
 internal fun copyToSafUri(context: Context, srcFile: File, destUri: Uri) {
-    val input: InputStream = srcFile.inputStream()
-    val output: OutputStream = context.contentResolver.openOutputStream(destUri)
-        ?: error("Cannot open output stream for $destUri")
-    input.use { i -> output.use { o -> i.copyTo(o) } }
+    // Open the input inside its own use{} first: if openOutputStream returns null and
+    // error() throws, the input stream is still closed (it never leaks half-opened).
+    srcFile.inputStream().use { input ->
+        val output: OutputStream = context.contentResolver.openOutputStream(destUri)
+            ?: error("Cannot open output stream for $destUri")
+        output.use { o -> input.copyTo(o) }
+    }
 }
 
 /**
