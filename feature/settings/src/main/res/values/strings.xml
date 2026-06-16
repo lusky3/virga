@@ -71,6 +71,12 @@
     <string name="settings_retention_180">180 days</string>
     <string name="settings_retention_365">365 days</string>
 
+    <!-- Notifications section (SettingsNotificationsSection) -->
+    <string name="settings_section_notifications">Notifications</string>
+    <string name="settings_toggle_notify_on_failure_only">Notify on failure only</string>
+    <string name="settings_notify_on_failure_only_hint">When on, quiet successful syncs are silenced — you\'ll only see a notification when something goes wrong. Progress and error notifications always appear.</string>
+    <string name="settings_item_notification_settings">Notification settings</string>
+
     <!-- Language picker (SettingsLanguageSection) -->
     <string name="settings_section_language">Language</string>
     <string name="settings_language_hint">Sets the display language for Virga. Other apps and the system are not affected.</string>

@@ -341,18 +341,27 @@ open class SyncWorker @AssistedInject constructor(
             // foreground notification doesn't silently vanish. On a partial success
             // (errors>0), the error builder instead — it carries the error count and a Retry
             // action, so the user isn't told the backup was clean when some files were skipped.
+            // D5: when notifyOnFailureOnly is on, skip the success notification only — error
+            // and partial-success (finalErrorCount > 0) paths always post so failures are
+            // never silenced. The FGS/progress notification is managed separately and is
+            // never affected by this preference.
             runCatching {
-                val notification = if (finalErrorCount > 0) {
-                    notifications.error(
-                        task.name,
-                        "Completed with $finalErrorCount error(s) — some files couldn't be read or transferred.",
-                        taskId,
-                    )
-                } else {
-                    notifications.complete(task.name, last?.transferredFiles ?: 0, taskId)
+                val suppressSuccess = finalErrorCount == 0 &&
+                    runCatching { preferencesRepository.preferences.first().notifyOnFailureOnly }
+                        .getOrDefault(false)
+                if (!suppressSuccess) {
+                    val notification = if (finalErrorCount > 0) {
+                        notifications.error(
+                            task.name,
+                            "Completed with $finalErrorCount error(s) — some files couldn't be read or transferred.",
+                            taskId,
+                        )
+                    } else {
+                        notifications.complete(task.name, last?.transferredFiles ?: 0, taskId)
+                    }
+                    NotificationManagerCompat.from(applicationContext)
+                        .notify(SyncNotifications.resultId(taskId), notification)
                 }
-                NotificationManagerCompat.from(applicationContext)
-                    .notify(SyncNotifications.resultId(taskId), notification)
             }
             // Belt-and-suspenders: a successful sync proves the token is valid.
             // Clear any lingering needsReauth flag so re-auth via an out-of-band

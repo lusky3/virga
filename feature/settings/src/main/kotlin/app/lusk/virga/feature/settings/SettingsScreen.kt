@@ -256,6 +256,12 @@ fun SettingsScreen(
                 onDaysChange = viewModel::setRunRetentionDays,
             )
 
+            // Notifications — failure-only toggle + OS channel deep-link. See SettingsNotificationsSection.
+            NotificationsSection(
+                notifyOnFailureOnly = prefs.notifyOnFailureOnly,
+                onNotifyOnFailureOnlyChange = viewModel::setNotifyOnFailureOnly,
+            )
+
             HorizontalDivider()
             SectionTitle(stringResource(R.string.settings_section_help_about))
             SettingsLinkRow(
