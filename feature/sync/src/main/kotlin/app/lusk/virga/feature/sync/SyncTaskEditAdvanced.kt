@@ -174,6 +174,8 @@ internal fun AdvancedSection(form: SyncTaskForm, viewModel: SyncTaskEditViewMode
                 RetryConfigSection(form = form, viewModel = viewModel)
                 // B10: sync-group and sort order
                 GroupSection(form = form, viewModel = viewModel)
+                // B7: conflict strategy / detection
+                ConflictStrategySection(form = form, viewModel = viewModel)
             }
         }
     }

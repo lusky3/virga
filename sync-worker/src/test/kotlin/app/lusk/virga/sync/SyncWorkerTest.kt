@@ -12,6 +12,7 @@ import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.data.ConflictRepository
 import app.lusk.virga.core.data.RemoteRepository
+import app.lusk.virga.sync.CheckUseCase
 import app.lusk.virga.core.data.StatsRepository
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
@@ -65,6 +66,7 @@ class SyncWorkerTest {
     private val preferencesRepository: PreferencesRepository = mockk {
         every { preferences } returns flowOf(AppPreferences())
     }
+    private val checkUseCase: CheckUseCase = mockk(relaxed = true)
 
     @Before
     fun setUp() {
@@ -110,13 +112,13 @@ class SyncWorkerTest {
                         SyncWorker(
                             appContext, workerParameters, executor, engine, taskRepository,
                             historyRepository, conflictRepository, statsRepository, staging, scheduler,
-                            remoteRepository, preferencesRepository,
+                            remoteRepository, preferencesRepository, checkUseCase,
                         )
                     } else {
                         object : SyncWorker(
                             appContext, workerParameters, executor, engine, taskRepository,
                             historyRepository, conflictRepository, statsRepository, staging, scheduler,
-                            remoteRepository, preferencesRepository,
+                            remoteRepository, preferencesRepository, checkUseCase,
                         ) {
                             override fun anotherRunInFlight(taskId: Long): Boolean = inFlightOverride
                         }
@@ -713,6 +715,77 @@ class SyncWorkerTest {
 
         assertThat(result).isEqualTo(ListenableWorker.Result.success())
         coVerify(exactly = 1) { executor.run(any(), any(), any(), any(), any()) }
+    }
+
+    // --- B7: pre-sync one-way conflict check ----------------------------------
+
+    @Test
+    fun conflictCheck_true_oneWay_nonContent_recordsAdvisoryConflict() = runBlocking {
+        // When conflictCheck=true on a non-SAF one-way task, the worker runs a pre-sync
+        // check and calls recordOneWayAdvisory when differences > 0.
+        val t = SyncTask(
+            id = TASK_ID,
+            name = "test",
+            sourcePath = "/sdcard/DCIM",
+            remoteName = "gdrive",
+            remotePath = "/Backup",
+            direction = SyncDirection.UPLOAD,
+            intervalMinutes = null,
+            conflictCheck = true,
+        )
+        coEvery { taskRepository.getTask(TASK_ID) } returns t
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = t.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), any(), any()) } returns
+            flow { emit(progress(transferred = 2)) }
+        every { checkUseCase.isAvailableFor(t) } returns true
+        coEvery { executor.runCheck(any()) } returns
+            flow { emit(progress(transferred = 0, errors = 4)) }
+
+        buildWorker().doWork()
+
+        coVerify { conflictRepository.recordOneWayAdvisory(t, 4) }
+    }
+
+    @Test
+    fun conflictCheck_false_oneWay_doesNotRunCheck() = runBlocking {
+        // Default conflictCheck=false: no pre-sync check, no advisory conflict recording.
+        val t = task(direction = SyncDirection.UPLOAD)
+        coEvery { taskRepository.getTask(TASK_ID) } returns t
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = t.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), any(), any()) } returns
+            flow { emit(progress(transferred = 1)) }
+
+        buildWorker().doWork()
+
+        coVerify(exactly = 0) { executor.runCheck(any()) }
+        coVerify(exactly = 0) { conflictRepository.recordOneWayAdvisory(any(), any()) }
+    }
+
+    @Test
+    fun conflictCheck_true_bisync_doesNotRunCheck() = runBlocking {
+        // BISYNC tasks must not run the one-way check even if conflictCheck=true.
+        val t = SyncTask(
+            id = TASK_ID,
+            name = "test",
+            sourcePath = "/sdcard/DCIM",
+            remoteName = "gdrive",
+            remotePath = "/Backup",
+            direction = SyncDirection.BISYNC,
+            intervalMinutes = null,
+            conflictCheck = true,
+        )
+        coEvery { taskRepository.getTask(TASK_ID) } returns t
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = t.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), any(), any()) } returns
+            flow { emit(progress(transferred = 1)) }
+
+        buildWorker().doWork()
+
+        coVerify(exactly = 0) { executor.runCheck(any()) }
+        coVerify(exactly = 0) { conflictRepository.recordOneWayAdvisory(any(), any()) }
     }
 
     /** Current local minute-of-day (0..1439), matching the worker's quiet-hours clock. */

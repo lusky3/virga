@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -57,6 +58,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.common.util.formatFileSize
 import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import app.lusk.virga.core.data.ConflictChoice
+import app.lusk.virga.core.data.ConflictType
 import app.lusk.virga.core.common.model.Conflict
 import app.lusk.virga.core.designsystem.component.EmptyState
 import app.lusk.virga.core.designsystem.component.SelectionTopBar
@@ -240,6 +242,9 @@ private fun ConflictCard(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
+                if (conflict.conflictType.isNotBlank()) {
+                    ConflictTypeBadge(conflict.conflictType)
+                }
             }
             Text(
                 stringResource(R.string.conflicts_on_remote, conflict.remoteName),
@@ -251,6 +256,15 @@ private fun ConflictCard(
                 stringResource(R.string.conflicts_detected_at, detectedAt),
                 style = MaterialTheme.typography.labelSmall,
             )
+            // One-way detection rows are advisory: they have no variant files to keep,
+            // so show the differing-file count (carried in variant1Size) and omit the
+            // KEEP_* resolve actions, which only make sense for bisync .conflictN pairs.
+            if (conflict.conflictType == ConflictType.ONE_WAY) {
+                Text(
+                    stringResource(R.string.conflicts_one_way_advisory, conflict.variant1Size),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            } else {
             VariantRow(stringResource(R.string.conflicts_label_local), conflict.variant1Path, conflict.variant1Size)
             VariantRow(stringResource(R.string.conflicts_label_remote), conflict.variant2Path, conflict.variant2Size)
 
@@ -290,7 +304,20 @@ private fun ConflictCard(
                     ) { Text(stringResource(R.string.conflicts_btn_keep_both)) }
                 }
             }
+            }
         }
+    }
+}
+
+/** Small badge showing the conflict origin type ("bisync" or "one-way"). */
+@Composable
+internal fun ConflictTypeBadge(conflictType: String) {
+    Badge(
+        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        modifier = Modifier.padding(start = VirgaSpacing.xs),
+    ) {
+        Text(conflictType, style = MaterialTheme.typography.labelSmall)
     }
 }
 

@@ -415,6 +415,76 @@ class MappersTest {
         assertThat(domain.resolved).isTrue()
     }
 
+    // --- B7: conflictResolve / conflictCheck / conflictType ---
+
+    @Test fun `B7 conflictResolve and conflictCheck survive SyncTask round-trip`() {
+        val original = SyncTask(
+            id = 80L,
+            name = "Bisync",
+            sourcePath = "/sdcard/DCIM",
+            remoteName = "gdrive",
+            remotePath = "Archive",
+            direction = SyncDirection.BISYNC,
+            intervalMinutes = null,
+            createdAtEpochMs = 1L,
+            conflictResolve = "newer",
+            conflictCheck = true,
+        )
+
+        val roundTripped = original.toEntity().toDomain()
+
+        assertThat(roundTripped.conflictResolve).isEqualTo("newer")
+        assertThat(roundTripped.conflictCheck).isTrue()
+    }
+
+    @Test fun `B7 conflictResolve blank and conflictCheck false are defaults`() {
+        val entity = SyncTaskEntity(
+            id = 81L,
+            name = "Default",
+            sourcePath = "/sdcard/DCIM",
+            remoteName = "gdrive",
+            remotePath = "Archive",
+            direction = SyncDirection.UPLOAD,
+            intervalMinutes = null,
+        )
+
+        val domain = entity.toDomain()
+
+        assertThat(domain.conflictResolve).isEmpty()
+        assertThat(domain.conflictCheck).isFalse()
+    }
+
+    @Test fun `B7 conflictType survives ConflictEntity toDomain`() {
+        val entity = ConflictEntity(
+            id = 5L,
+            taskId = 9L,
+            remoteName = "gdrive",
+            basePath = "Docs/report.txt",
+            variant1Path = "Docs/report.txt.conflict1",
+            variant2Path = "Docs/report.txt.conflict2",
+            variant1Size = 0L,
+            variant2Size = 0L,
+            conflictType = "bisync",
+        )
+
+        assertThat(entity.toDomain().conflictType).isEqualTo("bisync")
+    }
+
+    @Test fun `B7 conflictType defaults to empty string for old ConflictEntity rows`() {
+        val entity = ConflictEntity(
+            id = 6L,
+            taskId = 9L,
+            remoteName = "gdrive",
+            basePath = "file.txt",
+            variant1Path = "file.txt.conflict1",
+            variant2Path = "file.txt.conflict2",
+            variant1Size = 0L,
+            variant2Size = 0L,
+        )
+
+        assertThat(entity.toDomain().conflictType).isEmpty()
+    }
+
     // --- B4: scheduleTimes round-trip ---
 
     @Test fun `scheduleTimes non-empty round-trips through toEntity and back`() {

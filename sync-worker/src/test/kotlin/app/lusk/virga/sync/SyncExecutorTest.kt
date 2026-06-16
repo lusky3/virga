@@ -342,4 +342,38 @@ class SyncExecutorTest {
         SyncExecutor(engine).run(task(SyncDirection.BISYNC), metered = false, dryRun = true).collect {}
         assertThat(engine.bisyncArgs!!.third.dryRun).isTrue()
     }
+
+    // --- B7: conflictResolve threading into BisyncOptions ------------------
+
+    @Test
+    fun `B7 non-blank conflictResolve is threaded into BisyncOptions`() = runTest {
+        val engine = RecordingEngine()
+        SyncExecutor(engine).run(
+            task(SyncDirection.BISYNC).copy(conflictResolve = "newer"),
+            metered = false,
+        ).collect {}
+
+        assertThat(engine.bisyncArgs!!.third.conflictResolve).isEqualTo("newer")
+    }
+
+    @Test
+    fun `B7 blank conflictResolve becomes null in BisyncOptions`() = runTest {
+        val engine = RecordingEngine()
+        SyncExecutor(engine).run(task(SyncDirection.BISYNC), metered = false).collect {}
+
+        assertThat(engine.bisyncArgs!!.third.conflictResolve).isNull()
+    }
+
+    @Test
+    fun `B7 conflictResolve is not set on SyncOptions for one-way syncs`() = runTest {
+        val engine = RecordingEngine()
+        SyncExecutor(engine).run(
+            task(SyncDirection.UPLOAD).copy(conflictResolve = "newer"),
+            metered = false,
+        ).collect {}
+
+        // One-way uses syncArgs, not bisyncArgs — verify the engine received sync, not bisync.
+        assertThat(engine.syncArgs).isNotNull()
+        assertThat(engine.bisyncArgs).isNull()
+    }
 }

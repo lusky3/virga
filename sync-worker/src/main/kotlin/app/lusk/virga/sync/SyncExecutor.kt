@@ -73,6 +73,7 @@ class SyncExecutor @Inject constructor(
                     maxDelete = task.maxDelete,
                     extraConfig = extra,
                     maxTransfer = task.maxTransfer.ifBlank { null },
+                    conflictResolve = task.conflictResolve.ifBlank { null },
                 ),
             )
             else -> engine.sync(

@@ -18,6 +18,7 @@ import app.lusk.virga.core.common.model.SyncProgress
 import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.data.ConflictRepository
+import app.lusk.virga.core.data.ConflictType
 import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.data.StatsRepository
 import app.lusk.virga.core.data.SyncHistoryRepository
@@ -55,6 +56,7 @@ open class SyncWorker @AssistedInject constructor(
     private val scheduler: SyncScheduler,
     private val remoteRepository: RemoteRepository,
     private val preferencesRepository: PreferencesRepository,
+    private val checkUseCase: CheckUseCase,
 ) : CoroutineWorker(appContext, params) {
 
     private val notifications = SyncNotifications(appContext)
@@ -201,6 +203,11 @@ open class SyncWorker @AssistedInject constructor(
                         message = "Local-disk remotes need all-files access, which isn't granted on this build. Use a cloud remote.",
                     )
                 } else {
+                // B7: pre-sync conflict detection for one-way tasks (DETECTION-ONLY).
+                // Runs a check before the actual sync and records advisory conflicts so
+                // the user sees them in ConflictsScreen. Does NOT change the sync outcome.
+                runOneWayConflictCheck(task, effectiveTask)
+
                 // A bisync task's first run needs rclone's --resync to establish
                 // the baseline listing (otherwise rclone aborts). Request it until
                 // the task has a prior successful run. The current run is still
@@ -412,6 +419,31 @@ open class SyncWorker @AssistedInject constructor(
             (task.retryOnRclone && failure is VirgaError.Rclone)
         if (retryable && attempt < task.maxRetries - 1) return Result.retry()
         return Result.failure()
+    }
+
+    /**
+     * Advisory pre-sync conflict detection for one-way tasks. Runs a check (no transfer)
+     * and records differing files as a single advisory conflict row so the user sees them
+     * in ConflictsScreen. DETECTION-ONLY: does NOT block or alter the sync. No-op when
+     * [task.conflictCheck][SyncTask.conflictCheck] is false, direction is BISYNC, or the
+     * source is a SAF URI (check is unavailable for SAF). Daemon must already be leased.
+     */
+    private suspend fun runOneWayConflictCheck(task: SyncTask, effectiveTask: SyncTask) {
+        if (!task.conflictCheck) return
+        if (task.direction == SyncDirection.BISYNC) return
+        if (!checkUseCase.isAvailableFor(task)) return
+        val result = runCatching {
+            var differences = 0
+            executor.runCheck(effectiveTask)
+                .catch { Log.w(TAG, "pre-sync check flow error", it) }
+                .collect { differences = it.errors }
+            differences
+        }
+        val diffs = result.getOrNull() ?: return
+        if (diffs > 0) {
+            runCatching { conflictRepository.recordOneWayAdvisory(task, diffs) }
+                .onFailure { Log.w(TAG, "Failed to record one-way advisory conflicts", it) }
+        }
     }
 
     /**

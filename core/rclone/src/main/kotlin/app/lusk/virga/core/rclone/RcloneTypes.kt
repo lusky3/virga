@@ -123,6 +123,11 @@ data class BisyncOptions(
      *  the run once this many bytes have been transferred. CutoffMode is set to CAUTIOUS
      *  automatically. Null = unset. */
     override val maxTransfer: String? = null,
+    /**
+     * Rclone `_config` key "ConflictResolve" for bisync. Accepted values:
+     * none, newer, older, larger, smaller, path1, path2. Null/"" = rclone default (none).
+     */
+    val conflictResolve: String? = null,
 ) : RcloneRunConfig
 
 /** Parsed view of the rclone config (remote name -> type). */

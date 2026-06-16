@@ -78,6 +78,8 @@ internal fun SyncTaskEntity.toDomain() = SyncTask(
     scheduleTimes = decodeScheduleTimes(scheduleTimes),
     groupTag = groupTag,
     sortOrder = sortOrder,
+    conflictResolve = conflictResolve,
+    conflictCheck = conflictCheck,
 )
 
 internal fun SyncTask.toEntity() = SyncTaskEntity(
@@ -121,6 +123,8 @@ internal fun SyncTask.toEntity() = SyncTaskEntity(
     scheduleTimes = encodeScheduleTimes(scheduleTimes),
     groupTag = groupTag,
     sortOrder = sortOrder,
+    conflictResolve = conflictResolve,
+    conflictCheck = conflictCheck,
 )
 
 internal fun SyncRunEntity.toDomain() = SyncRun(
@@ -148,4 +152,5 @@ internal fun ConflictEntity.toDomain() = Conflict(
     variant2Size = variant2Size,
     detectedAtEpochMs = detectedAtEpochMs,
     resolved = resolved,
+    conflictType = conflictType,
 )
