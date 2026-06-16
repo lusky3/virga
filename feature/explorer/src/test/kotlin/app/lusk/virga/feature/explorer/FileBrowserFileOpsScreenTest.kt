@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.common.model.Remote
@@ -120,7 +121,7 @@ class FileBrowserFileOpsScreenTest {
         composeRule.waitForIdle()
 
         // With 2 items selected the Rename button should be visible but disabled.
-        composeRule.onNodeWithContentDescription("Rename").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Rename").assertIsDisplayed().assertIsNotEnabled()
         assertThat(vm.state.value.selectedPaths.size).isEqualTo(2)
     }
 }

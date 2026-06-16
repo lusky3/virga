@@ -115,7 +115,9 @@ internal fun DestinationDialog(
             )
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(dest.trim().trim('/')) }) {
+            // Require a non-blank entry so an accidental tap can't silently move/copy to
+            // the remote root; users who want root can type "/" (it normalizes to "").
+            TextButton(onClick = { onConfirm(dest.trim().trim('/')) }, enabled = dest.isNotBlank()) {
                 Text(stringResource(confirmRes))
             }
         },

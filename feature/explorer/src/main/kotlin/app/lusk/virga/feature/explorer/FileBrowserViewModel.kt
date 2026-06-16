@@ -278,6 +278,7 @@ class FileBrowserViewModel @Inject constructor(
 
     /** Deletes selected items per-item. Always refreshes afterward; partial failures surface via statusMessage. */
     fun deleteSelected() {
+        if (_state.value.fileOpInProgress) return
         val remote = _state.value.remoteName ?: return
         val paths = _state.value.selectedPaths
         val rawEntries = _state.value.rawEntries
@@ -320,6 +321,7 @@ class FileBrowserViewModel @Inject constructor(
 
     /** Renames [path] to [newName] in the same parent dir. Validates structure + collision (self excluded). */
     fun rename(path: String, newName: String) {
+        if (_state.value.fileOpInProgress) return
         val trimmed = newName.trim()
         if (!isStructurallyValidFolderName(trimmed)) {
             _state.update { it.copy(renameError = R.string.explorer_rename_invalid_name) }
@@ -380,6 +382,7 @@ class FileBrowserViewModel @Inject constructor(
 
     /** Moves selected items into [destDir] per-item. Slashes normalized; empty = root. Always refreshes. */
     fun moveSelected(destDir: String) {
+        if (_state.value.fileOpInProgress) return
         val remote = _state.value.remoteName ?: return
         val paths = _state.value.selectedPaths
         val rawEntries = _state.value.rawEntries
@@ -412,6 +415,7 @@ class FileBrowserViewModel @Inject constructor(
 
     /** Copies selected items into [destDir] per-item. Slashes normalized; empty = root. Always refreshes. */
     fun copySelected(destDir: String) {
+        if (_state.value.fileOpInProgress) return
         val remote = _state.value.remoteName ?: return
         val paths = _state.value.selectedPaths
         val rawEntries = _state.value.rawEntries
