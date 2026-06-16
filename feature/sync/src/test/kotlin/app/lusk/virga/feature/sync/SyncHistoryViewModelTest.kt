@@ -12,6 +12,7 @@ import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
 import app.lusk.virga.sync.SyncScheduler
 import com.google.common.truth.Truth.assertThat
+import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -215,6 +216,45 @@ class SyncHistoryViewModelTest {
         advanceUntilIdle()
 
         coVerify(exactly = 1) { historyRepository.clearAll() }
+    }
+
+    // --- exportRows ---------------------------------------------------------
+
+    @Test
+    fun exportRows_mapsNamedSyncRunToSyncRunRow() = runTest(mainDispatcher.dispatcher) {
+        val namedRun = NamedSyncRun(run = run(id = 9L, taskId = 3L), taskName = "Videos")
+        coEvery { historyRepository.exportRows(any(), any(), any()) } returns listOf(namedRun)
+
+        val rows = viewModel().exportRows()
+
+        assertThat(rows).hasSize(1)
+        assertThat(rows.single().run.id).isEqualTo(9L)
+        assertThat(rows.single().taskName).isEqualTo("Videos")
+    }
+
+    @Test
+    fun exportRows_nullTaskName_fallsBackToDeletedLabel() = runTest(mainDispatcher.dispatcher) {
+        val namedRun = NamedSyncRun(run = run(id = 11L, taskId = 99L), taskName = null)
+        coEvery { historyRepository.exportRows(any(), any(), any()) } returns listOf(namedRun)
+
+        val rows = viewModel().exportRows()
+
+        assertThat(rows.single().taskName).isEqualTo("(deleted task)")
+    }
+
+    @Test
+    fun exportRows_trimsWhitespacePaddedSearchQuery() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.uiState.collect {} }
+        vm.setSearchQuery("  photos  ")
+        advanceUntilIdle()
+
+        coEvery { historyRepository.exportRows(null, null, "photos") } returns emptyList()
+
+        vm.exportRows()
+
+        coVerify { historyRepository.exportRows(null, null, "photos") }
+        job.cancel()
     }
 
     // --- loading flag -------------------------------------------------------

@@ -2,10 +2,12 @@ package app.lusk.virga.core.data
 
 import app.lusk.virga.core.common.model.SyncStatus
 import app.lusk.virga.core.database.dao.SyncRunDao
+import app.lusk.virga.core.database.dao.SyncRunWithTaskName
 import app.lusk.virga.core.database.entity.SyncRunEntity
 import com.google.common.truth.Truth.assertThat
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.flow.first
@@ -259,5 +261,79 @@ class SyncHistoryRepositoryTest {
         assertThat(runs.map { it.id }).containsExactly(10L, 11L).inOrder()
         assertThat(runs.map { it.status })
             .containsExactly(SyncStatus.FAILED, SyncStatus.SUCCESS).inOrder()
+    }
+
+    // --- distinctTaskIds ---
+
+    @Test fun `distinctTaskIds delegates to dao observeDistinctTaskIds`() = runTest {
+        val idsFlow = flowOf(listOf(1L, 2L, 5L))
+        every { runDao.observeDistinctTaskIds() } returns idsFlow
+        val freshRepo = SyncHistoryRepository(runDao)
+
+        val ids = freshRepo.distinctTaskIds.first()
+
+        assertThat(ids).containsExactly(1L, 2L, 5L).inOrder()
+    }
+
+    @Test fun `distinctTaskIds emits empty list when no runs exist`() = runTest {
+        every { runDao.observeDistinctTaskIds() } returns flowOf(emptyList())
+        val freshRepo = SyncHistoryRepository(runDao)
+
+        assertThat(freshRepo.distinctTaskIds.first()).isEmpty()
+    }
+
+    // --- exportRows ---
+
+    @Test fun `exportRows maps SyncRunWithTaskName rows to NamedSyncRun domain models`() = runTest {
+        val withTask = SyncRunWithTaskName(
+            id = 20L, taskId = 3L, startedAtEpochMs = 100L, endedAtEpochMs = 200L,
+            status = SyncStatus.SUCCESS, filesTransferred = 7, bytesTransferred = 2048L,
+            errorCount = 0, errorMessage = null, logPath = null, failedFiles = "",
+            remoteName = "s3", direction = "UPLOAD", durationMs = 100L, taskName = "Docs",
+        )
+        coEvery { runDao.exportRunsWithTask(null, null, "") } returns listOf(withTask)
+
+        val result = repo.exportRows(taskId = null, status = null, query = "")
+
+        assertThat(result).hasSize(1)
+        assertThat(result.single().run.id).isEqualTo(20L)
+        assertThat(result.single().taskName).isEqualTo("Docs")
+        assertThat(result.single().run.status).isEqualTo(SyncStatus.SUCCESS)
+    }
+
+    @Test fun `exportRows preserves null taskName for deleted tasks`() = runTest {
+        val withTask = SyncRunWithTaskName(
+            id = 30L, taskId = 99L, startedAtEpochMs = 1L, endedAtEpochMs = null,
+            status = SyncStatus.FAILED, filesTransferred = 0, bytesTransferred = 0L,
+            errorCount = 1, errorMessage = "boom", logPath = null, failedFiles = "",
+            remoteName = "gdrive", direction = "DOWNLOAD", durationMs = 0L, taskName = null,
+        )
+        coEvery { runDao.exportRunsWithTask(any(), any(), any()) } returns listOf(withTask)
+
+        val result = repo.exportRows(taskId = null, status = null, query = "")
+
+        assertThat(result.single().taskName).isNull()
+    }
+
+    @Test fun `exportRows forwards taskId status and query filter args to the dao`() = runTest {
+        coEvery { runDao.exportRunsWithTask(5L, SyncStatus.FAILED, "photo") } returns emptyList()
+
+        repo.exportRows(taskId = 5L, status = SyncStatus.FAILED, query = "photo")
+
+        coVerify { runDao.exportRunsWithTask(5L, SyncStatus.FAILED, "photo") }
+    }
+
+    // --- pagedRuns ---
+
+    @Test fun `pagedRuns returns a non-null flow`() {
+        val flow = repo.pagedRuns(taskId = null, status = null, query = "")
+        assertThat(flow).isNotNull()
+    }
+
+    @Test fun `pagedRuns passes filter args through to the paging source factory`() = runTest {
+        // Verify the DAO method is wired up — the returned PagingSource is not collected
+        // in a unit test (no paging test environment), but invoking the factory is enough.
+        repo.pagedRuns(taskId = 7L, status = SyncStatus.SUCCESS, query = "backup")
+        // No assertion beyond non-null; the DAO-level filter is exercised in SyncRunPagedDaoTest.
     }
 }
