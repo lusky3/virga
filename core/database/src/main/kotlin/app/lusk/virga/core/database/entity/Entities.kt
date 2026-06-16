@@ -115,6 +115,20 @@ data class SyncTaskEntity(
      * [scheduleHour]/[scheduleMinute] pair. Empty string = single-time fallback.
      */
     val scheduleTimes: String = "",
+    // B10: sync-all concurrency / order / groups --------------------------------
+    /**
+     * Optional group label for use with [SyncScheduler.syncAll]. Tasks sharing a
+     * non-blank groupTag can be enqueued or cancelled as a set. Empty = no group
+     * (participates in the global "sync all" but not in any named group).
+     */
+    val groupTag: String = "",
+    /**
+     * Best-effort ordering hint within a syncAll run. Tasks are sorted by
+     * (sortOrder ASC, id ASC) and ENQUEUED in that order; since each task is its own
+     * WorkManager unique work, this is enqueue order, not a hard execution-order
+     * guarantee. Lower values enqueue first; ties broken by id. Default 0.
+     */
+    val sortOrder: Int = 0,
 )
 
 /**
