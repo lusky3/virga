@@ -46,44 +46,31 @@ data class SortConfig(
 
 data class FileBrowserUiState(
     val remoteName: String? = null,
-    /** Current path within the remote, "" for root. */
     val path: String = "",
     val rawEntries: List<FileItem> = emptyList(),
     val loading: Boolean = false,
-    /** True while a pull-to-refresh reload is in flight (distinct from [loading]). */
     val isRefreshing: Boolean = false,
     val error: String? = null,
-    /** True when the directory has more entries than [MAX_ENTRIES]. */
     val truncated: Boolean = false,
     val sortConfig: SortConfig = SortConfig(),
     val searchQuery: String = "",
     val searchActive: Boolean = false,
     val selectedPaths: Set<String> = emptySet(),
     val selectionMode: Boolean = false,
-    /** True while the "create folder" dialog is shown (pick mode). */
     val showCreateFolderDialog: Boolean = false,
-    /** String resource for the current create-folder error, or null if none. */
     @param:StringRes val createFolderError: Int? = null,
-    /** True while a folder-creation RC call is in flight. */
     val creatingFolder: Boolean = false,
-    /** One-shot operation status message (error string); cleared after consumed. */
     val statusMessage: String? = null,
-    /** True while a delete/rename/move/copy operation is in flight. */
     val fileOpInProgress: Boolean = false,
-    /** True while the delete-confirm dialog is shown (destructive). */
     val showDeleteConfirmDialog: Boolean = false,
-    /** True while the rename dialog is shown. */
     val showRenameDialog: Boolean = false,
-    /** The single path being renamed (null when dialog is closed). */
     val renamePath: String? = null,
-    /** String resource for a rename validation error, or null if none. */
     @param:StringRes val renameError: Int? = null,
-    /** True while the move-destination dialog is shown. */
     val showMoveDialog: Boolean = false,
-    /** True while the copy-destination dialog is shown. */
     val showCopyDialog: Boolean = false,
-    /** The item whose properties sheet is open, or null when closed. */
     val propertiesItem: FileItem? = null,
+    val actionSheetItem: FileItem? = null,
+    val transferInProgress: Boolean = false,
 ) {
     val atRoot: Boolean get() = path.isEmpty()
     val breadcrumb: List<String> get() = path.split('/').filter { it.isNotBlank() }
@@ -247,6 +234,54 @@ class FileBrowserViewModel @Inject constructor(
         _state.update { it.copy(propertiesItem = null) }
     }
 
+    fun showActionSheet(item: FileItem) { _state.update { it.copy(actionSheetItem = item) } }
+    fun dismissActionSheet() { _state.update { it.copy(actionSheetItem = null) } }
+
+    /**
+     * Downloads [item] into [cacheDir]/shared and invokes [onReady] with the file on the
+     * main thread. [onReady] fires the intent; the ViewModel only manages transfer state.
+     */
+    fun downloadForAction(item: FileItem, cacheDir: java.io.File, onReady: (java.io.File) -> Unit) {
+        val remote = _state.value.remoteName ?: return
+        if (_state.value.transferInProgress) return
+        viewModelScope.launch {
+            _state.update { it.copy(transferInProgress = true, actionSheetItem = null) }
+            runTransfer(
+                io = { fileBrowser.downloadToCache(remote, item.path, java.io.File(cacheDir, "shared")) },
+                onSuccess = { file -> _state.update { it.copy(transferInProgress = false) }; onReady(file) },
+                onFailure = { e -> _state.update { it.copy(transferInProgress = false, statusMessage = e.toUserMessage()) } },
+            )
+        }
+    }
+
+    /** Uploads [localFile] (plain fs file, not content://) into the current remote directory. */
+    fun uploadLocalFile(localFile: java.io.File) {
+        val remote = _state.value.remoteName ?: return
+        val currentPath = _state.value.path
+        if (_state.value.transferInProgress) return
+        val destPath = if (currentPath.isEmpty()) localFile.name else "$currentPath/${localFile.name}"
+        viewModelScope.launch {
+            _state.update { it.copy(transferInProgress = true) }
+            runTransfer(
+                io = { fileBrowser.uploadFromLocal(localFile, remote, destPath) },
+                onSuccess = { _state.update { it.copy(transferInProgress = false) }; load(remote, currentPath) },
+                onFailure = { e -> _state.update { it.copy(transferInProgress = false, statusMessage = e.toUserMessage()) } },
+            )
+        }
+    }
+
+    private suspend fun <T> runTransfer(
+        io: suspend () -> T,
+        onSuccess: (T) -> Unit,
+        onFailure: (Exception) -> Unit,
+    ) {
+        val result = runCatching { withContext(dispatchers.io) { io() } }
+        result.fold(
+            onSuccess = { onSuccess(it) },
+            onFailure = { e -> if (e is CancellationException) throw e else onFailure(e as Exception) },
+        )
+    }
+
     fun setSortConfig(config: SortConfig) {
         _state.update { it.copy(sortConfig = config) }
     }
@@ -389,18 +424,7 @@ class FileBrowserViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Shared coroutine skeleton for delete/move/copy batch ops.
-     *
-     * Guards: skips if [fileOpInProgress] or no remote or no selected paths.
-     * Loop: calls [perItem] for each path, catching exceptions per-item
-     * (CancellationException is always rethrown). Always clears selection and
-     * refreshes the listing; sets statusMessage to a partial-failure summary
-     * when at least one item failed.
-     *
-     * [hideDialog] is a state transform applied together with setting
-     * fileOpInProgress=true at the start (e.g. `copy(showDeleteConfirmDialog=false)`).
-     */
+    /** Shared batch-op skeleton: guards, per-item loop (CE rethrown), always refreshes. */
     private fun runBatchFileOp(
         hideDialog: FileBrowserUiState.() -> FileBrowserUiState,
         perItem: suspend BatchScope.(path: String) -> Unit,
@@ -431,26 +455,15 @@ class FileBrowserViewModel @Inject constructor(
         }
     }
 
-    /** Receiver for [runBatchFileOp] lambdas — carries the resolved remote name. */
     private inner class BatchScope(val remote: String)
 
-    /** L3: the in-flight load, cancelled before each relaunch so a slow list(A)
-     *  finishing after list(parent) can't overwrite the parent's entries. */
     private var loadJob: kotlinx.coroutines.Job? = null
 
     private fun load(remote: String, path: String, isRefresh: Boolean = false) {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
-            // Always set both flags explicitly so a leftover from a cancelled opposing
-            // job is cleared atomically — prevents loading && isRefreshing both being true.
             _state.update {
-                it.copy(
-                    remoteName = remote,
-                    path = path,
-                    loading = !isRefresh,
-                    isRefreshing = isRefresh,
-                    error = null,
-                )
+                it.copy(remoteName = remote, path = path, loading = !isRefresh, isRefreshing = isRefresh, error = null)
             }
             try {
                 val raw = fileBrowser.list(remote, path)
@@ -458,14 +471,10 @@ class FileBrowserViewModel @Inject constructor(
                     val truncated = raw.size > MAX_ENTRIES
                     (if (truncated) raw.take(MAX_ENTRIES) else raw) to truncated
                 }
-                _state.update {
-                    it.copy(rawEntries = capped, loading = false, isRefreshing = false, truncated = truncated)
-                }
+                _state.update { it.copy(rawEntries = capped, loading = false, isRefreshing = false, truncated = truncated) }
             } catch (e: VirgaError) {
                 _state.update { it.copy(loading = false, isRefreshing = false, error = e.toUserMessage()) }
             } catch (e: Exception) {
-                // Navigating away cancels this load; a CancellationException is
-                // normal flow control, not an error to surface to the user.
                 if (e is CancellationException) throw e
                 _state.update { it.copy(loading = false, isRefreshing = false, error = e.toUserMessage()) }
             }
@@ -474,15 +483,9 @@ class FileBrowserViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        // viewModelScope is already cancelled by super.onCleared(), so a
-        // viewModelScope.launch here never runs — the rclone daemon would leak.
-        // Release it on a detached scope so cleanup actually executes.
-        CoroutineScope(dispatchers.io + SupervisorJob()).launch {
-            runCatching { fileBrowser.releaseDaemon() }
-        }
+        CoroutineScope(dispatchers.io + SupervisorJob()).launch { runCatching { fileBrowser.releaseDaemon() } }
     }
 
-    /** Null when all succeeded; a brief count summary when some or all failed. */
     private fun buildPartialFailureMessage(succeeded: Int, failCount: Int): String? {
         if (failCount == 0) return null
         return "Succeeded: $succeeded, failed: $failCount"

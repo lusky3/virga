@@ -51,6 +51,18 @@ class SyncExecutorTest {
         override suspend fun deleteFile(remote: String, path: String) = Unit
         override suspend fun moveFile(source: String, dest: String) = Unit
         override suspend fun copyFile(source: String, dest: String) = Unit
+        override suspend fun downloadFile(
+            remoteName: String,
+            remotePath: String,
+            destDir: String,
+            destName: String,
+        ) = Unit
+        override suspend fun uploadFile(
+            srcDir: String,
+            srcName: String,
+            remoteName: String,
+            remotePath: String,
+        ) = Unit
         override suspend fun purge(remote: String, path: String) = Unit
         override suspend fun mkdir(remote: String, path: String) = Unit
         override suspend fun testConnectivity(remoteName: String) = Result.success(Unit)

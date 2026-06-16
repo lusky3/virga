@@ -496,6 +496,30 @@ class RcloneEngineImpl @Inject constructor(
         })
     }
 
+    override suspend fun downloadFile(
+        remoteName: String,
+        remotePath: String,
+        destDir: String,
+        destName: String,
+    ): Unit = withLease { d ->
+        rc(d, "operations/copyfile", buildJsonObject {
+            put("srcFs", "$remoteName:"); put("srcRemote", remotePath)
+            put("dstFs", destDir); put("dstRemote", destName)
+        })
+    }
+
+    override suspend fun uploadFile(
+        srcDir: String,
+        srcName: String,
+        remoteName: String,
+        remotePath: String,
+    ): Unit = withLease { d ->
+        rc(d, "operations/copyfile", buildJsonObject {
+            put("srcFs", srcDir); put("srcRemote", srcName)
+            put("dstFs", "$remoteName:"); put("dstRemote", remotePath)
+        })
+    }
+
     override suspend fun purge(remote: String, path: String): Unit = withLease { d ->
         rc(d, "operations/purge", buildJsonObject {
             put("fs", remote)
