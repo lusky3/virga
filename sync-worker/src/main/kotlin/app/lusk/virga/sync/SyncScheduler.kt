@@ -42,33 +42,77 @@ class SyncScheduler @Inject constructor(
         syncNow(taskId, backoffSeconds = DEFAULT_BACKOFF_SECONDS, backoffExponential = true)
     }
 
-    /** Internal overload used by [syncAllEnabled] when the task is already loaded. */
-    internal fun syncNow(taskId: Long, backoffSeconds: Long, backoffExponential: Boolean) {
+    /** Internal overload used by [syncAll] when the task is already loaded. */
+    internal fun syncNow(
+        taskId: Long,
+        backoffSeconds: Long,
+        backoffExponential: Boolean,
+        tags: Set<String> = emptySet(),
+    ) {
         val policy = if (backoffExponential) BackoffPolicy.EXPONENTIAL else BackoffPolicy.LINEAR
-        val request = OneTimeWorkRequestBuilder<SyncWorker>()
+        val builder = OneTimeWorkRequestBuilder<SyncWorker>()
             .setInputData(workDataOf(SyncWorker.KEY_TASK_ID to taskId, SyncWorker.KEY_MANUAL to true))
             .setBackoffCriteria(policy, backoffSeconds, TimeUnit.SECONDS)
-            .build()
+        tags.forEach { builder.addTag(it) }
         workManager.enqueueUniqueWork(
             uniqueName(taskId) + "_now",
             // KEEP, not REPLACE: a second "Sync now" (double-tap, or "sync all" while
             // one is running) must NOT cancel the in-flight transfer and record it as
             // failed. If a manual sync is already queued/running for this task, keep it.
             ExistingWorkPolicy.KEEP,
-            request,
+            builder.build(),
         )
     }
 
     /**
-     * Enqueues an immediate one-time sync for every enabled task and returns how
-     * many were enqueued, so a caller can message the user off the same single
-     * read (no second flow collection that could disagree with what ran).
+     * Enqueues an immediate one-time sync for every enabled task, optionally
+     * filtered to a named [groupTag], sorted by (sortOrder ASC, id ASC).
+     *
+     * Each enqueued WorkRequest is tagged with [TAG_SYNC_ALL] and, when a
+     * groupTag is provided, with "syncgroup:<groupTag>". Tags enable set-level
+     * cancellation via [cancelSyncAll] and WorkManager queries by tag.
+     *
+     * Bounded concurrency note: no explicit N-worker semaphore is added here.
+     * WorkManager's internal executor bounds parallelism, and Virga's rclone
+     * engine shares a single daemon across concurrent runs via a refcount lease
+     * (effective daemon parallelism is already coordinated). An explicit per-run
+     * concurrency cap is intentionally deferred until a concrete need is
+     * demonstrated; adding one here would require chaining workers or a
+     * semaphore that could conflict with the per-task KEEP policy.
+     *
+     * Returns the number of tasks enqueued.
      */
-    suspend fun syncAllEnabled(): Int {
+    suspend fun syncAll(groupTag: String? = null): Int {
         val enabled = taskRepository.tasks.first().filter { it.enabled }
-        enabled.forEach { syncNow(it.id, it.backoffSeconds, it.backoffExponential) }
-        return enabled.size
+        val filtered = if (groupTag != null) enabled.filter { it.groupTag == groupTag } else enabled
+        val sorted = filtered.sortedWith(compareBy({ it.sortOrder }, { it.id }))
+        val tags = buildSet {
+            add(TAG_SYNC_ALL)
+            if (groupTag != null) add("$TAG_SYNC_GROUP_PREFIX$groupTag")
+        }
+        sorted.forEach { syncNow(it.id, it.backoffSeconds, it.backoffExponential, tags) }
+        return sorted.size
     }
+
+    /**
+     * Cancels all work tagged with [TAG_SYNC_ALL] (when [groupTag] is null) or
+     * the specific group tag "syncgroup:<groupTag>" (when non-null).
+     *
+     * Demonstrates the "addTag for set ops" deliverable from B10: a group of
+     * tasks enqueued via [syncAll] can be cancelled atomically without knowing
+     * each task's unique work name.
+     */
+    fun cancelSyncAll(groupTag: String? = null) {
+        val tag = if (groupTag != null) "$TAG_SYNC_GROUP_PREFIX$groupTag" else TAG_SYNC_ALL
+        workManager.cancelAllWorkByTag(tag)
+    }
+
+    /**
+     * Enqueues an immediate one-time sync for every enabled task and returns how
+     * many were enqueued. Delegates to [syncAll] with no group filter so all
+     * callers continue to work without changes.
+     */
+    suspend fun syncAllEnabled(): Int = syncAll(groupTag = null)
 
     /**
      * (Re)registers the schedule for a task, or cancels it if manual/disabled.
@@ -207,5 +251,9 @@ class SyncScheduler @Inject constructor(
         const val MIN_INTERVAL_MINUTES = 15
         /** Fallback backoff for syncNow(taskId) callers that don't have a task object. */
         const val DEFAULT_BACKOFF_SECONDS = 30L
+        /** WorkManager tag applied to every WorkRequest enqueued by [syncAll]. */
+        const val TAG_SYNC_ALL = "syncall"
+        /** Prefix for per-group tags: "syncgroup:<groupTag>". */
+        const val TAG_SYNC_GROUP_PREFIX = "syncgroup:"
     }
 }

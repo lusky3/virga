@@ -480,4 +480,63 @@ class MappersTest {
     @Test fun `encodeScheduleTimes non-empty list produces bracketed csv`() {
         assertThat(encodeScheduleTimes(listOf(120, 840))).isEqualTo("[120,840]")
     }
+
+    // --- B10: groupTag / sortOrder round-trip ---
+
+    @Test fun `B10 groupTag and sortOrder survive SyncTask round-trip through toEntity and back`() {
+        val original = SyncTask(
+            id = 70L,
+            name = "GroupTest",
+            sourcePath = "/sdcard/DCIM",
+            remoteName = "gdrive",
+            remotePath = "Backup",
+            direction = SyncDirection.UPLOAD,
+            intervalMinutes = null,
+            createdAtEpochMs = 1L,
+            groupTag = "photos",
+            sortOrder = 3,
+        )
+
+        val roundTripped = original.toEntity().toDomain()
+
+        assertThat(roundTripped.groupTag).isEqualTo("photos")
+        assertThat(roundTripped.sortOrder).isEqualTo(3)
+    }
+
+    @Test fun `B10 groupTag defaults to empty and sortOrder defaults to 0 for a plain entity`() {
+        val entity = SyncTaskEntity(
+            id = 71L,
+            name = "Default",
+            sourcePath = "/sdcard/DCIM",
+            remoteName = "gdrive",
+            remotePath = "Backup",
+            direction = SyncDirection.UPLOAD,
+            intervalMinutes = null,
+        )
+
+        val domain = entity.toDomain()
+
+        assertThat(domain.groupTag).isEmpty()
+        assertThat(domain.sortOrder).isEqualTo(0)
+    }
+
+    @Test fun `B10 empty groupTag round-trips as empty string`() {
+        val original = SyncTask(
+            id = 72L,
+            name = "NoGroup",
+            sourcePath = "/sdcard/DCIM",
+            remoteName = "gdrive",
+            remotePath = "Backup",
+            direction = SyncDirection.UPLOAD,
+            intervalMinutes = null,
+            createdAtEpochMs = 1L,
+            groupTag = "",
+            sortOrder = 0,
+        )
+
+        val roundTripped = original.toEntity().toDomain()
+
+        assertThat(roundTripped.groupTag).isEmpty()
+        assertThat(roundTripped.sortOrder).isEqualTo(0)
+    }
 }

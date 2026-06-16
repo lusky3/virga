@@ -1092,6 +1092,84 @@ class SyncTaskEditViewModelTest {
         assertThat(vm.form.value.scheduleTimes).isEqualTo(listOf(120, 840))
     }
 
+    // --- B10: groupTag and sortOrder ----------------------------------------
+
+    @Test
+    fun load_existingTask_hydratesGroupTagAndSortOrder() = runTest(mainDispatcher.dispatcher) {
+        val entity = SyncTask(
+            id = 80,
+            name = "Grouped",
+            sourcePath = "/sdcard",
+            remoteName = "gdrive",
+            remotePath = "/dst",
+            direction = SyncDirection.UPLOAD,
+            intervalMinutes = null,
+            groupTag = "photos",
+            sortOrder = 5,
+        )
+        coEvery { taskRepository.getTask(80) } returns entity
+        val vm = viewModel()
+        vm.load(taskId = 80)
+        advanceUntilIdle()
+
+        assertThat(vm.form.value.groupTag).isEqualTo("photos")
+        assertThat(vm.form.value.sortOrder).isEqualTo(5)
+        assertThat(vm.form.value.sortOrderText).isEqualTo("5")
+    }
+
+    @Test
+    fun save_persistsGroupTagAndSortOrder() = runTest(mainDispatcher.dispatcher) {
+        coEvery { taskRepository.save(any()) } returns 1L
+        val vm = viewModel()
+        vm.update {
+            it.copy(
+                name = "Backup",
+                sourcePath = "/sdcard",
+                remoteName = "gdrive",
+                remotePath = "Backups",
+                groupTag = "docs",
+                sortOrder = 2,
+            )
+        }
+
+        vm.save {}
+        advanceUntilIdle()
+
+        coVerify {
+            taskRepository.save(match<SyncTask> { it.groupTag == "docs" && it.sortOrder == 2 })
+        }
+    }
+
+    @Test
+    fun save_trimsGroupTag() = runTest(mainDispatcher.dispatcher) {
+        coEvery { taskRepository.save(any()) } returns 1L
+        val vm = viewModel()
+        vm.update {
+            it.copy(
+                name = "Backup",
+                sourcePath = "/sdcard",
+                remoteName = "gdrive",
+                remotePath = "Backups",
+                groupTag = "  photos  ",
+            )
+        }
+
+        vm.save {}
+        advanceUntilIdle()
+
+        coVerify { taskRepository.save(match<SyncTask> { it.groupTag == "photos" }) }
+    }
+
+    @Test
+    fun newTask_defaultGroupTagIsEmpty_defaultSortOrderIsZero() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        vm.load(taskId = 0)
+        advanceUntilIdle()
+
+        assertThat(vm.form.value.groupTag).isEmpty()
+        assertThat(vm.form.value.sortOrder).isEqualTo(0)
+    }
+
     // --- helpers ------------------------------------------------------------
 
     private fun task(

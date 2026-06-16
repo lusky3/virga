@@ -95,6 +95,12 @@ data class SyncTaskForm(
     val backoffSecondsText: String = "30",
     /** EXPONENTIAL backoff when true; LINEAR when false. */
     val backoffExponential: Boolean = true,
+    // B10: sync-all group and ordering ----------------------------------------
+    /** Optional group label — tasks with the same label can be synced/cancelled together. */
+    val groupTag: String = "",
+    /** Ordering hint within a syncAll run; lower values run first. Default 0. */
+    val sortOrder: Int = 0,
+    val sortOrderText: String = "0",
     val bwLimitWifiError: String? = null,
     val bwLimitMeteredError: String? = null,
     val bufferSizeError: String? = null,
@@ -267,6 +273,9 @@ class SyncTaskEditViewModel @Inject constructor(
                         backoffSeconds = task.backoffSeconds,
                         backoffSecondsText = task.backoffSeconds.toString(),
                         backoffExponential = task.backoffExponential,
+                        groupTag = task.groupTag,
+                        sortOrder = task.sortOrder,
+                        sortOrderText = task.sortOrder.toString(),
                     )
                 }
             }
@@ -421,6 +430,8 @@ class SyncTaskEditViewModel @Inject constructor(
                 retryOnRclone = form.retryOnRclone,
                 backoffSeconds = form.backoffSeconds.coerceAtLeast(10L),
                 backoffExponential = form.backoffExponential,
+                groupTag = form.groupTag.trim(),
+                sortOrder = form.sortOrder,
             )
             val id = taskRepository.save(task)
             scheduler.schedule(task.copy(id = id))
@@ -487,4 +498,3 @@ class SyncTaskEditViewModel @Inject constructor(
         }
     }
 }
-

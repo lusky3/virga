@@ -316,6 +316,14 @@
     <string name="sync_edit_field_backoff_seconds_hint">Delay before the first retry (minimum 10s). WorkManager doubles it each attempt (exponential) or repeats it (linear).</string>
     <string name="sync_edit_field_backoff_exponential">Exponential backoff</string>
     <string name="sync_edit_field_backoff_exponential_hint">Doubles the delay on each retry. Disable for a fixed-delay (linear) backoff.</string>
+    <!-- B10: sync-all group / ordering -->
+    <string name="sync_edit_group_section">Sync group &amp; order</string>
+    <string name="sync_edit_field_group_tag">Group label (optional)</string>
+    <string name="sync_edit_field_group_tag_placeholder">e.g. photos</string>
+    <string name="sync_edit_field_group_tag_hint">Tasks with the same label can be synced or cancelled together.</string>
+    <string name="sync_edit_field_sort_order">Sort order</string>
+    <string name="sync_edit_field_sort_order_placeholder">e.g. 0</string>
+    <string name="sync_edit_field_sort_order_hint">Lower values run first in a &#8220;sync all&#8221; run. Default 0.</string>
     <!-- Dry-run preview (WS2.3) -->
     <!-- Verify / check (B2) -->
     <string name="sync_verify_action">Verify</string>

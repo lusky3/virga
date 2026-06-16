@@ -107,6 +107,18 @@ data class SyncTask(
      * Empty = single-time fallback (behavior-preserving default).
      */
     val scheduleTimes: List<Int> = emptyList(),
+    // B10: sync-all concurrency / order / groups --------------------------------
+    /**
+     * Optional group label. Tasks with the same non-blank groupTag are enqueued
+     * and can be cancelled together via [SyncScheduler.syncAll]/[cancelSyncAll].
+     * Empty = no group (participates in global "sync all" only).
+     */
+    val groupTag: String = "",
+    /**
+     * Ordering hint for syncAll: tasks are sorted (sortOrder ASC, id ASC) before
+     * enqueuing. Lower values run first; ties broken by id. Default 0.
+     */
+    val sortOrder: Int = 0,
 )
 
 /** A single execution of a [SyncTask]. Domain model; mirrors `SyncRunEntity`. */

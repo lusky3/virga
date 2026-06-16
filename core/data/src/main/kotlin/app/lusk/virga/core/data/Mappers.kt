@@ -76,6 +76,8 @@ internal fun SyncTaskEntity.toDomain() = SyncTask(
     backoffSeconds = backoffSeconds,
     backoffExponential = backoffExponential,
     scheduleTimes = decodeScheduleTimes(scheduleTimes),
+    groupTag = groupTag,
+    sortOrder = sortOrder,
 )
 
 internal fun SyncTask.toEntity() = SyncTaskEntity(
@@ -117,6 +119,8 @@ internal fun SyncTask.toEntity() = SyncTaskEntity(
     backoffSeconds = backoffSeconds,
     backoffExponential = backoffExponential,
     scheduleTimes = encodeScheduleTimes(scheduleTimes),
+    groupTag = groupTag,
+    sortOrder = sortOrder,
 )
 
 internal fun SyncRunEntity.toDomain() = SyncRun(
