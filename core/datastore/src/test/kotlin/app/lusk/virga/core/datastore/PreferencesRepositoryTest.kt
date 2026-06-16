@@ -208,6 +208,102 @@ class PreferencesRepositoryTest {
         }
     }
 
+    // --- setQuietHoursEnabled ---
+
+    @Test fun `quietHoursEnabled defaults to false`() = testScope.runTest {
+        val repo = createRepo()
+        repo.preferences.test {
+            assertThat(awaitItem().quietHoursEnabled).isFalse()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `setQuietHoursEnabled true is persisted`() = testScope.runTest {
+        val repo = createRepo()
+
+        repo.setQuietHoursEnabled(true)
+
+        repo.preferences.test {
+            assertThat(awaitItem().quietHoursEnabled).isTrue()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    // --- setQuietHoursStart ---
+
+    @Test fun `quietHoursStartMinutes defaults to 0`() = testScope.runTest {
+        val repo = createRepo()
+        repo.preferences.test {
+            assertThat(awaitItem().quietHoursStartMinutes).isEqualTo(0)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `setQuietHoursStart persists value`() = testScope.runTest {
+        val repo = createRepo()
+
+        repo.setQuietHoursStart(1320)
+
+        repo.preferences.test {
+            assertThat(awaitItem().quietHoursStartMinutes).isEqualTo(1320)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `setQuietHoursStart clamps value above 1439 to 1439`() = testScope.runTest {
+        val repo = createRepo()
+
+        repo.setQuietHoursStart(1500)
+
+        repo.preferences.test {
+            assertThat(awaitItem().quietHoursStartMinutes).isEqualTo(1439)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `setQuietHoursStart clamps negative value to 0`() = testScope.runTest {
+        val repo = createRepo()
+
+        repo.setQuietHoursStart(-10)
+
+        repo.preferences.test {
+            assertThat(awaitItem().quietHoursStartMinutes).isEqualTo(0)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    // --- setQuietHoursEnd ---
+
+    @Test fun `quietHoursEndMinutes defaults to 0`() = testScope.runTest {
+        val repo = createRepo()
+        repo.preferences.test {
+            assertThat(awaitItem().quietHoursEndMinutes).isEqualTo(0)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `setQuietHoursEnd persists value`() = testScope.runTest {
+        val repo = createRepo()
+
+        repo.setQuietHoursEnd(360)
+
+        repo.preferences.test {
+            assertThat(awaitItem().quietHoursEndMinutes).isEqualTo(360)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `setQuietHoursEnd clamps value above 1439 to 1439`() = testScope.runTest {
+        val repo = createRepo()
+
+        repo.setQuietHoursEnd(9999)
+
+        repo.preferences.test {
+            assertThat(awaitItem().quietHoursEndMinutes).isEqualTo(1439)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
     // --- invalid ThemeMode name stored externally ---
 
     @Test fun `unknown theme mode string stored externally falls back to SYSTEM`() = testScope.runTest {

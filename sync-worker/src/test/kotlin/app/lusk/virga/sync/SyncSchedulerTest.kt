@@ -12,8 +12,11 @@ import app.lusk.virga.core.data.SyncTaskRepository
 import app.lusk.virga.core.database.dao.SyncTaskDao
 import app.lusk.virga.core.database.entity.SyncTaskEntity
 import app.lusk.virga.core.common.model.SyncTask
+import app.lusk.virga.core.datastore.AppPreferences
+import app.lusk.virga.core.datastore.PreferencesRepository
 import com.google.common.truth.Truth.assertThat
 import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
@@ -33,6 +36,9 @@ class SyncSchedulerTest {
     private val dao: SyncTaskDao = mockk(relaxed = true)
     private lateinit var repository: SyncTaskRepository
     private lateinit var scheduler: SyncScheduler
+    private val preferencesRepository: PreferencesRepository = mockk {
+        every { preferences } returns flowOf(AppPreferences())
+    }
 
     @Before
     fun setUp() {
@@ -44,7 +50,7 @@ class SyncSchedulerTest {
         workManager = WorkManager.getInstance(context)
         coEvery { dao.observeAll() } returns flowOf(emptyList())
         repository = SyncTaskRepository(dao)
-        scheduler = SyncScheduler(context, repository)
+        scheduler = SyncScheduler(context, repository, preferencesRepository)
     }
 
     @Test
@@ -63,7 +69,7 @@ class SyncSchedulerTest {
     fun schedule_periodicWork_appliesWifiOnlyConstraint() {
         val task = task(id = 7, intervalMinutes = 60, wifiOnly = true)
 
-        scheduler.schedule(task)
+        runBlocking { scheduler.schedule(task) }
 
         val infos = workManager.getWorkInfosForUniqueWork("sync_task_7").get()
         assertThat(infos).hasSize(1)
@@ -76,7 +82,7 @@ class SyncSchedulerTest {
     fun schedule_meteredAllowed_usesConnectedConstraint() {
         val task = task(id = 8, intervalMinutes = 30, wifiOnly = false)
 
-        scheduler.schedule(task)
+        runBlocking { scheduler.schedule(task) }
 
         val infos = workManager.getWorkInfosForUniqueWork("sync_task_8").get()
         assertThat(infos[0].constraints.requiredNetworkType).isEqualTo(NetworkType.CONNECTED)
@@ -84,10 +90,10 @@ class SyncSchedulerTest {
 
     @Test
     fun schedule_disabledTask_cancelsExistingWork() {
-        scheduler.schedule(task(id = 9, intervalMinutes = 60))
+        runBlocking { scheduler.schedule(task(id = 9, intervalMinutes = 60)) }
         assertThat(workManager.getWorkInfosForUniqueWork("sync_task_9").get()).isNotEmpty()
 
-        scheduler.schedule(task(id = 9, intervalMinutes = 60, enabled = false))
+        runBlocking { scheduler.schedule(task(id = 9, intervalMinutes = 60, enabled = false)) }
 
         val states = workManager.getWorkInfosForUniqueWork("sync_task_9").get().map { it.state }
         // Cancelled is terminal; the entry stays around until pruned.
@@ -96,7 +102,7 @@ class SyncSchedulerTest {
 
     @Test
     fun schedule_manualTask_doesNotEnqueueWork() {
-        scheduler.schedule(task(id = 10, intervalMinutes = null))
+        runBlocking { scheduler.schedule(task(id = 10, intervalMinutes = null)) }
 
         assertThat(workManager.getWorkInfosForUniqueWork("sync_task_10").get()).isEmpty()
     }
@@ -113,7 +119,7 @@ class SyncSchedulerTest {
         )
         // Rebuild repository and scheduler so they see the new observeAll() stub.
         val localRepo = SyncTaskRepository(dao)
-        val localScheduler = SyncScheduler(context, localRepo)
+        val localScheduler = SyncScheduler(context, localRepo, preferencesRepository)
 
         localScheduler.syncAllEnabled()
 
@@ -146,7 +152,7 @@ class SyncSchedulerTest {
         // not fail and must produce exactly one WorkInfo entry.
         val task = task(id = 30, intervalMinutes = 60, backoffExponential = false, backoffSeconds = 45L)
 
-        scheduler.schedule(task)
+        runBlocking { scheduler.schedule(task) }
 
         val infos = workManager.getWorkInfosForUniqueWork("sync_task_30").get()
         assertThat(infos).hasSize(1)
@@ -161,6 +167,47 @@ class SyncSchedulerTest {
         val infos = workManager.getWorkInfosForUniqueWork("sync_task_50_now").get()
         assertThat(infos).hasSize(1)
     }
+
+    // --- B4: quiet-hours scheduler tests ---
+
+    @Test
+    fun scheduleCalendar_quietHoursDisabled_enqueuesWithoutShifting() {
+        // When quiet hours are off the calendar is scheduled normally.
+        every { preferencesRepository.preferences } returns flowOf(AppPreferences(quietHoursEnabled = false))
+        val task = calendarTask(id = 60, daysMask = 0x7F, hour = 2, minute = 0)
+
+        runBlocking { scheduler.schedule(task) }
+
+        val infos = workManager.getWorkInfosForUniqueWork("sync_task_60").get()
+        assertThat(infos).hasSize(1)
+    }
+
+    @Test
+    fun scheduleCalendar_quietHoursEnabled_enqueuesOneTimeWork() {
+        // When quiet hours are on the calendar is still enqueued (shifted past window).
+        every { preferencesRepository.preferences } returns flowOf(
+            AppPreferences(quietHoursEnabled = true, quietHoursStartMinutes = 0, quietHoursEndMinutes = 360),
+        )
+        val task = calendarTask(id = 61, daysMask = 0x7F, hour = 2, minute = 0)
+
+        runBlocking { scheduler.schedule(task) }
+
+        val infos = workManager.getWorkInfosForUniqueWork("sync_task_61").get()
+        assertThat(infos).hasSize(1)
+    }
+
+    private fun calendarTask(id: Long, daysMask: Int, hour: Int, minute: Int) = SyncTask(
+        id = id,
+        name = "cal-$id",
+        sourcePath = "/storage/emulated/0/DCIM",
+        remoteName = "gdrive",
+        remotePath = "/Backup",
+        direction = SyncDirection.UPLOAD,
+        intervalMinutes = 0, // sentinel for calendar
+        scheduleDaysMask = daysMask,
+        scheduleHour = hour,
+        scheduleMinute = minute,
+    )
 
     private fun task(
         id: Long,

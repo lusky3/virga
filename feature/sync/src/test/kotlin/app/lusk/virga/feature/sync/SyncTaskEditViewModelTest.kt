@@ -968,6 +968,130 @@ class SyncTaskEditViewModelTest {
         coVerify { taskRepository.save(match<SyncTask> { it.maxRetries >= 1 }) }
     }
 
+    // --- B4: scheduleTimes add / remove ---
+
+    @Test
+    fun addScheduleTime_appendsToList() {
+        val vm = viewModel()
+        vm.addScheduleTime(120)
+        vm.addScheduleTime(840)
+
+        assertThat(vm.form.value.scheduleTimes).isEqualTo(listOf(120, 840))
+    }
+
+    @Test
+    fun addScheduleTime_deduplicate_doesNotAddSameTimeAgain() {
+        val vm = viewModel()
+        vm.addScheduleTime(120)
+        vm.addScheduleTime(120)
+
+        assertThat(vm.form.value.scheduleTimes).isEqualTo(listOf(120))
+    }
+
+    @Test
+    fun addScheduleTime_clampsToValidRange() {
+        val vm = viewModel()
+        vm.addScheduleTime(1500) // > 1439
+
+        assertThat(vm.form.value.scheduleTimes).isEqualTo(listOf(1439))
+    }
+
+    @Test
+    fun removeScheduleTime_removesAtIndex() {
+        val vm = viewModel()
+        vm.addScheduleTime(120)
+        vm.addScheduleTime(840)
+
+        vm.removeScheduleTime(0)
+
+        assertThat(vm.form.value.scheduleTimes).isEqualTo(listOf(840))
+    }
+
+    @Test
+    fun removeScheduleTime_outOfBoundsIsNoop() {
+        val vm = viewModel()
+        vm.addScheduleTime(120)
+
+        vm.removeScheduleTime(5) // out of bounds
+
+        assertThat(vm.form.value.scheduleTimes).isEqualTo(listOf(120))
+    }
+
+    @Test
+    fun save_calendarSchedule_persistsScheduleTimes() = runTest(mainDispatcher.dispatcher) {
+        coEvery { taskRepository.save(any()) } returns 1L
+        val vm = viewModel()
+        vm.selectCalendarSchedule()
+        vm.update {
+            it.copy(
+                name = "CalTask",
+                sourcePath = "/sdcard/DCIM",
+                remoteName = "gdrive",
+                remotePath = "Backup",
+                scheduleDays = setOf(1, 2, 3, 4, 5, 6, 7),
+            )
+        }
+        vm.addScheduleTime(120)
+        vm.addScheduleTime(840)
+
+        vm.save {}
+        advanceUntilIdle()
+
+        coVerify {
+            taskRepository.save(
+                match<SyncTask> { it.scheduleTimes == listOf(120, 840) },
+            )
+        }
+    }
+
+    @Test
+    fun save_nonCalendarSchedule_clearsScheduleTimes() = runTest(mainDispatcher.dispatcher) {
+        coEvery { taskRepository.save(any()) } returns 1L
+        val vm = viewModel()
+        // Set times, then switch away from calendar.
+        vm.selectCalendarSchedule()
+        vm.addScheduleTime(120)
+        vm.update {
+            it.copy(
+                name = "T",
+                sourcePath = "/s",
+                remoteName = "r",
+                remotePath = "dst",
+                intervalMinutes = 60, // non-calendar interval
+            )
+        }
+
+        vm.save {}
+        advanceUntilIdle()
+
+        coVerify {
+            taskRepository.save(match<SyncTask> { it.scheduleTimes.isEmpty() })
+        }
+    }
+
+    @Test
+    fun load_existingCalendarTask_hydratesScheduleTimes() = runTest(mainDispatcher.dispatcher) {
+        val entity = SyncTask(
+            id = 70,
+            name = "Multi",
+            sourcePath = "/sdcard",
+            remoteName = "gdrive",
+            remotePath = "/dst",
+            direction = SyncDirection.UPLOAD,
+            intervalMinutes = 0,
+            scheduleDaysMask = 0x7F,
+            scheduleHour = 9,
+            scheduleMinute = 0,
+            scheduleTimes = listOf(120, 840),
+        )
+        coEvery { taskRepository.getTask(70) } returns entity
+        val vm = viewModel()
+        vm.load(taskId = 70)
+        advanceUntilIdle()
+
+        assertThat(vm.form.value.scheduleTimes).isEqualTo(listOf(120, 840))
+    }
+
     // --- helpers ------------------------------------------------------------
 
     private fun task(

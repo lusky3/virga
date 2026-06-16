@@ -22,11 +22,13 @@ import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.data.StatsRepository
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
+import app.lusk.virga.core.datastore.PreferencesRepository
 import app.lusk.virga.core.rclone.isAuthError
 import app.lusk.virga.core.rclone.RcloneEngine
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 
 /**
  * Executes one sync task as a foreground (dataSync) job so it survives Doze and
@@ -52,6 +54,7 @@ open class SyncWorker @AssistedInject constructor(
     private val staging: LocalStaging,
     private val scheduler: SyncScheduler,
     private val remoteRepository: RemoteRepository,
+    private val preferencesRepository: PreferencesRepository,
 ) : CoroutineWorker(appContext, params) {
 
     private val notifications = SyncNotifications(appContext)
@@ -68,6 +71,17 @@ open class SyncWorker @AssistedInject constructor(
             // for it may still be scheduled. Cancel it so this zombie stops firing,
             // and succeed (a failure would just be retried).
             scheduler.cancel(taskId)
+            return Result.success()
+        }
+
+        // Quiet-hours check: for SCHEDULED runs only, suppress the sync when the
+        // current time falls inside the global blackout window. Manual "Sync now"
+        // always bypasses quiet hours — user intent. We re-enqueue the calendar
+        // next occurrence (which the scheduler will shift past the window), so the
+        // schedule is not lost. Return success so WorkManager doesn't retry/backoff.
+        if (!isManualRun && isWithinQuietHours()) {
+            Log.i(TAG, "Deferred for quiet hours: task $taskId — skipping sync, next occurrence re-queued.")
+            reenqueueCalendar(task, isManualRun)
             return Result.success()
         }
 
@@ -375,7 +389,7 @@ open class SyncWorker @AssistedInject constructor(
      * it. Called both on the normal completion path and the [anotherRunInFlight]
      * skip path so bailing never drops the schedule.
      */
-    private fun reenqueueCalendar(task: SyncTask, isManualRun: Boolean) {
+    private suspend fun reenqueueCalendar(task: SyncTask, isManualRun: Boolean) {
         if (isManualRun) return
         if (task.scheduleDaysMask == 0 || !task.enabled) return
         // A swallowed failure here means the calendar task silently never runs
@@ -539,6 +553,26 @@ open class SyncWorker @AssistedInject constructor(
             // older API levels (where the class isn't loaded) still compile and run.
             Log.w(TAG, "Could not start foreground service; continuing without it", e)
         }
+    }
+
+    /**
+     * Returns true when the current time falls inside the global quiet-hours window
+     * and quiet hours are enabled. Reads the prefs snapshot synchronously; any
+     * failure (corrupt prefs, cancelled coroutine) defaults to false so the sync
+     * runs rather than being incorrectly suppressed.
+     */
+    private suspend fun isWithinQuietHours(): Boolean {
+        val prefs = runCatching { preferencesRepository.preferences.first() }
+            // Rethrow cancellation so a cancelled worker stops instead of slipping
+            // past the gate into a sync (structured concurrency — see captureFailedFiles).
+            .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+            .getOrNull() ?: return false
+        if (!prefs.quietHoursEnabled) return false
+        val now = java.util.Calendar.getInstance()
+        val minuteOfDay = now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE)
+        return SyncSchedule.isWithinBlackout(
+            minuteOfDay, prefs.quietHoursStartMinutes, prefs.quietHoursEndMinutes,
+        )
     }
 
     /**

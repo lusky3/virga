@@ -256,6 +256,9 @@ fun SyncTaskEditScreen(
                     daysError = form.scheduleDaysError,
                     onToggleDay = viewModel::toggleScheduleDay,
                     onTimeChange = viewModel::setScheduleTime,
+                    scheduleTimes = form.scheduleTimes,
+                    onAddTime = viewModel::addScheduleTime,
+                    onRemoveTime = viewModel::removeScheduleTime,
                 )
             }
 

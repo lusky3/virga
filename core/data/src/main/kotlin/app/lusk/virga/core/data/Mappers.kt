@@ -8,6 +8,31 @@ import app.lusk.virga.core.database.entity.SyncRunEntity
 import app.lusk.virga.core.database.entity.SyncTaskEntity
 
 /**
+ * Decodes a JSON-array-of-ints string (e.g. "[120,840]") to a list of
+ * minutes-of-day. Returns an empty list for blank/null/unparseable input
+ * so a bad stored value never crashes the mapping pipeline.
+ */
+internal fun decodeScheduleTimes(json: String): List<Int> {
+    val trimmed = json.trim()
+    if (trimmed.isBlank() || trimmed == "[]") return emptyList()
+    // Require a well-formed JSON array shape; a non-bracketed/half-bracketed value
+    // (e.g. "120,840" or "[120,840") is a corrupt store and maps to empty, not to
+    // silently-accepted times. Pure String ops below can't throw — a malformed entry
+    // inside the brackets just drops out via toIntOrNull()/the range filter.
+    if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) return emptyList()
+    return trimmed.removePrefix("[").removeSuffix("]")
+        .split(",")
+        .mapNotNull { it.trim().toIntOrNull() }
+        .filter { it in 0..1439 }
+}
+
+/** Encodes a list of minutes-of-day to a compact JSON array string. */
+internal fun encodeScheduleTimes(times: List<Int>): String {
+    if (times.isEmpty()) return ""
+    return "[${times.joinToString(",")}]"
+}
+
+/**
  * Entity ↔ domain mappers. Room `*Entity` types stay inside the data layer;
  * repositories convert to the domain models in [app.lusk.virga.core.common.model]
  * that ViewModels and UI consume. The shapes mirror each other field-for-field,
@@ -50,6 +75,7 @@ internal fun SyncTaskEntity.toDomain() = SyncTask(
     retryOnRclone = retryOnRclone,
     backoffSeconds = backoffSeconds,
     backoffExponential = backoffExponential,
+    scheduleTimes = decodeScheduleTimes(scheduleTimes),
 )
 
 internal fun SyncTask.toEntity() = SyncTaskEntity(
@@ -90,6 +116,7 @@ internal fun SyncTask.toEntity() = SyncTaskEntity(
     retryOnRclone = retryOnRclone,
     backoffSeconds = backoffSeconds,
     backoffExponential = backoffExponential,
+    scheduleTimes = encodeScheduleTimes(scheduleTimes),
 )
 
 internal fun SyncRunEntity.toDomain() = SyncRun(

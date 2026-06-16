@@ -30,4 +30,10 @@ class SettingsViewModel @Inject constructor(
     fun setAppLock(enabled: Boolean) = viewModelScope.launch { preferences.setAppLockEnabled(enabled) }
     fun setDefaultBwLimits(wifi: String?, metered: String?) =
         viewModelScope.launch { preferences.setDefaultBwLimits(wifi, metered) }
+    fun setQuietHoursEnabled(enabled: Boolean) =
+        viewModelScope.launch { preferences.setQuietHoursEnabled(enabled) }
+    fun setQuietHoursStart(minutes: Int) =
+        viewModelScope.launch { preferences.setQuietHoursStart(minutes) }
+    fun setQuietHoursEnd(minutes: Int) =
+        viewModelScope.launch { preferences.setQuietHoursEnd(minutes) }
 }

@@ -192,4 +192,50 @@ class SettingsViewModelTest {
         advanceUntilIdle()
         coVerify(exactly = 1) { repository.setThemeMode(ThemeMode.SYSTEM) }
     }
+
+    // --- B4: quiet hours setters ---
+
+    @Test
+    fun setQuietHoursEnabled_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setQuietHoursEnabled(true)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { repository.setQuietHoursEnabled(true) }
+    }
+
+    @Test
+    fun setQuietHoursStart_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setQuietHoursStart(1320)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { repository.setQuietHoursStart(1320) }
+    }
+
+    @Test
+    fun setQuietHoursEnd_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setQuietHoursEnd(360)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { repository.setQuietHoursEnd(360) }
+    }
+
+    @Test
+    fun quietHoursEnabled_defaultsFalse() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.state.collect {} }
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.quietHoursEnabled).isFalse()
+        job.cancel()
+    }
+
+    @Test
+    fun quietHoursEnabled_trueReflectedInState() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.state.collect {} }
+        prefsFlow.value = AppPreferences(quietHoursEnabled = true, quietHoursStartMinutes = 1320, quietHoursEndMinutes = 360)
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.quietHoursEnabled).isTrue()
+        assertThat(vm.state.value.quietHoursStartMinutes).isEqualTo(1320)
+        assertThat(vm.state.value.quietHoursEndMinutes).isEqualTo(360)
+        job.cancel()
+    }
 }

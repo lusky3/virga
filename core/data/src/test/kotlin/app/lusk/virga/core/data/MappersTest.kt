@@ -414,4 +414,70 @@ class MappersTest {
         assertThat(domain.detectedAtEpochMs).isEqualTo(9999L)
         assertThat(domain.resolved).isTrue()
     }
+
+    // --- B4: scheduleTimes round-trip ---
+
+    @Test fun `scheduleTimes non-empty round-trips through toEntity and back`() {
+        val original = SyncTask(
+            id = 60L,
+            name = "MultiTime",
+            sourcePath = "/sdcard/DCIM",
+            remoteName = "gdrive",
+            remotePath = "Backup",
+            direction = SyncDirection.UPLOAD,
+            intervalMinutes = null,
+            createdAtEpochMs = 1L,
+            scheduleTimes = listOf(120, 840),
+        )
+
+        val roundTripped = original.toEntity().toDomain()
+
+        assertThat(roundTripped.scheduleTimes).isEqualTo(listOf(120, 840))
+    }
+
+    @Test fun `scheduleTimes empty round-trips as emptyList`() {
+        val original = SyncTask(
+            id = 61L,
+            name = "SingleTime",
+            sourcePath = "/sdcard/DCIM",
+            remoteName = "gdrive",
+            remotePath = "Backup",
+            direction = SyncDirection.UPLOAD,
+            intervalMinutes = null,
+            createdAtEpochMs = 1L,
+            scheduleTimes = emptyList(),
+        )
+
+        assertThat(original.toEntity().toDomain().scheduleTimes).isEmpty()
+    }
+
+    @Test fun `decodeScheduleTimes blank returns emptyList`() {
+        assertThat(decodeScheduleTimes("")).isEmpty()
+        assertThat(decodeScheduleTimes("   ")).isEmpty()
+    }
+
+    @Test fun `decodeScheduleTimes garbage returns emptyList`() {
+        assertThat(decodeScheduleTimes("not-json")).isEmpty()
+    }
+
+    @Test fun `decodeScheduleTimes empty brackets returns emptyList`() {
+        assertThat(decodeScheduleTimes("[]")).isEmpty()
+    }
+
+    @Test fun `decodeScheduleTimes valid json returns parsed list`() {
+        assertThat(decodeScheduleTimes("[120,840]")).isEqualTo(listOf(120, 840))
+    }
+
+    @Test fun `decodeScheduleTimes filters out-of-range values`() {
+        // Values outside 0..1439 must be dropped.
+        assertThat(decodeScheduleTimes("[-1,720,1440]")).isEqualTo(listOf(720))
+    }
+
+    @Test fun `encodeScheduleTimes empty list returns empty string`() {
+        assertThat(encodeScheduleTimes(emptyList())).isEmpty()
+    }
+
+    @Test fun `encodeScheduleTimes non-empty list produces bracketed csv`() {
+        assertThat(encodeScheduleTimes(listOf(120, 840))).isEqualTo("[120,840]")
+    }
 }

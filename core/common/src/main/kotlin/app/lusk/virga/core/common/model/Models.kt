@@ -99,6 +99,14 @@ data class SyncTask(
     val backoffSeconds: Long = 30,
     /** EXPONENTIAL backoff when true; LINEAR when false. */
     val backoffExponential: Boolean = true,
+    // B4: multi-time calendar schedule -----------------------------------------
+    /**
+     * Minutes-of-day (0..1439) for the calendar schedule. When non-empty,
+     * overrides the single [scheduleHour]/[scheduleMinute] pair; each element
+     * is tried independently and the soonest qualifying occurrence is scheduled.
+     * Empty = single-time fallback (behavior-preserving default).
+     */
+    val scheduleTimes: List<Int> = emptyList(),
 )
 
 /** A single execution of a [SyncTask]. Domain model; mirrors `SyncRunEntity`. */

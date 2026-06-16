@@ -38,6 +38,9 @@ class PreferencesRepository @Inject constructor(
     suspend fun setLastSeenChangelogVersionCode(code: Int) = edit { it[Keys.LAST_SEEN_CHANGELOG] = code }
     suspend fun setCrashReportingEnabled(enabled: Boolean) = edit { it[Keys.CRASH_REPORTING] = enabled }
     suspend fun setAppLockEnabled(enabled: Boolean) = edit { it[Keys.APP_LOCK] = enabled }
+    suspend fun setQuietHoursEnabled(enabled: Boolean) = edit { it[Keys.QUIET_HOURS_ENABLED] = enabled }
+    suspend fun setQuietHoursStart(minutes: Int) = edit { it[Keys.QUIET_HOURS_START] = minutes.coerceIn(0, 1439) }
+    suspend fun setQuietHoursEnd(minutes: Int) = edit { it[Keys.QUIET_HOURS_END] = minutes.coerceIn(0, 1439) }
 
     suspend fun setDefaultBwLimits(wifi: String?, metered: String?) = edit { prefs ->
         if (wifi.isNullOrBlank()) prefs.remove(Keys.BW_WIFI) else prefs[Keys.BW_WIFI] = wifi
@@ -62,6 +65,9 @@ class PreferencesRepository @Inject constructor(
         lastSeenChangelogVersionCode = this[Keys.LAST_SEEN_CHANGELOG] ?: 0,
         crashReportingEnabled = this[Keys.CRASH_REPORTING] ?: false,
         appLockEnabled = this[Keys.APP_LOCK] ?: false,
+        quietHoursEnabled = this[Keys.QUIET_HOURS_ENABLED] ?: false,
+        quietHoursStartMinutes = this[Keys.QUIET_HOURS_START] ?: 0,
+        quietHoursEndMinutes = this[Keys.QUIET_HOURS_END] ?: 0,
     )
 
     private object Keys {
@@ -77,5 +83,8 @@ class PreferencesRepository @Inject constructor(
         val LAST_SEEN_CHANGELOG = intPreferencesKey("last_seen_changelog_version_code")
         val CRASH_REPORTING = booleanPreferencesKey("crash_reporting_enabled")
         val APP_LOCK = booleanPreferencesKey("app_lock_enabled")
+        val QUIET_HOURS_ENABLED = booleanPreferencesKey("quiet_hours_enabled")
+        val QUIET_HOURS_START = intPreferencesKey("quiet_hours_start_minutes")
+        val QUIET_HOURS_END = intPreferencesKey("quiet_hours_end_minutes")
     }
 }

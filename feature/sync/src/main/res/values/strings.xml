@@ -196,6 +196,8 @@
     <string name="sync_schedule_cron_preview">Cron: %1$s</string>
     <string name="sync_schedule_decrement">Decrease</string>
     <string name="sync_schedule_increment">Increase</string>
+    <string name="sync_schedule_add_time">Add time</string>
+    <string name="sync_schedule_remove_time">Remove time</string>
 
     <!-- ConflictsScreen -->
     <string name="conflicts_title">Conflicts</string>
