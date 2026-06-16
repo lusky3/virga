@@ -38,4 +38,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { preferences.setQuietHoursEnd(minutes) }
     fun setRunRetentionDays(days: Int) =
         viewModelScope.launch { preferences.setRunRetentionDays(days) }
+
+    fun setAppLanguageTag(tag: String?) =
+        viewModelScope.launch { preferences.setAppLanguageTag(tag) }
 }

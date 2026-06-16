@@ -62,4 +62,11 @@ data class AppPreferences(
      * Enforced at app startup by pruning rows older than this many days.
      */
     val runRetentionDays: Int = 0,
+    /**
+     * BCP-47 language tag for the per-app locale override, or null to follow the
+     * system locale. Applied at startup and whenever the user changes the setting.
+     * Stored here as the source of truth for the picker UI; AppCompat also persists
+     * it internally on its own, but that internal store isn't observable from Kotlin.
+     */
+    val appLanguageTag: String? = null,
 )

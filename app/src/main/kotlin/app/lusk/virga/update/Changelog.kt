@@ -1,43 +1,34 @@
 package app.lusk.virga.update
 
+import android.content.res.Resources
+import app.lusk.virga.R
+
 /** A single release's version name and human-readable notes. */
 data class ReleaseNotes(val versionName: String, val notes: List<String>)
 
 /**
- * In-app changelog. Each entry maps a version name to a short list of
- * user-facing notes (BRAND §2 voice: calm, informative). Newest first.
+ * Builds the in-app changelog from translatable string resources. Newest first.
+ * Add a new [VersionEntry] here and the matching strings/arrays in strings.xml
+ * when shipping a release — no other Kotlin changes needed.
  */
-val RELEASE_NOTES: List<ReleaseNotes> = listOf(
-    ReleaseNotes(
-        versionName = "0.3.0",
-        notes = listOf(
-            "Create a new destination folder right from the folder picker",
-            "Test a remote's connectivity on demand from its card menu",
-            "Importing a config now warns you before it replaces your remotes",
-            "Old per-run sync logs are pruned automatically, so they no longer grow without bound",
-        ),
-    ),
-    ReleaseNotes(
-        versionName = "0.2.0",
-        notes = listOf(
-            "Configure any rclone provider — Box, Dropbox, OneDrive, Google Drive, pCloud, and more",
-            "Sign in with OAuth, or bring your own credentials",
-            "Daemon-mediated OAuth for providers without a bundled sign-in",
-            "Add crypt and wrapper remotes (union, alias, and others)",
-            "Import and export your rclone config",
-            "Backups now continue past unreadable files and report an error summary instead of stopping",
-        ),
-    ),
-    ReleaseNotes(
-        versionName = "0.1.0",
-        notes = listOf(
-            "New Home dashboard with sync status and lifetime stats",
-            "Refreshed app icon, provider marks, and Settings",
-            "More reliable encrypted-config handling and a keyboard-free launch",
-        ),
-    ),
-)
+fun releaseNotes(resources: Resources): List<ReleaseNotes> =
+    VERSION_ENTRIES.map { entry ->
+        ReleaseNotes(
+            versionName = resources.getString(entry.versionNameRes),
+            notes = resources.getStringArray(entry.notesArrayRes).toList(),
+        )
+    }
 
 /** Returns the [ReleaseNotes] for [versionName], or null if not found. */
-fun releaseNotesFor(versionName: String): ReleaseNotes? =
-    RELEASE_NOTES.firstOrNull { it.versionName == versionName }
+fun releaseNotesFor(versionName: String, resources: Resources): ReleaseNotes? =
+    releaseNotes(resources).firstOrNull { it.versionName == versionName }
+
+/** Pairs a version-name string resource with its notes string-array resource. */
+private data class VersionEntry(val versionNameRes: Int, val notesArrayRes: Int)
+
+/** Newest-first registry. Add entries here when a new release ships. */
+private val VERSION_ENTRIES: List<VersionEntry> = listOf(
+    VersionEntry(R.string.release_version_0_3_0, R.array.release_notes_0_3_0),
+    VersionEntry(R.string.release_version_0_2_0, R.array.release_notes_0_2_0),
+    VersionEntry(R.string.release_version_0_1_0, R.array.release_notes_0_1_0),
+)

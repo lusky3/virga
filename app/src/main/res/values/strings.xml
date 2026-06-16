@@ -58,6 +58,35 @@
     <string name="whats_new_title">What\'s new</string>
     <string name="whats_new_cd_back">Back</string>
 
+    <!-- Changelog / release notes (WhatsNewScreen + HomeBannersViewModel).
+         Each version gets a string-array of bullet items (newest first) and a
+         plain string for the version label. Add a new triplet here when shipping
+         a new release; no Kotlin changes needed to display it. -->
+    <string name="release_version_0_3_0">0.3.0</string>
+    <string-array name="release_notes_0_3_0">
+        <item>Create a new destination folder right from the folder picker</item>
+        <item>Test a remote\'s connectivity on demand from its card menu</item>
+        <item>Importing a config now warns you before it replaces your remotes</item>
+        <item>Old per-run sync logs are pruned automatically, so they no longer grow without bound</item>
+    </string-array>
+
+    <string name="release_version_0_2_0">0.2.0</string>
+    <string-array name="release_notes_0_2_0">
+        <item>Configure any rclone provider — Box, Dropbox, OneDrive, Google Drive, pCloud, and more</item>
+        <item>Sign in with OAuth, or bring your own credentials</item>
+        <item>Daemon-mediated OAuth for providers without a bundled sign-in</item>
+        <item>Add crypt and wrapper remotes (union, alias, and others)</item>
+        <item>Import and export your rclone config</item>
+        <item>Backups now continue past unreadable files and report an error summary instead of stopping</item>
+    </string-array>
+
+    <string name="release_version_0_1_0">0.1.0</string>
+    <string-array name="release_notes_0_1_0">
+        <item>New Home dashboard with sync status and lifetime stats</item>
+        <item>Refreshed app icon, provider marks, and Settings</item>
+        <item>More reliable encrypted-config handling and a keyboard-free launch</item>
+    </string-array>
+
     <!-- LockScreen + BiometricGate -->
     <string name="lock_screen_title">Virga is locked</string>
     <string name="lock_screen_message">Authenticate to continue</string>

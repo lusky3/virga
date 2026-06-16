@@ -37,7 +37,8 @@
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
         android:theme="@style/Theme.Virga"
-        android:enableOnBackInvokedCallback="true">
+        android:enableOnBackInvokedCallback="true"
+        android:localeConfig="@xml/locales_config">
 
         <!-- Crash reporting is OPT-IN. Disable the Sentry SDK's ContentProvider
              auto-init so it never starts on its own; CrashReporter initializes it

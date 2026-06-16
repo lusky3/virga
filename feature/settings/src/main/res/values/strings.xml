@@ -71,6 +71,13 @@
     <string name="settings_retention_180">180 days</string>
     <string name="settings_retention_365">365 days</string>
 
+    <!-- Language picker (SettingsLanguageSection) -->
+    <string name="settings_section_language">Language</string>
+    <string name="settings_language_hint">Sets the display language for Virga. Other apps and the system are not affected.</string>
+    <string name="settings_language_system_default">System default</string>
+    <string name="settings_language_label">Display language</string>
+    <string name="settings_language_english">English</string>
+
     <!-- AboutScreen -->
     <string name="about_title">About</string>
     <string name="about_cd_back">Back</string>

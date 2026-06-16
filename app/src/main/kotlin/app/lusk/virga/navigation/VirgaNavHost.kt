@@ -46,6 +46,7 @@ import app.lusk.virga.feature.remotes.AddRemoteScreen
 import app.lusk.virga.feature.remotes.RemotesScreen
 import app.lusk.virga.feature.settings.AboutScreen
 import app.lusk.virga.feature.settings.SettingsScreen
+import app.lusk.virga.locale.LocaleManager
 import app.lusk.virga.feature.stats.StatsScreen
 import app.lusk.virga.feature.sync.ConflictsScreen
 import app.lusk.virga.feature.sync.FirstSyncWizardScreen
@@ -309,6 +310,9 @@ fun VirgaNavHost(
                 crashReportingAvailable = app.lusk.virga.BuildConfig.SENTRY_DSN.isNotBlank(),
                 // All-files-access builds (foss) can offer a storage-access grant in Settings.
                 storageAccessRelevant = app.lusk.virga.BuildConfig.SDCARD_ACCESS_AVAILABLE,
+                // Apply the locale immediately when the user changes it; the VM also
+                // persists it to DataStore so startup can restore the choice.
+                onLanguageChange = LocaleManager::apply,
             )
         }
         entry<StatsRoute> {

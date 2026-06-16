@@ -7,6 +7,7 @@ import androidx.work.Configuration
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.datastore.PreferencesRepository
 import app.lusk.virga.core.rclone.RcloneEngine
+import app.lusk.virga.locale.LocaleManager
 import app.lusk.virga.notification.NotificationChannels
 import app.lusk.virga.sync.WatchdogController
 import app.lusk.virga.telemetry.CrashReporter
@@ -46,6 +47,15 @@ class VirgaApplication : Application(), Configuration.Provider {
         // can't run the worker's finally), so history doesn't show a phantom
         // in-progress sync after a crash/force-stop.
         val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        // Apply the persisted per-app locale on the main thread before any UI
+        // is composed. AppCompat also persists it internally, but reading our own
+        // pref ensures the picker UI and the AppCompat store stay in sync.
+        appScope.launch {
+            runCatching {
+                val tag = preferences.preferences.first().appLanguageTag
+                LocaleManager.apply(tag)
+            }.onFailure { Log.w(TAG, "Failed to apply persisted locale on startup", it) }
+        }
         appScope.launch {
             runCatching { syncHistory.reconcileInterruptedRuns(processStartMs) }
                 .onFailure { Log.w(TAG, "Failed to reconcile interrupted runs on startup", it) }

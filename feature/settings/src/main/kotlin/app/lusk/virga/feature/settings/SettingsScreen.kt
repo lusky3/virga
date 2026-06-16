@@ -62,6 +62,13 @@ fun SettingsScreen(
     // Build-time flags from the app module (keeps feature:settings BuildConfig-free).
     crashReportingAvailable: Boolean = false,
     storageAccessRelevant: Boolean = false,
+    /**
+     * Called immediately when the user picks a language, BEFORE the pref is persisted.
+     * The app module wires this to LocaleManager.apply() so the locale change takes
+     * effect at once without waiting for the DataStore write to round-trip.
+     * Defaults to a no-op so preview / instrumented tests don't need to supply it.
+     */
+    onLanguageChange: (String?) -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val prefs by viewModel.state.collectAsStateWithLifecycle()
@@ -105,6 +112,14 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(VirgaSpacing.md),
         ) {
+            LanguageSection(
+                selectedTag = prefs.appLanguageTag,
+                onLanguageSelected = { tag ->
+                    onLanguageChange(tag)
+                    viewModel.setAppLanguageTag(tag)
+                },
+            )
+
             SectionTitle(stringResource(R.string.settings_section_appearance))
             Text(
                 stringResource(R.string.settings_label_theme),
