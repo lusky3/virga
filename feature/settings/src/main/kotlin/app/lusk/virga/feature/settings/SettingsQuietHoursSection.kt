@@ -156,10 +156,10 @@ private fun TimePickerDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = onConfirm) { Text("OK") }
+            TextButton(onClick = onConfirm) { Text(stringResource(android.R.string.ok)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) }
         },
         text = { TimePicker(state = state) },
         title = { Text(stringResource(R.string.settings_section_quiet_hours)) },

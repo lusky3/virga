@@ -562,8 +562,11 @@ open class SyncWorker @AssistedInject constructor(
      * runs rather than being incorrectly suppressed.
      */
     private suspend fun isWithinQuietHours(): Boolean {
-        val prefs = runCatching { preferencesRepository.preferences.first() }.getOrNull()
-            ?: return false
+        val prefs = runCatching { preferencesRepository.preferences.first() }
+            // Rethrow cancellation so a cancelled worker stops instead of slipping
+            // past the gate into a sync (structured concurrency — see captureFailedFiles).
+            .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+            .getOrNull() ?: return false
         if (!prefs.quietHoursEnabled) return false
         val now = java.util.Calendar.getInstance()
         val minuteOfDay = now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE)

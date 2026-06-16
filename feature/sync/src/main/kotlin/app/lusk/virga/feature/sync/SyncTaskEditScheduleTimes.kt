@@ -180,7 +180,10 @@ private fun AddTimeChip(onAddTime: (Int) -> Unit) {
                 Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.sync_schedule_add_time))
             }
             IconButton(onClick = { editing.value = false }) {
-                Icon(Icons.Filled.Close, contentDescription = null)
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = stringResource(android.R.string.cancel),
+                )
             }
         }
     }

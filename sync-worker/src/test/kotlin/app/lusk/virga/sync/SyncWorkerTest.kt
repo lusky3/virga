@@ -651,11 +651,15 @@ class SyncWorkerTest {
     fun scheduledRun_insideQuietWindow_returnsSuccessWithoutCallingEngine() = runBlocking {
         // A scheduled (non-manual) run during the blackout window must skip the sync
         // and return success — WorkManager must not retry it.
+        // Anchor the window to the current minute so "now" is deterministically inside
+        // regardless of wall-clock time (a fixed [0,1439) misses 23:59). The 2-minute
+        // span absorbs a minute roll-over between this read and the worker's.
+        val nowMin = nowMinuteOfDay()
         every { preferencesRepository.preferences } returns flowOf(
             AppPreferences(
                 quietHoursEnabled = true,
-                quietHoursStartMinutes = 0,   // midnight
-                quietHoursEndMinutes = 1439,  // 23:59 — always inside
+                quietHoursStartMinutes = nowMin,
+                quietHoursEndMinutes = (nowMin + 2) % 1440,
             ),
         )
         val t = calendarSyncTask()
@@ -669,12 +673,14 @@ class SyncWorkerTest {
 
     @Test
     fun manualRun_insideQuietWindow_runsNormally() = runBlocking {
-        // Manual "Sync now" bypasses quiet hours regardless of the window.
+        // Manual "Sync now" bypasses quiet hours regardless of the window. Anchor the
+        // window to the current minute so "now" is deterministically inside it.
+        val nowMin = nowMinuteOfDay()
         every { preferencesRepository.preferences } returns flowOf(
             AppPreferences(
                 quietHoursEnabled = true,
-                quietHoursStartMinutes = 0,
-                quietHoursEndMinutes = 1439,
+                quietHoursStartMinutes = nowMin,
+                quietHoursEndMinutes = (nowMin + 2) % 1440,
             ),
         )
         val t = calendarSyncTask()
@@ -707,6 +713,12 @@ class SyncWorkerTest {
 
         assertThat(result).isEqualTo(ListenableWorker.Result.success())
         coVerify(exactly = 1) { executor.run(any(), any(), any(), any(), any()) }
+    }
+
+    /** Current local minute-of-day (0..1439), matching the worker's quiet-hours clock. */
+    private fun nowMinuteOfDay(): Int {
+        val cal = java.util.Calendar.getInstance()
+        return cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
     }
 
     private fun calendarSyncTask() = SyncTask(
