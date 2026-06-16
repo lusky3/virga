@@ -49,6 +49,8 @@ class PreferencesRepository @Inject constructor(
         else prefs[Keys.APP_LANGUAGE_TAG] = tag
     }
 
+    suspend fun setNotifyOnFailureOnly(enabled: Boolean) = edit { it[Keys.NOTIFY_ON_FAILURE_ONLY] = enabled }
+
     suspend fun setDefaultBwLimits(wifi: String?, metered: String?) = edit { prefs ->
         if (wifi.isNullOrBlank()) prefs.remove(Keys.BW_WIFI) else prefs[Keys.BW_WIFI] = wifi
         if (metered.isNullOrBlank()) prefs.remove(Keys.BW_METERED) else prefs[Keys.BW_METERED] = metered
@@ -77,6 +79,7 @@ class PreferencesRepository @Inject constructor(
         quietHoursEndMinutes = this[Keys.QUIET_HOURS_END] ?: 0,
         runRetentionDays = normalizeRetention(this[Keys.RUN_RETENTION_DAYS] ?: 0),
         appLanguageTag = this[Keys.APP_LANGUAGE_TAG],
+        notifyOnFailureOnly = this[Keys.NOTIFY_ON_FAILURE_ONLY] ?: false,
     )
 
     /** Clamp a stored/incoming retention value to a value the UI knows how to render
@@ -102,6 +105,7 @@ class PreferencesRepository @Inject constructor(
         val QUIET_HOURS_END = intPreferencesKey("quiet_hours_end_minutes")
         val RUN_RETENTION_DAYS = intPreferencesKey("run_retention_days")
         val APP_LANGUAGE_TAG = stringPreferencesKey("app_language_tag")
+        val NOTIFY_ON_FAILURE_ONLY = booleanPreferencesKey("notify_on_failure_only")
     }
 
     private companion object {

@@ -69,4 +69,11 @@ data class AppPreferences(
      * it internally on its own, but that internal store isn't observable from Kotlin.
      */
     val appLanguageTag: String? = null,
+    /**
+     * When true, the clean-success completion notification is suppressed so the
+     * user only sees a notification when something goes wrong. The foreground/
+     * progress notification and all error/failure notifications are NEVER affected.
+     * Default false = current behaviour (always post the success notification).
+     */
+    val notifyOnFailureOnly: Boolean = false,
 )

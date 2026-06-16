@@ -41,4 +41,7 @@ class SettingsViewModel @Inject constructor(
 
     fun setAppLanguageTag(tag: String?) =
         viewModelScope.launch { preferences.setAppLanguageTag(tag) }
+
+    fun setNotifyOnFailureOnly(enabled: Boolean) =
+        viewModelScope.launch { preferences.setNotifyOnFailureOnly(enabled) }
 }
