@@ -76,7 +76,7 @@ class SyncScheduler @Inject constructor(
      * plain interval. Calendar runs are one-shots re-enqueued after each run by
      * [SyncWorker], since WorkManager periodic work can't target a time-of-day.
      */
-    fun schedule(task: SyncTask) {
+    suspend fun schedule(task: SyncTask) {
         val interval = task.intervalMinutes
         when {
             !task.enabled -> cancel(task.id)
@@ -108,7 +108,7 @@ class SyncScheduler @Inject constructor(
      * quiet-hours blackout window if quiet hours are enabled. [SyncWorker] calls
      * [schedule] again after the run to queue the following occurrence.
      */
-    private fun scheduleCalendar(task: SyncTask) {
+    private suspend fun scheduleCalendar(task: SyncTask) {
         val now = System.currentTimeMillis()
         val zone = ZoneId.systemDefault()
         val rawNextMs = computeNextCalendarMs(task, now, zone)
@@ -148,14 +148,13 @@ class SyncScheduler @Inject constructor(
         }
 
     /**
-     * Reads quiet-hours prefs synchronously (blocking) via [runCatching] + [first].
-     * Called only from the scheduling path (not on the main thread). Returns the
+     * Suspends to read quiet-hours prefs off the caller's coroutine (callers invoke
+     * [schedule] from a coroutine, never blocking the main thread). Returns the
      * shifted candidate, or the original if quiet hours are disabled or prefs fail.
      */
-    private fun applyQuietHours(candidateMs: Long, zone: ZoneId): Long {
-        val prefs = runCatching {
-            kotlinx.coroutines.runBlocking { preferencesRepository.preferences.first() }
-        }.getOrNull() ?: return candidateMs
+    private suspend fun applyQuietHours(candidateMs: Long, zone: ZoneId): Long {
+        val prefs = runCatching { preferencesRepository.preferences.first() }
+            .getOrNull() ?: return candidateMs
         if (!prefs.quietHoursEnabled) return candidateMs
         return SyncSchedule.shiftPastBlackout(
             candidateMs, prefs.quietHoursStartMinutes, prefs.quietHoursEndMinutes, zone,

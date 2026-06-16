@@ -34,27 +34,32 @@ import app.lusk.virga.core.designsystem.theme.VirgaSpacing
  * single-time stepper is hidden (multi-time mode).
  * The user can add additional times or remove existing chips.
  */
+/** Bundles the time-editor values so [ScheduleTimesEditor] stays under the param limit. */
+internal data class ScheduleTimesState(
+    val singleHour: Int,
+    val singleMinute: Int,
+    val scheduleTimes: List<Int>,
+)
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ScheduleTimesEditor(
-    singleHour: Int,
-    singleMinute: Int,
-    scheduleTimes: List<Int>,
+    state: ScheduleTimesState,
     onSingleTimeChange: (hour: Int, minute: Int) -> Unit,
     onAddTime: (minuteOfDay: Int) -> Unit,
     onRemoveTime: (index: Int) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
-        if (scheduleTimes.isEmpty()) {
+        if (state.scheduleTimes.isEmpty()) {
             SingleTimeStepper(
-                hour = singleHour,
-                minute = singleMinute,
+                hour = state.singleHour,
+                minute = state.singleMinute,
                 onTimeChange = onSingleTimeChange,
             )
             TextButton(
                 onClick = {
                     // Promote the current single-time to the multi-time list.
-                    onAddTime(singleHour * 60 + singleMinute)
+                    onAddTime(state.singleHour * 60 + state.singleMinute)
                 },
                 modifier = Modifier.padding(start = VirgaSpacing.xs),
             ) {
@@ -65,7 +70,7 @@ internal fun ScheduleTimesEditor(
         } else {
             Text(stringResource(R.string.sync_schedule_time_label), style = MaterialTheme.typography.bodyMedium)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
-                scheduleTimes.forEachIndexed { index, minuteOfDay ->
+                state.scheduleTimes.forEachIndexed { index, minuteOfDay ->
                     val h = minuteOfDay / 60
                     val m = minuteOfDay % 60
                     FilterChip(

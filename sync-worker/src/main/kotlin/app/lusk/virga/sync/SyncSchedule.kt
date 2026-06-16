@@ -1,6 +1,7 @@
 package app.lusk.virga.sync
 
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
@@ -65,23 +66,34 @@ object SyncSchedule {
     ): Long {
         if (daysMask == 0 || times.isEmpty()) return -1
         val from = Instant.ofEpochMilli(fromMs).atZone(zone)
-        var best = Long.MAX_VALUE
         for (i in 0..8) {
             val date = from.toLocalDate().plusDays(i.toLong())
             if (!includesDay(daysMask, date.dayOfWeek.value)) continue
-            for (minuteOfDay in times) {
-                val h = minuteOfDay.coerceIn(0, 1439) / 60
-                val m = minuteOfDay.coerceIn(0, 1439) % 60
-                val candidate = date.atTime(h, m).atZone(zone)
-                if (candidate.isAfter(from)) {
-                    val ms = candidate.toInstant().toEpochMilli()
-                    if (ms < best) best = ms
-                }
-            }
-            // Once we have a best from this day, days farther out can't improve it.
-            if (best != Long.MAX_VALUE) break
+            // The earliest matching time on the first selected day wins: days farther
+            // out can only be later, so the first non-null result is the answer.
+            val best = earliestOnDate(date, times, from, zone)
+            if (best != null) return best
         }
-        return if (best == Long.MAX_VALUE) -1L else best
+        return -1
+    }
+
+    /** Earliest of [times] (minutes-of-day) on [date] strictly after [from], or null. */
+    private fun earliestOnDate(
+        date: LocalDate,
+        times: List<Int>,
+        from: ZonedDateTime,
+        zone: ZoneId,
+    ): Long? {
+        var best: Long? = null
+        for (minuteOfDay in times) {
+            val clamped = minuteOfDay.coerceIn(0, 1439)
+            val candidate = date.atTime(clamped / 60, clamped % 60).atZone(zone)
+            if (candidate.isAfter(from)) {
+                val ms = candidate.toInstant().toEpochMilli()
+                if (best == null || ms < best) best = ms
+            }
+        }
+        return best
     }
 
     /**
@@ -124,15 +136,14 @@ object SyncSchedule {
     }
 
     private fun endZdt(candidateZdt: ZonedDateTime, startMin: Int, endMin: Int): ZonedDateTime {
-        val endHour = endMin / 60
-        val endMinute = endMin % 60
-        val sameDay = candidateZdt.toLocalDate().atTime(endHour, endMinute).atZone(candidateZdt.zone)
-        return if (startMin >= endMin) {
-            // Overnight wrap: end is the next calendar day.
-            sameDay.plusDays(1)
-        } else {
-            sameDay
-        }
+        val sameDay = candidateZdt.toLocalDate().atTime(endMin / 60, endMin % 60).atZone(candidateZdt.zone)
+        val minuteOfDay = candidateZdt.hour * 60 + candidateZdt.minute
+        // Overnight wrap (startMin >= endMin): a candidate in the EVENING portion
+        // (>= startMin, e.g. 23:00 of a 22:00–06:00 window) ends the NEXT day; a
+        // MORNING-portion candidate (< endMin, e.g. 02:00) ends the SAME day. Only
+        // the evening portion needs +1 day — adding it unconditionally pushed morning
+        // candidates a full 24h too far.
+        return if (startMin >= endMin && minuteOfDay >= startMin) sameDay.plusDays(1) else sameDay
     }
 
     /**

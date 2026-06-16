@@ -146,6 +146,15 @@ class SyncScheduleTest {
         assertThat(shifted).isEqualTo(ms(2024, 1, 2, 6, 0))
     }
 
+    @Test fun `shiftPastBlackout overnight wrap - morning candidate ends same day`() {
+        // Candidate at 2024-01-02 02:00 UTC, window 22:00-06:00 (1320-360). The 02:00
+        // candidate is in the MORNING portion, so the window it sits in ends at 06:00
+        // the SAME day — not 06:00 tomorrow (the over-shift bug this guards against).
+        val candidateMs = ms(2024, 1, 2, 2, 0)
+        val shifted = SyncSchedule.shiftPastBlackout(candidateMs, 1320, 360, utc)
+        assertThat(shifted).isEqualTo(ms(2024, 1, 2, 6, 0))
+    }
+
     @Test fun `shiftPastBlackout zero-width window returns unchanged`() {
         val candidateMs = ms(2024, 1, 1, 9, 0)
         val shifted = SyncSchedule.shiftPastBlackout(candidateMs, 540, 540, utc)

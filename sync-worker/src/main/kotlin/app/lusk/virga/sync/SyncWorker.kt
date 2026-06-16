@@ -389,7 +389,7 @@ open class SyncWorker @AssistedInject constructor(
      * it. Called both on the normal completion path and the [anotherRunInFlight]
      * skip path so bailing never drops the schedule.
      */
-    private fun reenqueueCalendar(task: SyncTask, isManualRun: Boolean) {
+    private suspend fun reenqueueCalendar(task: SyncTask, isManualRun: Boolean) {
         if (isManualRun) return
         if (task.scheduleDaysMask == 0 || !task.enabled) return
         // A swallowed failure here means the calendar task silently never runs

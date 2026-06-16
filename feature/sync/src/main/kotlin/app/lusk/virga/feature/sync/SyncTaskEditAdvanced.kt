@@ -262,9 +262,11 @@ internal fun CalendarScheduleEditor(
             Text(daysError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
         ScheduleTimesEditor(
-            singleHour = hour,
-            singleMinute = minute,
-            scheduleTimes = scheduleTimes,
+            state = ScheduleTimesState(
+                singleHour = hour,
+                singleMinute = minute,
+                scheduleTimes = scheduleTimes,
+            ),
             onSingleTimeChange = onTimeChange,
             onAddTime = onAddTime,
             onRemoveTime = onRemoveTime,

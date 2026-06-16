@@ -222,9 +222,11 @@ fun SettingsScreen(
 
             // Quiet hours — global blackout window. See SettingsQuietHoursSection.
             QuietHoursSection(
-                enabled = prefs.quietHoursEnabled,
-                startMinutes = prefs.quietHoursStartMinutes,
-                endMinutes = prefs.quietHoursEndMinutes,
+                state = QuietHoursUiState(
+                    enabled = prefs.quietHoursEnabled,
+                    startMinutes = prefs.quietHoursStartMinutes,
+                    endMinutes = prefs.quietHoursEndMinutes,
+                ),
                 onEnabledChange = viewModel::setQuietHoursEnabled,
                 onStartChange = viewModel::setQuietHoursStart,
                 onEndChange = viewModel::setQuietHoursEnd,

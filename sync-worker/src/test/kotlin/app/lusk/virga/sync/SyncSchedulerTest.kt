@@ -69,7 +69,7 @@ class SyncSchedulerTest {
     fun schedule_periodicWork_appliesWifiOnlyConstraint() {
         val task = task(id = 7, intervalMinutes = 60, wifiOnly = true)
 
-        scheduler.schedule(task)
+        runBlocking { scheduler.schedule(task) }
 
         val infos = workManager.getWorkInfosForUniqueWork("sync_task_7").get()
         assertThat(infos).hasSize(1)
@@ -82,7 +82,7 @@ class SyncSchedulerTest {
     fun schedule_meteredAllowed_usesConnectedConstraint() {
         val task = task(id = 8, intervalMinutes = 30, wifiOnly = false)
 
-        scheduler.schedule(task)
+        runBlocking { scheduler.schedule(task) }
 
         val infos = workManager.getWorkInfosForUniqueWork("sync_task_8").get()
         assertThat(infos[0].constraints.requiredNetworkType).isEqualTo(NetworkType.CONNECTED)
@@ -90,10 +90,10 @@ class SyncSchedulerTest {
 
     @Test
     fun schedule_disabledTask_cancelsExistingWork() {
-        scheduler.schedule(task(id = 9, intervalMinutes = 60))
+        runBlocking { scheduler.schedule(task(id = 9, intervalMinutes = 60)) }
         assertThat(workManager.getWorkInfosForUniqueWork("sync_task_9").get()).isNotEmpty()
 
-        scheduler.schedule(task(id = 9, intervalMinutes = 60, enabled = false))
+        runBlocking { scheduler.schedule(task(id = 9, intervalMinutes = 60, enabled = false)) }
 
         val states = workManager.getWorkInfosForUniqueWork("sync_task_9").get().map { it.state }
         // Cancelled is terminal; the entry stays around until pruned.
@@ -102,7 +102,7 @@ class SyncSchedulerTest {
 
     @Test
     fun schedule_manualTask_doesNotEnqueueWork() {
-        scheduler.schedule(task(id = 10, intervalMinutes = null))
+        runBlocking { scheduler.schedule(task(id = 10, intervalMinutes = null)) }
 
         assertThat(workManager.getWorkInfosForUniqueWork("sync_task_10").get()).isEmpty()
     }
@@ -152,7 +152,7 @@ class SyncSchedulerTest {
         // not fail and must produce exactly one WorkInfo entry.
         val task = task(id = 30, intervalMinutes = 60, backoffExponential = false, backoffSeconds = 45L)
 
-        scheduler.schedule(task)
+        runBlocking { scheduler.schedule(task) }
 
         val infos = workManager.getWorkInfosForUniqueWork("sync_task_30").get()
         assertThat(infos).hasSize(1)
@@ -176,7 +176,7 @@ class SyncSchedulerTest {
         every { preferencesRepository.preferences } returns flowOf(AppPreferences(quietHoursEnabled = false))
         val task = calendarTask(id = 60, daysMask = 0x7F, hour = 2, minute = 0)
 
-        scheduler.schedule(task)
+        runBlocking { scheduler.schedule(task) }
 
         val infos = workManager.getWorkInfosForUniqueWork("sync_task_60").get()
         assertThat(infos).hasSize(1)
@@ -190,7 +190,7 @@ class SyncSchedulerTest {
         )
         val task = calendarTask(id = 61, daysMask = 0x7F, hour = 2, minute = 0)
 
-        scheduler.schedule(task)
+        runBlocking { scheduler.schedule(task) }
 
         val infos = workManager.getWorkInfosForUniqueWork("sync_task_61").get()
         assertThat(infos).hasSize(1)

@@ -15,14 +15,12 @@ import app.lusk.virga.core.database.entity.SyncTaskEntity
 internal fun decodeScheduleTimes(json: String): List<Int> {
     val trimmed = json.trim()
     if (trimmed.isBlank() || trimmed == "[]") return emptyList()
-    return try {
-        trimmed.removePrefix("[").removeSuffix("]")
-            .split(",")
-            .mapNotNull { it.trim().toIntOrNull() }
-            .filter { it in 0..1439 }
-    } catch (_: Exception) {
-        emptyList()
-    }
+    // Pure String ops below can't throw — a malformed entry just drops out via
+    // toIntOrNull()/the range filter, so no try/catch is needed.
+    return trimmed.removePrefix("[").removeSuffix("]")
+        .split(",")
+        .mapNotNull { it.trim().toIntOrNull() }
+        .filter { it in 0..1439 }
 }
 
 /** Encodes a list of minutes-of-day to a compact JSON array string. */

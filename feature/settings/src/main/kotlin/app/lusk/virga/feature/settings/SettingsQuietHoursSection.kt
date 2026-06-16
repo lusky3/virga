@@ -22,8 +22,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import app.lusk.virga.core.designsystem.component.SettingsLinkRow
 import app.lusk.virga.core.designsystem.component.ToggleRow
+
+/** Bundles quiet-hours values so [QuietHoursSection] stays under the parameter limit. */
+internal data class QuietHoursUiState(
+    val enabled: Boolean,
+    val startMinutes: Int,
+    val endMinutes: Int,
+)
 
 /**
  * Quiet-hours settings section: enable toggle + start/end time pickers shown as
@@ -34,9 +40,7 @@ import app.lusk.virga.core.designsystem.component.ToggleRow
  */
 @Composable
 internal fun QuietHoursSection(
-    enabled: Boolean,
-    startMinutes: Int,
-    endMinutes: Int,
+    state: QuietHoursUiState,
     onEnabledChange: (Boolean) -> Unit,
     onStartChange: (Int) -> Unit,
     onEndChange: (Int) -> Unit,
@@ -45,7 +49,7 @@ internal fun QuietHoursSection(
     SectionTitle(stringResource(R.string.settings_section_quiet_hours))
     ToggleRow(
         label = stringResource(R.string.settings_toggle_quiet_hours),
-        checked = enabled,
+        checked = state.enabled,
         onChange = onEnabledChange,
     )
     Text(
@@ -53,18 +57,17 @@ internal fun QuietHoursSection(
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    if (enabled) {
+    if (state.enabled) {
         Spacer(Modifier.height(8.dp))
         QuietHoursTimePickers(
-            startMinutes = startMinutes,
-            endMinutes = endMinutes,
+            startMinutes = state.startMinutes,
+            endMinutes = state.endMinutes,
             onStartChange = onStartChange,
             onEndChange = onEndChange,
         )
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun QuietHoursTimePickers(
     startMinutes: Int,
@@ -79,61 +82,68 @@ private fun QuietHoursTimePickers(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                stringResource(R.string.settings_quiet_hours_start),
-                style = MaterialTheme.typography.labelLarge,
-            )
-            TextButton(onClick = { showStartPicker = true }) {
-                Text(formatMinutesOfDay(startMinutes))
-            }
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                stringResource(R.string.settings_quiet_hours_end),
-                style = MaterialTheme.typography.labelLarge,
-            )
-            TextButton(onClick = { showEndPicker = true }) {
-                Text(formatMinutesOfDay(endMinutes))
-            }
-        }
+        QuietHoursTimeColumn(
+            label = stringResource(R.string.settings_quiet_hours_start),
+            minutes = startMinutes,
+            onClick = { showStartPicker = true },
+            modifier = Modifier.weight(1f),
+        )
+        QuietHoursTimeColumn(
+            label = stringResource(R.string.settings_quiet_hours_end),
+            minutes = endMinutes,
+            onClick = { showEndPicker = true },
+            modifier = Modifier.weight(1f),
+        )
     }
 
     if (showStartPicker) {
-        val state = remember {
-            TimePickerState(
-                initialHour = startMinutes / 60,
-                initialMinute = startMinutes % 60,
-                is24Hour = true,
-            )
-        }
-        TimePickerDialog(
-            state = state,
+        MinuteTimePickerDialog(
+            initialMinutes = startMinutes,
+            onConfirm = { onStartChange(it); showStartPicker = false },
             onDismiss = { showStartPicker = false },
-            onConfirm = {
-                onStartChange(state.hour * 60 + state.minute)
-                showStartPicker = false
-            },
         )
     }
-
     if (showEndPicker) {
-        val state = remember {
-            TimePickerState(
-                initialHour = endMinutes / 60,
-                initialMinute = endMinutes % 60,
-                is24Hour = true,
-            )
-        }
-        TimePickerDialog(
-            state = state,
+        MinuteTimePickerDialog(
+            initialMinutes = endMinutes,
+            onConfirm = { onEndChange(it); showEndPicker = false },
             onDismiss = { showEndPicker = false },
-            onConfirm = {
-                onEndChange(state.hour * 60 + state.minute)
-                showEndPicker = false
-            },
         )
     }
+}
+
+@Composable
+private fun QuietHoursTimeColumn(
+    label: String,
+    minutes: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Text(label, style = MaterialTheme.typography.labelLarge)
+        TextButton(onClick = onClick) { Text(formatMinutesOfDay(minutes)) }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MinuteTimePickerDialog(
+    initialMinutes: Int,
+    onConfirm: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val state = remember {
+        TimePickerState(
+            initialHour = initialMinutes / 60,
+            initialMinute = initialMinutes % 60,
+            is24Hour = true,
+        )
+    }
+    TimePickerDialog(
+        state = state,
+        onDismiss = onDismiss,
+        onConfirm = { onConfirm(state.hour * 60 + state.minute) },
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
