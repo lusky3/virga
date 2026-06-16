@@ -385,6 +385,39 @@ class MappersTest {
         assertThat(domain.failedFiles).isEmpty()
     }
 
+    @Test fun `SyncRunEntity toDomain maps remoteName direction and durationMs`() {
+        val entity = SyncRunEntity(
+            id = 20L,
+            taskId = 3L,
+            startedAtEpochMs = 1000L,
+            status = SyncStatus.SUCCESS,
+            remoteName = "gdrive",
+            direction = "UPLOAD",
+            durationMs = 5_000L,
+        )
+
+        val domain = entity.toDomain()
+
+        assertThat(domain.remoteName).isEqualTo("gdrive")
+        assertThat(domain.direction).isEqualTo("UPLOAD")
+        assertThat(domain.durationMs).isEqualTo(5_000L)
+    }
+
+    @Test fun `SyncRunEntity toDomain remoteName direction durationMs default to empty and zero`() {
+        val entity = SyncRunEntity(
+            id = 21L,
+            taskId = 3L,
+            startedAtEpochMs = 1000L,
+            status = SyncStatus.RUNNING,
+        )
+
+        val domain = entity.toDomain()
+
+        assertThat(domain.remoteName).isEmpty()
+        assertThat(domain.direction).isEmpty()
+        assertThat(domain.durationMs).isEqualTo(0L)
+    }
+
     // --- ConflictEntity toDomain ---
 
     @Test fun `ConflictEntity toDomain copies every field`() {

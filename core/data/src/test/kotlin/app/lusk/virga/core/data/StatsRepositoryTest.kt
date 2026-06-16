@@ -3,6 +3,7 @@ package app.lusk.virga.core.data
 import app.lusk.virga.core.common.model.LifetimeStats
 import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.database.dao.AppStatsDao
+import app.lusk.virga.core.database.dao.SyncRunDao
 import app.lusk.virga.core.database.entity.AppStatsEntity
 import com.google.common.truth.Truth.assertThat
 import io.mockk.coVerify
@@ -17,11 +18,13 @@ import org.junit.jupiter.api.Test
 class StatsRepositoryTest {
 
     private val dao = mockk<AppStatsDao>(relaxed = true)
+    private val runDao = mockk<SyncRunDao>(relaxed = true)
+    private val remoteRepo = mockk<RemoteRepository>(relaxed = true)
     private lateinit var repo: StatsRepository
 
     @BeforeEach
     fun setUp() {
-        repo = StatsRepository(dao)
+        repo = StatsRepository(dao, runDao, remoteRepo)
     }
 
     // ---------------------------------------------------------------------------
@@ -290,7 +293,7 @@ class StatsRepositoryTest {
         every { dao.observe() } returns flowOf(entity)
 
         // Build the repo AFTER stubbing observe() — `stats` captures the flow once at construction.
-        val result = StatsRepository(dao).stats.first()
+        val result = StatsRepository(dao, runDao, remoteRepo).stats.first()
 
         assertThat(result.firstSyncEpochMs).isEqualTo(1_000_000L)
         assertThat(result.totalRuns).isEqualTo(42L)
@@ -313,7 +316,7 @@ class StatsRepositoryTest {
         every { dao.observe() } returns flowOf(null)
 
         // Build the repo AFTER stubbing observe() — `stats` captures the flow once at construction.
-        val result = StatsRepository(dao).stats.first()
+        val result = StatsRepository(dao, runDao, remoteRepo).stats.first()
 
         assertThat(result).isEqualTo(LifetimeStats())
     }
@@ -323,7 +326,7 @@ class StatsRepositoryTest {
         every { dao.observe() } returns flowOf(null)
 
         // Build the repo AFTER stubbing observe() — `stats` captures the flow once at construction.
-        val result = StatsRepository(dao).stats.first()
+        val result = StatsRepository(dao, runDao, remoteRepo).stats.first()
 
         assertThat(result.firstSyncEpochMs).isNull()
     }
@@ -333,7 +336,7 @@ class StatsRepositoryTest {
         every { dao.observe() } returns flowOf(null)
 
         // Build the repo AFTER stubbing observe() — `stats` captures the flow once at construction.
-        val result = StatsRepository(dao).stats.first()
+        val result = StatsRepository(dao, runDao, remoteRepo).stats.first()
 
         assertThat(result.totalRuns).isEqualTo(0L)
         assertThat(result.totalBytesTransferred).isEqualTo(0L)

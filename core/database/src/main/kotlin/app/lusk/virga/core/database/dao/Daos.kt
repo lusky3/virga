@@ -50,6 +50,27 @@ interface RemoteDao {
 /** Lightweight projection used by [RemoteDao.replaceAll] to carry the flag across a cache rebuild. */
 data class NeedsReauthRow(val name: String, val needsReauth: Boolean)
 
+/** Per-remote aggregate projection for stats queries. */
+data class RemoteStatRow(
+    val remoteName: String,
+    val totalRuns: Long,
+    val successRuns: Long,
+    val bytes: Long,
+    val files: Long,
+)
+
+/** Per-task aggregate projection for stats queries. */
+data class TaskStatRow(
+    val taskId: Long,
+    val totalRuns: Long,
+    val successRuns: Long,
+    val bytes: Long,
+    val files: Long,
+)
+
+/** One epoch-day bucket of bytes transferred, for trend charting. */
+data class DayBucketRow(val day: Long, val bytes: Long)
+
 @Dao
 interface SyncTaskDao {
     @Query("SELECT * FROM sync_tasks ORDER BY createdAtEpochMs DESC")
@@ -110,7 +131,8 @@ interface SyncRunDao {
         "UPDATE sync_runs SET endedAtEpochMs = :endedAtEpochMs, status = :status, " +
             "filesTransferred = :filesTransferred, bytesTransferred = :bytesTransferred, " +
             "errorCount = :errorCount, errorMessage = :errorMessage, logPath = :logPath, " +
-            "failedFiles = :failedFiles " +
+            "failedFiles = :failedFiles, remoteName = :remoteName, direction = :direction, " +
+            "durationMs = :durationMs " +
             "WHERE id = :runId",
     )
     suspend fun finishRun(
@@ -123,6 +145,9 @@ interface SyncRunDao {
         errorMessage: String?,
         logPath: String?,
         failedFiles: String = "",
+        remoteName: String = "",
+        direction: String = "",
+        durationMs: Long = 0,
     )
 
     @Query("DELETE FROM sync_runs WHERE startedAtEpochMs < :beforeEpochMs")
@@ -144,6 +169,31 @@ interface SyncRunDao {
             "WHERE status = 'RUNNING' AND startedAtEpochMs < :startedBefore",
     )
     suspend fun failInterruptedRuns(now: Long, message: String, startedBefore: Long): Int
+
+    @Query(
+        "SELECT remoteName, COUNT(*) AS totalRuns, " +
+            "SUM(CASE WHEN status='SUCCESS' THEN 1 ELSE 0 END) AS successRuns, " +
+            "SUM(bytesTransferred) AS bytes, SUM(filesTransferred) AS files " +
+            "FROM sync_runs GROUP BY remoteName",
+    )
+    fun observeRemoteStats(): Flow<List<RemoteStatRow>>
+
+    @Query(
+        "SELECT taskId, COUNT(*) AS totalRuns, " +
+            "SUM(CASE WHEN status='SUCCESS' THEN 1 ELSE 0 END) AS successRuns, " +
+            "SUM(bytesTransferred) AS bytes, SUM(filesTransferred) AS files " +
+            "FROM sync_runs GROUP BY taskId",
+    )
+    fun observeTaskStats(): Flow<List<TaskStatRow>>
+
+    @Query(
+        "SELECT (startedAtEpochMs/86400000) AS day, SUM(bytesTransferred) AS bytes " +
+            "FROM sync_runs WHERE startedAtEpochMs >= :sinceMs GROUP BY day ORDER BY day",
+    )
+    fun observeDailyBuckets(sinceMs: Long): Flow<List<DayBucketRow>>
+
+    @Query("DELETE FROM sync_runs WHERE remoteName = :remoteName")
+    suspend fun deleteByRemoteName(remoteName: String)
 
     @Query("DELETE FROM sync_runs")
     suspend fun deleteAll()

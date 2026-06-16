@@ -220,4 +220,10 @@ data class SyncRunEntity(
      * Capped at 100 entries at capture time. Empty string when no file-level failures.
      */
     val failedFiles: String = "",
+    /** Name of the rclone remote targeted by this run (e.g. "gdrive"). */
+    val remoteName: String = "",
+    /** Sync direction as a plain string (SyncDirection.name). */
+    val direction: String = "",
+    /** Wall-clock duration of this run in milliseconds. */
+    val durationMs: Long = 0,
 )
