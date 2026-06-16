@@ -63,6 +63,22 @@ data class FileBrowserUiState(
     @param:StringRes val createFolderError: Int? = null,
     /** True while a folder-creation RC call is in flight. */
     val creatingFolder: Boolean = false,
+    /** One-shot operation status message (error string); cleared after consumed. */
+    val statusMessage: String? = null,
+    /** True while a delete/rename/move/copy operation is in flight. */
+    val fileOpInProgress: Boolean = false,
+    /** True while the delete-confirm dialog is shown (destructive). */
+    val showDeleteConfirmDialog: Boolean = false,
+    /** True while the rename dialog is shown. */
+    val showRenameDialog: Boolean = false,
+    /** The single path being renamed (null when dialog is closed). */
+    val renamePath: String? = null,
+    /** String resource for a rename validation error, or null if none. */
+    @param:StringRes val renameError: Int? = null,
+    /** True while the move-destination dialog is shown. */
+    val showMoveDialog: Boolean = false,
+    /** True while the copy-destination dialog is shown. */
+    val showCopyDialog: Boolean = false,
 ) {
     val atRoot: Boolean get() = path.isEmpty()
     val breadcrumb: List<String> get() = path.split('/').filter { it.isNotBlank() }
@@ -229,6 +245,185 @@ class FileBrowserViewModel @Inject constructor(
 
     fun clearSelection() {
         _state.update { it.copy(selectionMode = false, selectedPaths = emptySet()) }
+    }
+
+    /** Dismisses any one-shot status message after the UI has consumed it. */
+    fun clearStatusMessage() {
+        _state.update { it.copy(statusMessage = null) }
+    }
+
+    // -------------------------------------------------------------------------
+    // Delete
+    // -------------------------------------------------------------------------
+
+    fun openDeleteConfirmDialog() {
+        if (_state.value.selectedPaths.isNotEmpty()) {
+            _state.update { it.copy(showDeleteConfirmDialog = true) }
+        }
+    }
+
+    fun dismissDeleteConfirmDialog() {
+        _state.update { it.copy(showDeleteConfirmDialog = false) }
+    }
+
+    /**
+     * Deletes all selected items: files via `deleteFile`, directories via `purge`
+     * (recursive). Refreshes the listing on success. Never throws — failure surfaces
+     * via [FileBrowserUiState.statusMessage].
+     */
+    fun deleteSelected() {
+        val remote = _state.value.remoteName ?: return
+        val paths = _state.value.selectedPaths
+        val entries = _state.value.rawEntries
+        if (paths.isEmpty()) return
+
+        viewModelScope.launch {
+            _state.update { it.copy(fileOpInProgress = true, showDeleteConfirmDialog = false) }
+            val result = runCatching {
+                withContext(dispatchers.io) {
+                    for (path in paths) {
+                        val isDir = entries.find { it.path == path }?.isDir ?: false
+                        if (isDir) {
+                            fileBrowser.purge(remote, path)
+                        } else {
+                            fileBrowser.deleteFile(remote, path)
+                        }
+                    }
+                }
+            }
+            val message = if (result.isSuccess) null else result.exceptionOrNull()?.toUserMessage()
+            _state.update { it.copy(fileOpInProgress = false, statusMessage = message) }
+            if (result.isSuccess) {
+                clearSelection()
+                load(remote, _state.value.path)
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Rename
+    // -------------------------------------------------------------------------
+
+    fun openRenameDialog(path: String) {
+        _state.update { it.copy(showRenameDialog = true, renamePath = path) }
+    }
+
+    fun dismissRenameDialog() {
+        _state.update { it.copy(showRenameDialog = false, renamePath = null, renameError = null) }
+    }
+
+    /**
+     * Renames the item at [path] to [newName] within the same parent directory.
+     * Validates the new name using the same rules as [createFolder]. Refreshes
+     * the listing on success. Invalid name surfaces [FileBrowserUiState.statusMessage]
+     * using [R.string.explorer_rename_invalid_name].
+     */
+    fun rename(path: String, newName: String) {
+        val trimmed = newName.trim()
+        if (!isStructurallyValidFolderName(trimmed)) {
+            _state.update { it.copy(renameError = R.string.explorer_rename_invalid_name) }
+            return
+        }
+        val remote = _state.value.remoteName ?: return
+        val parent = path.substringBeforeLast('/', missingDelimiterValue = "")
+        val destPath = if (parent.isEmpty()) trimmed else "$parent/$trimmed"
+
+        viewModelScope.launch {
+            _state.update { it.copy(fileOpInProgress = true, showRenameDialog = false, renamePath = null, renameError = null) }
+            val result = runCatching {
+                withContext(dispatchers.io) { fileBrowser.moveFile(remote, path, destPath) }
+            }
+            val message = if (result.isSuccess) null else result.exceptionOrNull()?.toUserMessage()
+            _state.update { it.copy(fileOpInProgress = false, statusMessage = message) }
+            if (result.isSuccess) {
+                clearSelection()
+                load(remote, _state.value.path)
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Move / Copy
+    // -------------------------------------------------------------------------
+
+    fun openMoveDialog() {
+        if (_state.value.selectedPaths.isNotEmpty()) {
+            _state.update { it.copy(showMoveDialog = true) }
+        }
+    }
+
+    fun dismissMoveDialog() {
+        _state.update { it.copy(showMoveDialog = false) }
+    }
+
+    fun openCopyDialog() {
+        if (_state.value.selectedPaths.isNotEmpty()) {
+            _state.update { it.copy(showCopyDialog = true) }
+        }
+    }
+
+    fun dismissCopyDialog() {
+        _state.update { it.copy(showCopyDialog = false) }
+    }
+
+    /**
+     * Moves each selected item into [destDir] within the same remote. The
+     * destination filename is the item's own name. Refreshes on success.
+     */
+    fun moveSelected(destDir: String) {
+        val remote = _state.value.remoteName ?: return
+        val paths = _state.value.selectedPaths
+        val entries = _state.value.rawEntries
+        if (paths.isEmpty()) return
+
+        viewModelScope.launch {
+            _state.update { it.copy(fileOpInProgress = true, showMoveDialog = false) }
+            val result = runCatching {
+                withContext(dispatchers.io) {
+                    for (path in paths) {
+                        val name = entries.find { it.path == path }?.name ?: path.substringAfterLast('/')
+                        val destPath = if (destDir.isEmpty()) name else "$destDir/$name"
+                        fileBrowser.moveFile(remote, path, destPath)
+                    }
+                }
+            }
+            val message = if (result.isSuccess) null else result.exceptionOrNull()?.toUserMessage()
+            _state.update { it.copy(fileOpInProgress = false, statusMessage = message) }
+            if (result.isSuccess) {
+                clearSelection()
+                load(remote, _state.value.path)
+            }
+        }
+    }
+
+    /**
+     * Copies each selected item into [destDir] within the same remote. The
+     * destination filename is the item's own name. Refreshes on success.
+     */
+    fun copySelected(destDir: String) {
+        val remote = _state.value.remoteName ?: return
+        val paths = _state.value.selectedPaths
+        val entries = _state.value.rawEntries
+        if (paths.isEmpty()) return
+
+        viewModelScope.launch {
+            _state.update { it.copy(fileOpInProgress = true, showCopyDialog = false) }
+            val result = runCatching {
+                withContext(dispatchers.io) {
+                    for (path in paths) {
+                        val name = entries.find { it.path == path }?.name ?: path.substringAfterLast('/')
+                        val destPath = if (destDir.isEmpty()) name else "$destDir/$name"
+                        fileBrowser.copyFile(remote, path, destPath)
+                    }
+                }
+            }
+            val message = if (result.isSuccess) null else result.exceptionOrNull()?.toUserMessage()
+            _state.update { it.copy(fileOpInProgress = false, statusMessage = message) }
+            if (result.isSuccess) {
+                clearSelection()
+                load(remote, _state.value.path)
+            }
+        }
     }
 
     /** L3: the in-flight load, cancelled before each relaunch so a slow list(A)

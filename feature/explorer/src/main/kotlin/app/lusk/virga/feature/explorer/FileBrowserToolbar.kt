@@ -2,6 +2,7 @@ package app.lusk.virga.feature.explorer
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
@@ -9,6 +10,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.semantics.Role
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.automirrored.filled.DriveFileMove
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
@@ -19,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -28,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -157,6 +164,50 @@ private fun SortOption(label: String, selected: Boolean, onClick: () -> Unit) {
         },
         onClick = onClick,
     )
+}
+
+/**
+ * Action bar shown in selection mode. Delete is always enabled; Rename is only
+ * enabled when exactly one item is selected.
+ *
+ * Callbacks are grouped into [SelectionActions] to stay within the 6-parameter limit.
+ */
+data class SelectionActions(
+    val onDelete: () -> Unit,
+    val onRename: () -> Unit,
+    val onMove: () -> Unit,
+    val onCopy: () -> Unit,
+)
+
+@Composable
+internal fun SelectionActionBar(
+    selectionCount: Int,
+    actions: SelectionActions,
+) {
+    Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "$selectionCount selected",
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = actions.onDelete) {
+                Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.explorer_action_delete))
+            }
+            IconButton(onClick = actions.onRename, enabled = selectionCount == 1) {
+                Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.explorer_action_rename))
+            }
+            IconButton(onClick = actions.onMove) {
+                Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = stringResource(R.string.explorer_action_move))
+            }
+            IconButton(onClick = actions.onCopy) {
+                Icon(Icons.Filled.ContentCopy, contentDescription = stringResource(R.string.explorer_action_copy))
+            }
+        }
+    }
 }
 
 /** Remote picker list shown at the top level when no remote is selected. */

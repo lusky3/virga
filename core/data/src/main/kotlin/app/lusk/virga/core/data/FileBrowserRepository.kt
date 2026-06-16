@@ -25,6 +25,31 @@ class FileBrowserRepository @Inject constructor(
     suspend fun mkdir(remoteName: String, path: String) =
         engine.mkdir("$remoteName:", path)
 
+    /** Deletes a single file at [path] within [remoteName]. Throws [app.lusk.virga.core.common.error.VirgaError] on failure. */
+    suspend fun deleteFile(remoteName: String, path: String) =
+        engine.deleteFile("$remoteName:", path)
+
+    /**
+     * Moves/renames [fromPath] to [toPath] within [remoteName] via
+     * `operations/movefile`. Use for rename (same dir, new name) or move
+     * (same remote, different dir). Throws [VirgaError] on failure.
+     */
+    suspend fun moveFile(remoteName: String, fromPath: String, toPath: String) =
+        engine.moveFile("$remoteName:$fromPath", "$remoteName:$toPath")
+
+    /**
+     * Copies [fromPath] to [toPath] within [remoteName]. Throws [VirgaError] on failure.
+     */
+    suspend fun copyFile(remoteName: String, fromPath: String, toPath: String) =
+        engine.copyFile("$remoteName:$fromPath", "$remoteName:$toPath")
+
+    /**
+     * Recursively deletes directory [path] within [remoteName] via `operations/purge`.
+     * Throws [VirgaError] on failure.
+     */
+    suspend fun purge(remoteName: String, path: String) =
+        engine.purge("$remoteName:", path)
+
     /**
      * Releases the daemon when browsing closes — best-effort: stops it only if no
      * sync is currently leasing it (the browser is a non-leasing consumer using the

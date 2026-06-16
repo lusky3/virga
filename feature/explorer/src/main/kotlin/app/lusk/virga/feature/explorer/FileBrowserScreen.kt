@@ -35,6 +35,8 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -44,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -92,9 +95,18 @@ fun FileBrowserScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val entries by viewModel.entries.collectAsStateWithLifecycle()
     val remotes by viewModel.remotes.collectAsStateWithLifecycle()
+    val snackbar = remember { SnackbarHostState() }
 
     if (initialRemote != null) {
         LaunchedEffect(initialRemote) { viewModel.selectRemoteIfUnset(initialRemote) }
+    }
+
+    LaunchedEffect(state.statusMessage) {
+        val msg = state.statusMessage
+        if (msg != null) {
+            snackbar.showSnackbar(msg)
+            viewModel.clearStatusMessage()
+        }
     }
 
     BackHandler(enabled = state.selectionMode) { viewModel.clearSelection() }
@@ -103,6 +115,16 @@ fun FileBrowserScreen(
     }
 
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+
+    val selectionActions = SelectionActions(
+        onDelete = viewModel::openDeleteConfirmDialog,
+        onRename = {
+            val path = state.selectedPaths.singleOrNull() ?: return@SelectionActions
+            viewModel.openRenameDialog(path)
+        },
+        onMove = viewModel::openMoveDialog,
+        onCopy = viewModel::openCopyDialog,
+    )
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -117,6 +139,7 @@ fun FileBrowserScreen(
                 onClearSelection = viewModel::clearSelection,
             )
         },
+        snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
             val remote = state.remoteName
             if (remote != null && !state.loading && state.error == null) {
@@ -188,6 +211,12 @@ fun FileBrowserScreen(
                 }
                 state.error != null -> ErrorState(state.error!!, viewModel::retry)
                 else -> Column(Modifier.fillMaxSize()) {
+                    if (state.selectionMode) {
+                        SelectionActionBar(
+                            selectionCount = state.selectedPaths.size,
+                            actions = selectionActions,
+                        )
+                    }
                     if (state.truncated) {
                         val truncatedDesc = stringResource(R.string.explorer_truncated_notice)
                         Text(
@@ -221,6 +250,42 @@ fun FileBrowserScreen(
             creating = state.creatingFolder,
             onDismiss = viewModel::dismissCreateFolderDialog,
             onConfirm = viewModel::createFolder,
+        )
+    }
+
+    if (state.showDeleteConfirmDialog) {
+        DeleteConfirmDialog(
+            count = state.selectedPaths.size,
+            onConfirm = viewModel::deleteSelected,
+            onDismiss = viewModel::dismissDeleteConfirmDialog,
+        )
+    }
+
+    if (state.showRenameDialog) {
+        val path = state.renamePath ?: ""
+        RenameDialog(
+            initialName = path.substringAfterLast('/').ifEmpty { path },
+            errorRes = state.renameError,
+            onConfirm = { viewModel.rename(path, it) },
+            onDismiss = viewModel::dismissRenameDialog,
+        )
+    }
+
+    if (state.showMoveDialog) {
+        DestinationDialog(
+            titleRes = R.string.explorer_dest_title_move,
+            confirmRes = R.string.explorer_dest_confirm_move,
+            onConfirm = viewModel::moveSelected,
+            onDismiss = viewModel::dismissMoveDialog,
+        )
+    }
+
+    if (state.showCopyDialog) {
+        DestinationDialog(
+            titleRes = R.string.explorer_dest_title_copy,
+            confirmRes = R.string.explorer_dest_confirm_copy,
+            onConfirm = viewModel::copySelected,
+            onDismiss = viewModel::dismissCopyDialog,
         )
     }
 }

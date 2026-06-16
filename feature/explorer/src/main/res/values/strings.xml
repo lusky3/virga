@@ -42,6 +42,34 @@
     <string name="explorer_new_folder_exists">A folder with that name already exists here.</string>
     <string name="explorer_new_folder_failed">Couldn\'t create the folder. Please try again.</string>
 
+    <!-- File operations — selection action bar -->
+    <string name="explorer_action_delete">Delete</string>
+    <string name="explorer_action_rename">Rename</string>
+    <string name="explorer_action_move">Move</string>
+    <string name="explorer_action_copy">Copy</string>
+
+    <!-- Delete confirm dialog -->
+    <!-- %1$d = number of items -->
+    <plurals name="explorer_delete_confirm_title">
+        <item quantity="one">Delete 1 item?</item>
+        <item quantity="other">Delete %1$d items?</item>
+    </plurals>
+    <string name="explorer_delete_confirm_body">This action cannot be undone.</string>
+    <string name="explorer_delete_confirm_confirm">Delete</string>
+
+    <!-- Rename dialog -->
+    <string name="explorer_rename_title">Rename</string>
+    <string name="explorer_rename_hint">New name</string>
+    <string name="explorer_rename_confirm">Rename</string>
+    <string name="explorer_rename_invalid_name">Enter a valid name (no slashes or control characters).</string>
+
+    <!-- Move / Copy destination dialog -->
+    <string name="explorer_dest_title_move">Move to folder</string>
+    <string name="explorer_dest_title_copy">Copy to folder</string>
+    <string name="explorer_dest_hint">Destination path (e.g. Photos/2024)</string>
+    <string name="explorer_dest_confirm_move">Move here</string>
+    <string name="explorer_dest_confirm_copy">Copy here</string>
+
     <!-- Item a11y content descriptions -->
     <!-- %1$s = folder name -->
     <string name="explorer_a11y_folder">Folder, %1$s</string>
