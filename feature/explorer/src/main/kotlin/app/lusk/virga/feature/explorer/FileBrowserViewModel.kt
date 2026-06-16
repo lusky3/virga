@@ -135,6 +135,13 @@ class FileBrowserViewModel @Inject constructor(
         return if (exists) R.string.explorer_new_folder_exists else null
     }
 
+    /** Structural + collision validation for rename. Returns a string-res error or null when valid. */
+    @StringRes
+    private fun renameValidationError(trimmed: String, excludePath: String): Int? {
+        if (!isStructurallyValidFolderName(trimmed)) return R.string.explorer_rename_invalid_name
+        return checkRenameCollision(trimmed, excludePath)
+    }
+
     /** L3: the in-flight folder creation, cancelled on dismiss/relaunch. */
     private var createFolderJob: kotlinx.coroutines.Job? = null
 
@@ -276,34 +283,12 @@ class FileBrowserViewModel @Inject constructor(
         _state.update { it.copy(showDeleteConfirmDialog = false) }
     }
 
-    /** Deletes selected items per-item. Always refreshes afterward; partial failures surface via statusMessage. */
+    /** Deletes selected items per-item (files→deleteFile, dirs→purge). Always refreshes afterward. */
     fun deleteSelected() {
-        if (_state.value.fileOpInProgress) return
-        val remote = _state.value.remoteName ?: return
-        val paths = _state.value.selectedPaths
         val rawEntries = _state.value.rawEntries
-        if (paths.isEmpty()) return
-
-        viewModelScope.launch {
-            _state.update { it.copy(fileOpInProgress = true, showDeleteConfirmDialog = false) }
-            val failed = mutableListOf<String>()
-            withContext(dispatchers.io) {
-                for (path in paths) {
-                    try {
-                        val isDir = rawEntries.find { it.path == path }?.isDir ?: false
-                        if (isDir) fileBrowser.purge(remote, path)
-                        else fileBrowser.deleteFile(remote, path)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        failed.add(path)
-                    }
-                }
-            }
-            val message = buildPartialFailureMessage(paths.size - failed.size, failed.size)
-            _state.update { it.copy(fileOpInProgress = false, statusMessage = message) }
-            clearSelection()
-            load(remote, _state.value.path)
+        runBatchFileOp(hideDialog = { copy(showDeleteConfirmDialog = false) }) { path ->
+            if (rawEntries.find { it.path == path }?.isDir == true) fileBrowser.purge(remote, path)
+            else fileBrowser.deleteFile(remote, path)
         }
     }
 
@@ -321,18 +306,11 @@ class FileBrowserViewModel @Inject constructor(
 
     /** Renames [path] to [newName] in the same parent dir. Validates structure + collision (self excluded). */
     fun rename(path: String, newName: String) {
+        val errorRes = renameValidationError(newName.trim(), excludePath = path)
+        if (errorRes != null) { _state.update { it.copy(renameError = errorRes) }; return }
+        val remote = _state.value.remoteName ?: return
         if (_state.value.fileOpInProgress) return
         val trimmed = newName.trim()
-        if (!isStructurallyValidFolderName(trimmed)) {
-            _state.update { it.copy(renameError = R.string.explorer_rename_invalid_name) }
-            return
-        }
-        val collisionError = checkRenameCollision(trimmed, excludePath = path)
-        if (collisionError != null) {
-            _state.update { it.copy(renameError = collisionError) }
-            return
-        }
-        val remote = _state.value.remoteName ?: return
         val parent = path.substringBeforeLast('/', missingDelimiterValue = "")
         val destPath = if (parent.isEmpty()) trimmed else "$parent/$trimmed"
 
@@ -349,10 +327,7 @@ class FileBrowserViewModel @Inject constructor(
                 message = e.toUserMessage()
             }
             _state.update { it.copy(fileOpInProgress = false, statusMessage = message) }
-            if (message == null) {
-                clearSelection()
-                load(remote, _state.value.path)
-            }
+            if (message == null) { clearSelection(); load(remote, _state.value.path) }
         }
     }
 
@@ -361,77 +336,68 @@ class FileBrowserViewModel @Inject constructor(
     // -------------------------------------------------------------------------
 
     fun openMoveDialog() {
-        if (_state.value.selectedPaths.isNotEmpty()) {
-            _state.update { it.copy(showMoveDialog = true) }
-        }
+        if (_state.value.selectedPaths.isNotEmpty()) _state.update { it.copy(showMoveDialog = true) }
     }
 
-    fun dismissMoveDialog() {
-        _state.update { it.copy(showMoveDialog = false) }
-    }
+    fun dismissMoveDialog() { _state.update { it.copy(showMoveDialog = false) } }
 
     fun openCopyDialog() {
-        if (_state.value.selectedPaths.isNotEmpty()) {
-            _state.update { it.copy(showCopyDialog = true) }
-        }
+        if (_state.value.selectedPaths.isNotEmpty()) _state.update { it.copy(showCopyDialog = true) }
     }
 
-    fun dismissCopyDialog() {
-        _state.update { it.copy(showCopyDialog = false) }
-    }
+    fun dismissCopyDialog() { _state.update { it.copy(showCopyDialog = false) } }
 
     /** Moves selected items into [destDir] per-item. Slashes normalized; empty = root. Always refreshes. */
     fun moveSelected(destDir: String) {
-        if (_state.value.fileOpInProgress) return
-        val remote = _state.value.remoteName ?: return
-        val paths = _state.value.selectedPaths
         val rawEntries = _state.value.rawEntries
-        if (paths.isEmpty()) return
         val normalizedDest = destDir.trim().trim('/')
-
-        viewModelScope.launch {
-            _state.update { it.copy(fileOpInProgress = true, showMoveDialog = false) }
-            val failed = mutableListOf<String>()
-            withContext(dispatchers.io) {
-                for (path in paths) {
-                    try {
-                        val name = rawEntries.find { it.path == path }?.name
-                            ?: path.substringAfterLast('/')
-                        val destPath = if (normalizedDest.isEmpty()) name else "$normalizedDest/$name"
-                        fileBrowser.moveFile(remote, path, destPath)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        failed.add(path)
-                    }
-                }
-            }
-            val message = buildPartialFailureMessage(paths.size - failed.size, failed.size)
-            _state.update { it.copy(fileOpInProgress = false, statusMessage = message) }
-            clearSelection()
-            load(remote, _state.value.path)
+        runBatchFileOp(hideDialog = { copy(showMoveDialog = false) }) { path ->
+            val name = rawEntries.find { it.path == path }?.name ?: path.substringAfterLast('/')
+            val destPath = if (normalizedDest.isEmpty()) name else "$normalizedDest/$name"
+            fileBrowser.moveFile(remote, path, destPath)
         }
     }
 
     /** Copies selected items into [destDir] per-item. Slashes normalized; empty = root. Always refreshes. */
     fun copySelected(destDir: String) {
+        val rawEntries = _state.value.rawEntries
+        val normalizedDest = destDir.trim().trim('/')
+        runBatchFileOp(hideDialog = { copy(showCopyDialog = false) }) { path ->
+            val name = rawEntries.find { it.path == path }?.name ?: path.substringAfterLast('/')
+            val destPath = if (normalizedDest.isEmpty()) name else "$normalizedDest/$name"
+            fileBrowser.copyFile(remote, path, destPath)
+        }
+    }
+
+    /**
+     * Shared coroutine skeleton for delete/move/copy batch ops.
+     *
+     * Guards: skips if [fileOpInProgress] or no remote or no selected paths.
+     * Loop: calls [perItem] for each path, catching exceptions per-item
+     * (CancellationException is always rethrown). Always clears selection and
+     * refreshes the listing; sets statusMessage to a partial-failure summary
+     * when at least one item failed.
+     *
+     * [hideDialog] is a state transform applied together with setting
+     * fileOpInProgress=true at the start (e.g. `copy(showDeleteConfirmDialog=false)`).
+     */
+    private fun runBatchFileOp(
+        hideDialog: FileBrowserUiState.() -> FileBrowserUiState,
+        perItem: suspend BatchScope.(path: String) -> Unit,
+    ) {
         if (_state.value.fileOpInProgress) return
         val remote = _state.value.remoteName ?: return
         val paths = _state.value.selectedPaths
-        val rawEntries = _state.value.rawEntries
         if (paths.isEmpty()) return
-        val normalizedDest = destDir.trim().trim('/')
+        val scope = BatchScope(remote)
 
         viewModelScope.launch {
-            _state.update { it.copy(fileOpInProgress = true, showCopyDialog = false) }
+            _state.update { hideDialog(it).copy(fileOpInProgress = true) }
             val failed = mutableListOf<String>()
             withContext(dispatchers.io) {
                 for (path in paths) {
                     try {
-                        val name = rawEntries.find { it.path == path }?.name
-                            ?: path.substringAfterLast('/')
-                        val destPath = if (normalizedDest.isEmpty()) name else "$normalizedDest/$name"
-                        fileBrowser.copyFile(remote, path, destPath)
+                        scope.perItem(path)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -439,12 +405,14 @@ class FileBrowserViewModel @Inject constructor(
                     }
                 }
             }
-            val message = buildPartialFailureMessage(paths.size - failed.size, failed.size)
-            _state.update { it.copy(fileOpInProgress = false, statusMessage = message) }
+            _state.update { it.copy(fileOpInProgress = false, statusMessage = buildPartialFailureMessage(paths.size - failed.size, failed.size)) }
             clearSelection()
             load(remote, _state.value.path)
         }
     }
+
+    /** Receiver for [runBatchFileOp] lambdas — carries the resolved remote name. */
+    private inner class BatchScope(val remote: String)
 
     /** L3: the in-flight load, cancelled before each relaunch so a slow list(A)
      *  finishing after list(parent) can't overwrite the parent's entries. */
