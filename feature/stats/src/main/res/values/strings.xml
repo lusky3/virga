@@ -42,11 +42,37 @@
     <!-- streak: 🔥 N-day streak (best: M) -->
     <string name="stats_fun_streak">🔥 %1$d-day streak (best: %2$d)</string>
 
+    <!-- New sections -->
+    <string name="stats_section_trend">30-day activity</string>
+    <string name="stats_trend_label">Bytes transferred per day</string>
+    <string name="stats_section_by_remote">By remote</string>
+    <!-- %1$d total runs, %2$d succeeded -->
+    <string name="stats_remote_detail">%1$d runs · %2$d succeeded</string>
+    <!-- %1$s free of %2$s total -->
+    <string name="stats_remote_quota">%1$s free of %2$s</string>
+    <!-- content description for the per-remote delete icon; %1$s = remote name -->
+    <string name="stats_reset_remote_cd">Clear history for %1$s</string>
+    <!-- Per-task section -->
+    <string name="stats_section_by_task">By task</string>
+    <!-- %1$d total runs, %2$d succeeded -->
+    <string name="stats_task_detail">%1$d runs · %2$d succeeded</string>
+
     <!-- Reset dialog -->
     <string name="stats_btn_reset">Reset statistics</string>
     <string name="stats_reset_title">Reset lifetime stats?</string>
     <string name="stats_reset_body">This will permanently clear all your lifetime sync statistics. Your sync tasks and remotes are not affected.</string>
     <string name="stats_reset_confirm">Reset</string>
     <string name="stats_reset_cancel">Cancel</string>
+
+    <!-- Granular reset -->
+    <string name="stats_reset_all">Reset all statistics</string>
+    <string name="stats_reset_runs_only">Clear run history only</string>
+    <string name="stats_reset_runs_title">Clear sync run history?</string>
+    <string name="stats_reset_runs_body">This will clear all sync run history. Lifetime counters and streak are not affected.</string>
+
+    <!-- Per-remote reset -->
+    <string name="stats_reset_remote_title">Clear remote history?</string>
+    <!-- %1$s = remote name -->
+    <string name="stats_reset_remote_body">This will clear all sync run history for %1$s. Lifetime counters are not affected.</string>
 
 </resources>

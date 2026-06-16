@@ -92,7 +92,7 @@ open class SyncWorker @AssistedInject constructor(
         if (task.sourcePath.startsWith("content://") && task.direction == SyncDirection.BISYNC) {
             val msg = "Two-way sync isn't supported for this folder on this device."
             val earlyStartMs = System.currentTimeMillis()
-            finishFailed(historyRepository.startRun(taskId), null, msg, direction = task.direction, runStartMs = earlyStartMs)
+            finishFailed(historyRepository.startRun(taskId), null, msg, direction = task.direction, runStartMs = earlyStartMs, remoteName = task.remoteName)
             runCatching {
                 NotificationManagerCompat.from(applicationContext)
                     .notify(SyncNotifications.resultId(taskId), notifications.error(task.name, msg, taskId))
@@ -268,7 +268,7 @@ open class SyncWorker @AssistedInject constructor(
             // it stays stuck RUNNING. Cancellation must still propagate so
             // WorkManager can stop the worker cleanly.
             kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-                runCatching { finishCancelled(runId, last, task.direction, runStartMs) }
+                runCatching { finishCancelled(runId, last, task.direction, runStartMs, task.remoteName) }
             }
             throw t
         } catch (t: Throwable) {
@@ -310,7 +310,7 @@ open class SyncWorker @AssistedInject constructor(
             } else {
                 log.line("Completed: ${last?.transferredFiles ?: 0} file(s) transferred")
             }
-            finishSucceeded(runId, last, log.path.takeIf { log.flush() }, task.direction, runStartMs, failedFiles)
+            finishSucceeded(runId, last, log.path.takeIf { log.flush() }, task.direction, runStartMs, failedFiles, task.remoteName)
             // After a bisync, scan the destination for rclone conflict files
             // and queue them for user resolution. detectFor → engine.listDir needs
             // a daemon; the worker's own lease was already released in the finally
@@ -363,7 +363,7 @@ open class SyncWorker @AssistedInject constructor(
         } else {
             val msg = failure.message ?: "Sync failed"
             log.line("Failed: $msg")
-            finishFailed(runId, last, msg, log.path.takeIf { log.flush() }, task.direction, runStartMs)
+            finishFailed(runId, last, msg, log.path.takeIf { log.flush() }, task.direction, runStartMs, task.remoteName)
             runCatching {
                 NotificationManagerCompat.from(applicationContext)
                     .notify(SyncNotifications.resultId(taskId), notifications.error(task.name, msg, taskId))
@@ -487,6 +487,7 @@ open class SyncWorker @AssistedInject constructor(
         direction: SyncDirection,
         runStartMs: Long,
         failedFiles: String = "",
+        remoteName: String = "",
     ) {
         historyRepository.finishRun(
             runId = runId,
@@ -496,6 +497,9 @@ open class SyncWorker @AssistedInject constructor(
             errorCount = progress?.errors ?: 0,
             logPath = logPath,
             failedFiles = failedFiles,
+            remoteName = remoteName,
+            direction = direction.name,
+            startedAtEpochMs = runStartMs,
         )
         val finishedAt = System.currentTimeMillis()
         runCatching {
@@ -518,6 +522,7 @@ open class SyncWorker @AssistedInject constructor(
         logPath: String? = null,
         direction: SyncDirection,
         runStartMs: Long,
+        remoteName: String = "",
     ) {
         historyRepository.finishRun(
             runId = runId,
@@ -527,6 +532,9 @@ open class SyncWorker @AssistedInject constructor(
             errorCount = (progress?.errors ?: 0) + 1,
             errorMessage = message,
             logPath = logPath,
+            remoteName = remoteName,
+            direction = direction.name,
+            startedAtEpochMs = runStartMs,
         )
         val finishedAt = System.currentTimeMillis()
         runCatching {
@@ -547,6 +555,7 @@ open class SyncWorker @AssistedInject constructor(
         progress: SyncProgress?,
         direction: SyncDirection,
         runStartMs: Long,
+        remoteName: String = "",
     ) {
         historyRepository.finishRun(
             runId = runId,
@@ -554,6 +563,9 @@ open class SyncWorker @AssistedInject constructor(
             filesTransferred = progress?.transferredFiles ?: 0,
             bytesTransferred = progress?.bytesTransferred ?: 0L,
             errorCount = progress?.errors ?: 0,
+            remoteName = remoteName,
+            direction = direction.name,
+            startedAtEpochMs = runStartMs,
         )
         val finishedAt = System.currentTimeMillis()
         runCatching {

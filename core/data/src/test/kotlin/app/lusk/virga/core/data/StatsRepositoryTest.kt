@@ -1,10 +1,13 @@
 package app.lusk.virga.core.data
 
 import app.lusk.virga.core.common.model.LifetimeStats
+import app.lusk.virga.core.common.model.RemoteQuota
 import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.database.dao.AppStatsDao
+import app.lusk.virga.core.database.dao.SyncRunDao
 import app.lusk.virga.core.database.entity.AppStatsEntity
 import com.google.common.truth.Truth.assertThat
+import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -17,11 +20,13 @@ import org.junit.jupiter.api.Test
 class StatsRepositoryTest {
 
     private val dao = mockk<AppStatsDao>(relaxed = true)
+    private val runDao = mockk<SyncRunDao>(relaxed = true)
+    private val remoteRepo = mockk<RemoteRepository>(relaxed = true)
     private lateinit var repo: StatsRepository
 
     @BeforeEach
     fun setUp() {
-        repo = StatsRepository(dao)
+        repo = StatsRepository(dao, runDao, remoteRepo)
     }
 
     // ---------------------------------------------------------------------------
@@ -290,7 +295,7 @@ class StatsRepositoryTest {
         every { dao.observe() } returns flowOf(entity)
 
         // Build the repo AFTER stubbing observe() — `stats` captures the flow once at construction.
-        val result = StatsRepository(dao).stats.first()
+        val result = StatsRepository(dao, runDao, remoteRepo).stats.first()
 
         assertThat(result.firstSyncEpochMs).isEqualTo(1_000_000L)
         assertThat(result.totalRuns).isEqualTo(42L)
@@ -313,7 +318,7 @@ class StatsRepositoryTest {
         every { dao.observe() } returns flowOf(null)
 
         // Build the repo AFTER stubbing observe() — `stats` captures the flow once at construction.
-        val result = StatsRepository(dao).stats.first()
+        val result = StatsRepository(dao, runDao, remoteRepo).stats.first()
 
         assertThat(result).isEqualTo(LifetimeStats())
     }
@@ -323,7 +328,7 @@ class StatsRepositoryTest {
         every { dao.observe() } returns flowOf(null)
 
         // Build the repo AFTER stubbing observe() — `stats` captures the flow once at construction.
-        val result = StatsRepository(dao).stats.first()
+        val result = StatsRepository(dao, runDao, remoteRepo).stats.first()
 
         assertThat(result.firstSyncEpochMs).isNull()
     }
@@ -333,7 +338,7 @@ class StatsRepositoryTest {
         every { dao.observe() } returns flowOf(null)
 
         // Build the repo AFTER stubbing observe() — `stats` captures the flow once at construction.
-        val result = StatsRepository(dao).stats.first()
+        val result = StatsRepository(dao, runDao, remoteRepo).stats.first()
 
         assertThat(result.totalRuns).isEqualTo(0L)
         assertThat(result.totalBytesTransferred).isEqualTo(0L)
@@ -348,5 +353,35 @@ class StatsRepositoryTest {
         repo.reset()
 
         coVerify { dao.clear() }
+    }
+
+    // ---------------------------------------------------------------------------
+    // fetchQuota — best-effort network call
+    // ---------------------------------------------------------------------------
+
+    @Test
+    fun `fetchQuota returns quota for each named remote`() = runTest {
+        coEvery { remoteRepo.about("gdrive") } returns Result.success(
+            RemoteQuota(total = 15_000_000_000L, used = 5_000_000_000L, free = 10_000_000_000L)
+        )
+
+        val result = repo.fetchQuota(listOf("gdrive"))
+
+        assertThat(result).hasSize(1)
+        assertThat(result[0].remoteName).isEqualTo("gdrive")
+        assertThat(result[0].total).isEqualTo(15_000_000_000L)
+        assertThat(result[0].free).isEqualTo(10_000_000_000L)
+    }
+
+    @Test
+    fun `fetchQuota sets null fields when about fails`() = runTest {
+        coEvery { remoteRepo.about("broken") } returns Result.failure(RuntimeException("network error"))
+
+        val result = repo.fetchQuota(listOf("broken"))
+
+        assertThat(result).hasSize(1)
+        assertThat(result[0].remoteName).isEqualTo("broken")
+        assertThat(result[0].total).isNull()
+        assertThat(result[0].free).isNull()
     }
 }

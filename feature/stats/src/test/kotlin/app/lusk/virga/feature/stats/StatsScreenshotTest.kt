@@ -6,7 +6,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onRoot
 import app.lusk.virga.core.common.model.LifetimeStats
+import app.lusk.virga.core.common.model.RemoteStat
+import app.lusk.virga.core.common.model.SyncDirection
+import app.lusk.virga.core.common.model.SyncTask
+import app.lusk.virga.core.common.model.TaskStat
+import app.lusk.virga.core.common.model.TrendDay
 import app.lusk.virga.core.data.StatsRepository
+import app.lusk.virga.core.data.SyncTaskRepository
 import app.lusk.virga.core.designsystem.theme.VirgaTheme
 import com.github.takahirom.roborazzi.RoborazziRule
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -54,9 +60,33 @@ class StatsScreenshotTest {
         ),
     )
 
-    private fun viewModel(stats: LifetimeStats): StatsViewModel {
-        val repo: StatsRepository = mockk(relaxed = true) { every { this@mockk.stats } returns flowOf(stats) }
-        return StatsViewModel(repo)
+    private fun syncTask(id: Long, name: String) = SyncTask(
+        id = id,
+        name = name,
+        sourcePath = "/src",
+        remoteName = "remote",
+        remotePath = "/dst",
+        direction = SyncDirection.UPLOAD,
+        intervalMinutes = null,
+    )
+
+    private fun viewModel(
+        stats: LifetimeStats = LifetimeStats(),
+        remotes: List<RemoteStat> = emptyList(),
+        tasks: List<TaskStat> = emptyList(),
+        trend: List<TrendDay> = emptyList(),
+        syncTasks: List<SyncTask> = emptyList(),
+    ): StatsViewModel {
+        val repo: StatsRepository = mockk(relaxed = true) {
+            every { this@mockk.stats } returns flowOf(stats)
+            every { remoteStats } returns flowOf(remotes)
+            every { taskStats } returns flowOf(tasks)
+            every { trendFlow(any()) } returns flowOf(trend)
+        }
+        val taskRepo: SyncTaskRepository = mockk(relaxed = true) {
+            every { this@mockk.tasks } returns flowOf(syncTasks)
+        }
+        return StatsViewModel(repo, taskRepo)
     }
 
     @Test
@@ -78,7 +108,61 @@ class StatsScreenshotTest {
             currentStreakDays = 5,
             longestStreakDays = 14,
         )
-        val vm = viewModel(stats)
+        val vm = viewModel(stats = stats)
+        composeRule.setContent {
+            VirgaTheme {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    StatsScreen(onBack = {}, viewModel = vm)
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage()
+    }
+
+    @Test
+    fun statsScreen_withRemoteStats() {
+        val stats = LifetimeStats(totalRuns = 5, totalBytesTransferred = 1024)
+        val remotes = listOf(RemoteStat("gdrive", 5, 4, 1024, 12))
+        // Fixed epoch-day constant avoids midnight-boundary flake (CodeRabbit fix).
+        val fixedToday = 20_089L
+        val trend = (0 until 30).map { i ->
+            TrendDay(dayOffset = (fixedToday - 29 + i).toInt(), bytes = if (i > 25) 1000L * (i - 25) else 0L)
+        }
+        val vm = viewModel(stats = stats, remotes = remotes, trend = trend)
+        composeRule.setContent {
+            VirgaTheme {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    StatsScreen(onBack = {}, viewModel = vm)
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage()
+    }
+
+    @Test
+    fun statsScreen_taskStatsSection_renders() {
+        val stats = LifetimeStats(totalRuns = 3, totalBytesTransferred = 512)
+        val tasks = listOf(TaskStat(1L, 3, 2, 512, 4))
+        val syncTasks = listOf(syncTask(1L, "Photos Backup"))
+        val vm = viewModel(stats = stats, tasks = tasks, syncTasks = syncTasks)
+        composeRule.setContent {
+            VirgaTheme {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    StatsScreen(onBack = {}, viewModel = vm)
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage()
+    }
+
+    @Test
+    fun statsScreen_remoteResetAffordance_renders() {
+        val stats = LifetimeStats(totalRuns = 2, totalBytesTransferred = 256)
+        val remotes = listOf(RemoteStat("box", 2, 2, 256, 3))
+        val vm = viewModel(stats = stats, remotes = remotes)
         composeRule.setContent {
             VirgaTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {

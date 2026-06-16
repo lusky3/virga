@@ -4,6 +4,9 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.common.model.SyncStatus
+import app.lusk.virga.core.database.dao.DayBucketRow
+import app.lusk.virga.core.database.dao.RemoteStatRow
+import app.lusk.virga.core.database.dao.TaskStatRow
 import app.lusk.virga.core.database.entity.RemoteEntity
 import app.lusk.virga.core.database.entity.SyncRunEntity
 import app.lusk.virga.core.database.entity.SyncTaskEntity
@@ -101,5 +104,94 @@ class SyncRunDaoTest {
         val affected = dao.failInterruptedRuns(now = 2_000, message = "x", startedBefore = 1_000)
 
         assertThat(affected).isEqualTo(0)
+    }
+
+    @Test
+    fun observeRemoteStats_groupsByRemoteAndAggregates() = runTest {
+        val dao = db.syncRunDao()
+        val taskId = seedTask()
+        dao.insert(SyncRunEntity(taskId = taskId, startedAtEpochMs = 1, status = SyncStatus.SUCCESS,
+            remoteName = "gdrive", bytesTransferred = 100, filesTransferred = 2))
+        dao.insert(SyncRunEntity(taskId = taskId, startedAtEpochMs = 2, status = SyncStatus.FAILED,
+            remoteName = "gdrive", bytesTransferred = 0, filesTransferred = 0))
+        dao.insert(SyncRunEntity(taskId = taskId, startedAtEpochMs = 3, status = SyncStatus.SUCCESS,
+            remoteName = "s3", bytesTransferred = 500, filesTransferred = 10))
+
+        val rows = dao.observeRemoteStats().first().sortedBy { it.remoteName }
+        assertThat(rows).hasSize(2)
+        val gdrive = rows[0]
+        assertThat(gdrive.remoteName).isEqualTo("gdrive")
+        assertThat(gdrive.totalRuns).isEqualTo(2)
+        assertThat(gdrive.successRuns).isEqualTo(1)
+        assertThat(gdrive.bytes).isEqualTo(100)
+        val s3 = rows[1]
+        assertThat(s3.remoteName).isEqualTo("s3")
+        assertThat(s3.totalRuns).isEqualTo(1)
+        assertThat(s3.successRuns).isEqualTo(1)
+        assertThat(s3.bytes).isEqualTo(500)
+    }
+
+    @Test
+    fun observeTaskStats_groupsByTaskAndAggregates() = runTest {
+        val dao = db.syncRunDao()
+        val taskId1 = seedTask()
+        db.remoteDao().upsert(RemoteEntity(name = "s3", type = "s3"))
+        val taskId2 = db.syncTaskDao().insert(
+            SyncTaskEntity(
+                name = "t2", sourcePath = "/y", remoteName = "s3",
+                remotePath = "", direction = SyncDirection.DOWNLOAD, intervalMinutes = null,
+            ),
+        )
+        dao.insert(SyncRunEntity(taskId = taskId1, startedAtEpochMs = 1, status = SyncStatus.SUCCESS,
+            bytesTransferred = 200, filesTransferred = 5))
+        dao.insert(SyncRunEntity(taskId = taskId2, startedAtEpochMs = 2, status = SyncStatus.FAILED,
+            bytesTransferred = 0, filesTransferred = 0))
+
+        val rows = dao.observeTaskStats().first()
+        assertThat(rows).hasSize(2)
+        val t1 = rows.first { it.taskId == taskId1 }
+        assertThat(t1.totalRuns).isEqualTo(1)
+        assertThat(t1.successRuns).isEqualTo(1)
+        assertThat(t1.bytes).isEqualTo(200)
+        val t2 = rows.first { it.taskId == taskId2 }
+        assertThat(t2.totalRuns).isEqualTo(1)
+        assertThat(t2.successRuns).isEqualTo(0)
+    }
+
+    @Test
+    fun observeDailyBuckets_groupsByDayAndFiltersOldRows() = runTest {
+        val dao = db.syncRunDao()
+        val taskId = seedTask()
+        val dayMs = 86_400_000L
+        val today = System.currentTimeMillis() / dayMs * dayMs
+        dao.insert(SyncRunEntity(taskId = taskId, startedAtEpochMs = today,
+            status = SyncStatus.SUCCESS, bytesTransferred = 100))
+        dao.insert(SyncRunEntity(taskId = taskId, startedAtEpochMs = today - 5 * dayMs,
+            status = SyncStatus.SUCCESS, bytesTransferred = 50))
+        // Outside 30-day window
+        dao.insert(SyncRunEntity(taskId = taskId, startedAtEpochMs = today - 40 * dayMs,
+            status = SyncStatus.SUCCESS, bytesTransferred = 999))
+
+        val sinceMs = today - 30 * dayMs
+        val rows = dao.observeDailyBuckets(sinceMs).first()
+        assertThat(rows).hasSize(2)
+        val todayRow = rows.first { it.day == today / dayMs }
+        assertThat(todayRow.bytes).isEqualTo(100)
+    }
+
+    @Test
+    fun deleteByRemoteName_removesOnlyMatchingRows() = runTest {
+        val dao = db.syncRunDao()
+        val taskId = seedTask()
+        dao.insert(SyncRunEntity(taskId = taskId, startedAtEpochMs = 1, status = SyncStatus.SUCCESS,
+            remoteName = "gdrive"))
+        dao.insert(SyncRunEntity(taskId = taskId, startedAtEpochMs = 2, status = SyncStatus.SUCCESS,
+            remoteName = "s3"))
+
+        dao.deleteByRemoteName("gdrive")
+
+        val remaining = dao.observeRecent().first()
+        assertThat(remaining).hasSize(1)
+        assertThat(remaining[0].remoteName).isEqualTo("s3")
     }
 }

@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 2,
-    "identityHash": "0a2842148fe4d4aebffab239cf4fa220",
+    "identityHash": "8383f5097229542e383dc9f67221d9fe",
     "entities": [
       {
         "tableName": "remotes",
@@ -283,7 +283,7 @@
       },
       {
         "tableName": "sync_runs",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `taskId` INTEGER NOT NULL, `startedAtEpochMs` INTEGER NOT NULL, `endedAtEpochMs` INTEGER, `status` TEXT NOT NULL, `filesTransferred` INTEGER NOT NULL, `bytesTransferred` INTEGER NOT NULL, `errorCount` INTEGER NOT NULL, `errorMessage` TEXT, `logPath` TEXT, `failedFiles` TEXT NOT NULL, FOREIGN KEY(`taskId`) REFERENCES `sync_tasks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `taskId` INTEGER NOT NULL, `startedAtEpochMs` INTEGER NOT NULL, `endedAtEpochMs` INTEGER, `status` TEXT NOT NULL, `filesTransferred` INTEGER NOT NULL, `bytesTransferred` INTEGER NOT NULL, `errorCount` INTEGER NOT NULL, `errorMessage` TEXT, `logPath` TEXT, `failedFiles` TEXT NOT NULL, `remoteName` TEXT NOT NULL, `direction` TEXT NOT NULL, `durationMs` INTEGER NOT NULL, FOREIGN KEY(`taskId`) REFERENCES `sync_tasks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "id",
@@ -346,6 +346,24 @@
             "fieldPath": "failedFiles",
             "columnName": "failedFiles",
             "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteName",
+            "columnName": "remoteName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "direction",
+            "columnName": "direction",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "durationMs",
+            "affinity": "INTEGER",
             "notNull": true
           }
         ],
@@ -604,7 +622,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '0a2842148fe4d4aebffab239cf4fa220')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8383f5097229542e383dc9f67221d9fe')"
     ]
   }
 }

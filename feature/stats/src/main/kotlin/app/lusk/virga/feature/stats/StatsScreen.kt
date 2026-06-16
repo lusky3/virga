@@ -16,6 +16,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -25,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +51,9 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+/** Scope for granular reset confirmation. */
+private enum class ResetScope { ALL, RUNS_ONLY }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatsScreen(
@@ -56,14 +62,33 @@ fun StatsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var showResetDialog by remember { mutableStateOf(false) }
+    var resetScope by remember { mutableStateOf(ResetScope.ALL) }
+    var showResetMenu by remember { mutableStateOf(false) }
+    var remoteToReset by remember { mutableStateOf<String?>(null) }
+
+    val remoteNames = remember(state.remoteStats) { state.remoteStats.map { it.remoteName } }
+    LaunchedEffect(remoteNames) {
+        if (remoteNames.isNotEmpty()) viewModel.refreshQuotas(remoteNames)
+    }
 
     if (showResetDialog) {
         ResetConfirmDialog(
+            scope = resetScope,
             onConfirm = {
-                viewModel.resetStats()
+                when (resetScope) {
+                    ResetScope.ALL -> viewModel.resetAll()
+                    ResetScope.RUNS_ONLY -> viewModel.resetRuns()
+                }
                 showResetDialog = false
             },
             onDismiss = { showResetDialog = false },
+        )
+    }
+    remoteToReset?.let { remote ->
+        RemoteResetConfirmDialog(
+            remoteName = remote,
+            onConfirm = { viewModel.resetRemote(remote); remoteToReset = null },
+            onDismiss = { remoteToReset = null },
         )
     }
 
@@ -82,7 +107,7 @@ fun StatsScreen(
             )
         },
     ) { padding ->
-        if (state.totalRuns == 0L) {
+        if (state.lifetime.totalRuns == 0L) {
             EmptyState(
                 title = stringResource(R.string.stats_empty_title),
                 body = stringResource(R.string.stats_empty_body),
@@ -100,27 +125,72 @@ fun StatsScreen(
                 verticalArrangement = Arrangement.spacedBy(VirgaSpacing.md),
             ) {
                 Spacer(Modifier.height(VirgaSpacing.sm))
-                HeroCard(state)
+                HeroCard(state.lifetime)
+                TrendSection(state.trendBytes)
                 SectionLabel(stringResource(R.string.stats_section_transfer))
-                TransferDirectionRow(state)
+                TransferDirectionRow(state.lifetime)
                 SectionLabel(stringResource(R.string.stats_section_activity))
-                TasksCard(state)
-                FilesCard(state)
-                TimeCard(state)
-                SpeedCard(state)
-                FunCard(state)
-                TextButton(
-                    onClick = { showResetDialog = true },
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                ) {
-                    Text(
-                        stringResource(R.string.stats_btn_reset),
-                        // Destructive action → error track per §13 (was warning).
-                        color = MaterialTheme.colorScheme.error,
-                    )
+                TasksCard(state.lifetime)
+                FilesCard(state.lifetime)
+                TimeCard(state.lifetime)
+                SpeedCard(state.lifetime)
+                FunCard(state.lifetime)
+                TaskStatsSection(state.taskStats)
+                RemoteStatsSection(
+                    remoteStats = state.remoteStats,
+                    quotas = state.quotas,
+                    onResetRemote = { remoteToReset = it },
+                )
+                Box(modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                    TextButton(onClick = { showResetMenu = true }) {
+                        Text(
+                            stringResource(R.string.stats_btn_reset),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showResetMenu,
+                        onDismissRequest = { showResetMenu = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.stats_reset_all)) },
+                            onClick = {
+                                showResetMenu = false
+                                resetScope = ResetScope.ALL
+                                showResetDialog = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.stats_reset_runs_only)) },
+                            onClick = {
+                                showResetMenu = false
+                                resetScope = ResetScope.RUNS_ONLY
+                                showResetDialog = true
+                            },
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Sections
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun TrendSection(trendBytes: List<Long>) {
+    if (trendBytes.all { it == 0L }) return
+    SectionLabel(stringResource(R.string.stats_section_trend))
+    VirgaCard {
+        Text(
+            text = stringResource(R.string.stats_trend_label),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(VirgaSpacing.xs))
+        SyncSparkline(data = trendBytes)
     }
 }
 
@@ -137,8 +207,6 @@ private fun HeroCard(state: LifetimeStats) {
             .fillMaxWidth()
             .clip(shape)
             .background(gradient)
-            // Scrim over the gradient so text clears WCAG-AA even on the lighter
-            // teal end (white is only ~2.9:1 on bare teal). BRAND §4.5/§4.7.
             .background(VirgaGradients.heroScrim)
             .padding(VirgaSpacing.lg),
     ) {
@@ -181,8 +249,6 @@ private fun TransferDirectionRow(state: LifetimeStats) {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
     ) {
-        // titleLarge (not headlineMedium) so "11.8 GB" fits one line in a narrow
-        // 3-up column on a 360dp phone.
         val compact = MaterialTheme.typography.titleLarge
         StatCard(
             number = formatFileSize(state.bytesUploaded),
@@ -276,9 +342,9 @@ private fun SpeedCard(state: LifetimeStats) {
 // Fun strip
 // ---------------------------------------------------------------------------
 
-private const val PHOTO_BYTES = 3_500_000L          // ≈ 3.5 MB
-private const val MUSIC_HOUR_BYTES = 60_000_000L    // ≈ 60 MB/hour
-private const val BLURAY_BYTES = 25_000_000_000L    // ≈ 25 GB
+private const val PHOTO_BYTES = 3_500_000L
+private const val MUSIC_HOUR_BYTES = 60_000_000L
+private const val BLURAY_BYTES = 25_000_000_000L
 
 @Composable
 private fun FunCard(state: LifetimeStats) {
@@ -290,59 +356,35 @@ private fun FunCard(state: LifetimeStats) {
             modifier = Modifier.semantics { heading() },
         )
         Spacer(Modifier.height(VirgaSpacing.sm))
-
         val photos = total / PHOTO_BYTES
         val musicHours = total / MUSIC_HOUR_BYTES
         val blurays = total / BLURAY_BYTES
         if (photos >= 1) {
-            Text(
-                text = stringResource(R.string.stats_fun_photos, photos),
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            Text(text = stringResource(R.string.stats_fun_photos, photos), style = MaterialTheme.typography.bodyMedium)
         }
         if (musicHours >= 1) {
-            Text(
-                text = stringResource(R.string.stats_fun_music, musicHours),
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            Text(text = stringResource(R.string.stats_fun_music, musicHours), style = MaterialTheme.typography.bodyMedium)
         }
         if (blurays >= 1) {
-            Text(
-                text = stringResource(R.string.stats_fun_blurays, blurays),
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            Text(text = stringResource(R.string.stats_fun_blurays, blurays), style = MaterialTheme.typography.bodyMedium)
         }
-
         Spacer(Modifier.height(VirgaSpacing.sm))
-        // Only show records once there's a non-zero value (a first run of 0 bytes
-        // would otherwise read "Biggest single backup: 0 B").
         if (state.largestRunBytes > 0) {
             Text(
-                text = stringResource(
-                    R.string.stats_fun_biggest,
-                    formatFileSize(state.largestRunBytes),
-                ),
+                text = stringResource(R.string.stats_fun_biggest, formatFileSize(state.largestRunBytes)),
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
         if (state.longestRunMillis > 0) {
             Text(
-                text = stringResource(
-                    R.string.stats_fun_longest,
-                    formatDuration(state.longestRunMillis),
-                ),
+                text = stringResource(R.string.stats_fun_longest, formatDuration(state.longestRunMillis)),
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
-
         if (state.currentStreakDays > 0) {
             Spacer(Modifier.height(VirgaSpacing.xs))
             Text(
-                text = stringResource(
-                    R.string.stats_fun_streak,
-                    state.currentStreakDays,
-                    state.longestStreakDays,
-                ),
+                text = stringResource(R.string.stats_fun_streak, state.currentStreakDays, state.longestStreakDays),
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
@@ -361,13 +403,8 @@ private fun StatCard(
     numberStyle: TextStyle = MaterialTheme.typography.headlineMedium,
 ) {
     VirgaCard(modifier = modifier) {
-        // Merge so TalkBack reads "<number>, <label>" as one item, not two.
         Column(Modifier.semantics(mergeDescendants = true) {}) {
-            Text(
-                text = number,
-                style = numberStyle,
-                maxLines = 1,
-            )
+            Text(text = number, style = numberStyle, maxLines = 1)
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelMedium,
@@ -378,7 +415,7 @@ private fun StatCard(
 }
 
 @Composable
-private fun SectionLabel(text: String) {
+internal fun SectionLabel(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.titleMedium,
@@ -393,23 +430,30 @@ private fun SectionLabel(text: String) {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun ResetConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+private fun ResetConfirmDialog(
+    scope: ResetScope,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val titleRes = when (scope) {
+        ResetScope.ALL -> R.string.stats_reset_title
+        ResetScope.RUNS_ONLY -> R.string.stats_reset_runs_title
+    }
+    val bodyRes = when (scope) {
+        ResetScope.ALL -> R.string.stats_reset_body
+        ResetScope.RUNS_ONLY -> R.string.stats_reset_runs_body
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.stats_reset_title)) },
-        text = { Text(stringResource(R.string.stats_reset_body)) },
+        title = { Text(stringResource(titleRes)) },
+        text = { Text(stringResource(bodyRes)) },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text(
-                    text = stringResource(R.string.stats_reset_confirm),
-                    color = MaterialTheme.colorScheme.error,
-                )
+                Text(text = stringResource(R.string.stats_reset_confirm), color = MaterialTheme.colorScheme.error)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.stats_reset_cancel))
-            }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.stats_reset_cancel)) }
         },
     )
 }

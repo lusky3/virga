@@ -36,6 +36,9 @@ class SyncHistoryRepository @Inject constructor(
      *
      * [failedFiles] is a newline-joined list of "path\terror" entries (tab-separated),
      * capped at 100 by the caller. Defaults to empty (no file-level failures).
+     *
+     * [remoteName] and [direction] are stamped on the row for aggregate stats queries.
+     * [startedAtEpochMs] is used to compute [durationMs]; pass 0 to leave it unset.
      */
     suspend fun finishRun(
         runId: Long,
@@ -46,17 +49,26 @@ class SyncHistoryRepository @Inject constructor(
         errorMessage: String? = null,
         logPath: String? = null,
         failedFiles: String = "",
-    ) = runDao.finishRun(
-        runId = runId,
-        endedAtEpochMs = System.currentTimeMillis(),
-        status = status,
-        filesTransferred = filesTransferred,
-        bytesTransferred = bytesTransferred,
-        errorCount = errorCount,
-        errorMessage = errorMessage,
-        logPath = logPath,
-        failedFiles = failedFiles,
-    )
+        remoteName: String = "",
+        direction: String = "",
+        startedAtEpochMs: Long = 0,
+    ) {
+        val endedAt = System.currentTimeMillis()
+        runDao.finishRun(
+            runId = runId,
+            endedAtEpochMs = endedAt,
+            status = status,
+            filesTransferred = filesTransferred,
+            bytesTransferred = bytesTransferred,
+            errorCount = errorCount,
+            errorMessage = errorMessage,
+            logPath = logPath,
+            failedFiles = failedFiles,
+            remoteName = remoteName,
+            direction = direction,
+            durationMs = if (startedAtEpochMs > 0) maxOf(0L, endedAt - startedAtEpochMs) else 0,
+        )
+    }
 
     suspend fun pruneOlderThan(beforeEpochMs: Long) = runDao.pruneOlderThan(beforeEpochMs)
 

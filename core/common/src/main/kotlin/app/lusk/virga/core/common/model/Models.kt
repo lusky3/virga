@@ -153,6 +153,12 @@ data class SyncRun(
      * Capped at 100 entries at capture time to avoid unbounded storage.
      */
     val failedFiles: String = "",
+    /** Name of the rclone remote targeted by this run. */
+    val remoteName: String = "",
+    /** Sync direction as a plain string (SyncDirection.name). */
+    val direction: String = "",
+    /** Wall-clock duration of this run in milliseconds. */
+    val durationMs: Long = 0,
 )
 
 /**
@@ -257,3 +263,32 @@ data class SyncProgress(
     val fraction: Float
         get() = if (totalBytes > 0) (bytesTransferred.toFloat() / totalBytes).coerceIn(0f, 1f) else 0f
 }
+
+/** Per-remote aggregate stats derived from sync_runs. */
+data class RemoteStat(
+    val remoteName: String,
+    val totalRuns: Long,
+    val successRuns: Long,
+    val bytes: Long,
+    val files: Long,
+)
+
+/** Per-task aggregate stats derived from sync_runs. */
+data class TaskStat(
+    val taskId: Long,
+    val totalRuns: Long,
+    val successRuns: Long,
+    val bytes: Long,
+    val files: Long,
+)
+
+/** One day in a trend series: raw epoch-day (ms / 86_400_000) + bytes transferred. */
+data class TrendDay(val dayOffset: Int, val bytes: Long)
+
+/** Storage quota for display alongside per-remote stats. */
+data class RemoteQuotaState(
+    val remoteName: String,
+    val used: Long?,
+    val total: Long?,
+    val free: Long?,
+)

@@ -71,6 +71,9 @@ class SyncHistoryRepositoryTest {
                 errorMessage = null,
                 logPath = "/logs/run5.txt",
                 failedFiles = "",
+                remoteName = "",
+                direction = "",
+                durationMs = 0L,
             )
         }
     }
@@ -96,6 +99,9 @@ class SyncHistoryRepositoryTest {
                 errorMessage = "boom",
                 logPath = null,
                 failedFiles = "",
+                remoteName = "",
+                direction = "",
+                durationMs = 0L,
             )
         }
     }
@@ -122,6 +128,40 @@ class SyncHistoryRepositoryTest {
                 errorMessage = null,
                 logPath = null,
                 failedFiles = failedFiles,
+                remoteName = "",
+                direction = "",
+                durationMs = 0L,
+            )
+        }
+    }
+
+    @Test fun `finishRun stamps remoteName direction and durationMs when startedAtEpochMs provided`() = runTest {
+        val startedAt = 1_000_000L
+        repo.finishRun(
+            runId = 12L,
+            status = SyncStatus.SUCCESS,
+            filesTransferred = 1,
+            bytesTransferred = 100L,
+            errorCount = 0,
+            remoteName = "gdrive",
+            direction = "UPLOAD",
+            startedAtEpochMs = startedAt,
+        )
+
+        coVerify {
+            runDao.finishRun(
+                runId = 12L,
+                endedAtEpochMs = match { it >= startedAt },
+                status = SyncStatus.SUCCESS,
+                filesTransferred = 1,
+                bytesTransferred = 100L,
+                errorCount = 0,
+                errorMessage = null,
+                logPath = null,
+                failedFiles = "",
+                remoteName = "gdrive",
+                direction = "UPLOAD",
+                durationMs = match { it >= 0L },
             )
         }
     }
