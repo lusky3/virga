@@ -220,6 +220,16 @@ fun SettingsScreen(
                 onAppLockChange = viewModel::setAppLock,
             )
 
+            // Quiet hours — global blackout window. See SettingsQuietHoursSection.
+            QuietHoursSection(
+                enabled = prefs.quietHoursEnabled,
+                startMinutes = prefs.quietHoursStartMinutes,
+                endMinutes = prefs.quietHoursEndMinutes,
+                onEnabledChange = viewModel::setQuietHoursEnabled,
+                onStartChange = viewModel::setQuietHoursStart,
+                onEndChange = viewModel::setQuietHoursEnd,
+            )
+
             HorizontalDivider()
             SectionTitle(stringResource(R.string.settings_section_help_about))
             SettingsLinkRow(

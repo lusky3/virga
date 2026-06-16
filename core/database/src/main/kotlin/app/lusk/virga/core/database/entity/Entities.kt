@@ -108,6 +108,13 @@ data class SyncTaskEntity(
     val backoffSeconds: Long = 30,
     /** EXPONENTIAL backoff when true; LINEAR when false. */
     val backoffExponential: Boolean = true,
+    // B4: multi-time calendar schedule -----------------------------------------
+    /**
+     * JSON array of minutes-of-day (0..1439) for the calendar schedule, e.g.
+     * "[120,840]" = 02:00 & 14:00. When non-empty, overrides the single
+     * [scheduleHour]/[scheduleMinute] pair. Empty string = single-time fallback.
+     */
+    val scheduleTimes: String = "",
 )
 
 /**

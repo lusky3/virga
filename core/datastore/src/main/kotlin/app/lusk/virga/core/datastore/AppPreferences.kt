@@ -38,4 +38,23 @@ data class AppPreferences(
      * and foreground service are NEVER gated — they keep running while the UI is locked.
      */
     val appLockEnabled: Boolean = false,
+    // B4: global quiet hours (blackout window) ----------------------------------
+    /**
+     * When true, SCHEDULED syncs are suppressed during the window
+     * [[quietHoursStartMinutes], [quietHoursEndMinutes]). Manual "Sync now" always
+     * bypasses quiet hours — user intent. Periodic (WorkManager) intervals are
+     * suppressed at the worker level; calendar runs are shifted past the window by
+     * the scheduler.
+     */
+    val quietHoursEnabled: Boolean = false,
+    /**
+     * Start of the quiet-hours window, in minutes-of-day (0..1439, default 0 = 00:00).
+     * If quietHoursStartMinutes > quietHoursEndMinutes the window wraps midnight.
+     */
+    val quietHoursStartMinutes: Int = 0,
+    /**
+     * End of the quiet-hours window, in minutes-of-day (0..1439, default 0 = 00:00).
+     * Equal to quietHoursStartMinutes means disabled / zero-width window.
+     */
+    val quietHoursEndMinutes: Int = 0,
 )

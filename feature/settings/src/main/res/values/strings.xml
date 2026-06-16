@@ -57,6 +57,11 @@
     <string name="settings_section_security">Security</string>
     <string name="settings_toggle_app_lock">App lock</string>
     <string name="settings_app_lock_hint">Locks the app\'s screen with your device biometric or PIN. It does not add encryption — your sync data is already encrypted at rest by rclone. Background syncs and the sync service keep running while the app is locked.</string>
+    <string name="settings_section_quiet_hours">Quiet hours</string>
+    <string name="settings_toggle_quiet_hours">Enable quiet hours</string>
+    <string name="settings_quiet_hours_hint">Scheduled syncs are paused during this window. Manual syncs always run immediately regardless of quiet hours.</string>
+    <string name="settings_quiet_hours_start">Start time</string>
+    <string name="settings_quiet_hours_end">End time</string>
 
     <!-- AboutScreen -->
     <string name="about_title">About</string>

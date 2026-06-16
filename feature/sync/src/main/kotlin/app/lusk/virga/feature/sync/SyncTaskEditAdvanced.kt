@@ -243,6 +243,9 @@ internal fun CalendarScheduleEditor(
     daysError: String?,
     onToggleDay: (Int) -> Unit,
     onTimeChange: (hour: Int, minute: Int) -> Unit,
+    scheduleTimes: List<Int> = emptyList(),
+    onAddTime: (minuteOfDay: Int) -> Unit = {},
+    onRemoveTime: (index: Int) -> Unit = {},
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
@@ -258,41 +261,26 @@ internal fun CalendarScheduleEditor(
         if (daysError != null) {
             Text(daysError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.sync_schedule_time_label), style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.width(VirgaSpacing.md))
-            Stepper(
-                value = "%02d".format(hour),
-                onDecrement = { onTimeChange((hour + 23) % 24, minute) },
-                onIncrement = { onTimeChange((hour + 1) % 24, minute) },
-            )
-            Text(":", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = VirgaSpacing.xs))
-            Stepper(
-                value = "%02d".format(minute),
-                onDecrement = { onTimeChange(hour, (minute + 55) % 60) },
-                onIncrement = { onTimeChange(hour, (minute + 5) % 60) },
-            )
-        }
+        ScheduleTimesEditor(
+            singleHour = hour,
+            singleMinute = minute,
+            scheduleTimes = scheduleTimes,
+            onSingleTimeChange = onTimeChange,
+            onAddTime = onAddTime,
+            onRemoveTime = onRemoveTime,
+        )
         val mask = days.fold(0) { acc, d -> acc or (1 shl (d - 1)) }
-        app.lusk.virga.sync.SyncSchedule.cronString(mask, hour, minute)?.let { cron ->
+        val cronText = if (scheduleTimes.isNotEmpty()) {
+            app.lusk.virga.sync.SyncSchedule.cronString(mask, scheduleTimes)
+        } else {
+            app.lusk.virga.sync.SyncSchedule.cronString(mask, hour, minute)
+        }
+        cronText?.let { cron ->
             Text(
                 stringResource(R.string.sync_schedule_cron_preview, cron),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        }
-    }
-}
-
-@Composable
-private fun Stepper(value: String, onDecrement: () -> Unit, onIncrement: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onDecrement) {
-            Icon(Icons.Filled.Remove, contentDescription = stringResource(R.string.sync_schedule_decrement))
-        }
-        Text(value, style = MaterialTheme.typography.titleMedium)
-        IconButton(onClick = onIncrement) {
-            Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.sync_schedule_increment))
         }
     }
 }

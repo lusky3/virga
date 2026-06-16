@@ -11,6 +11,7 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import app.lusk.virga.core.data.SyncTaskRepository
 import app.lusk.virga.core.common.model.SyncTask
+import app.lusk.virga.core.datastore.PreferencesRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import android.content.Context
 import java.time.ZoneId
@@ -22,11 +23,17 @@ import kotlinx.coroutines.flow.first
 /**
  * Schedules sync tasks with WorkManager. Periodic tasks honour the 15-minute
  * minimum interval; manual tasks are enqueued as one-shot work.
+ *
+ * Quiet-hours split: calendar one-shots are shifted past the blackout window HERE
+ * (at schedule time). Periodic (WorkManager-managed) interval tasks are NOT shifted
+ * here — the WORKER suppresses them at run time because WorkManager manages the
+ * periodic cadence independently of when we enqueue.
  */
 @Singleton
 class SyncScheduler @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val taskRepository: SyncTaskRepository,
+    private val preferencesRepository: PreferencesRepository,
 ) {
     private val workManager get() = WorkManager.getInstance(context)
 
@@ -97,18 +104,19 @@ class SyncScheduler @Inject constructor(
     }
 
     /**
-     * Enqueues the next calendar occurrence as a one-shot. [SyncWorker] calls
+     * Enqueues the next calendar occurrence as a one-shot, shifting it past the
+     * quiet-hours blackout window if quiet hours are enabled. [SyncWorker] calls
      * [schedule] again after the run to queue the following occurrence.
      */
     private fun scheduleCalendar(task: SyncTask) {
         val now = System.currentTimeMillis()
-        val nextMs = SyncSchedule.nextOccurrenceMs(
-            task.scheduleDaysMask, task.scheduleHour, task.scheduleMinute, now, ZoneId.systemDefault(),
-        )
-        if (nextMs <= now) {
+        val zone = ZoneId.systemDefault()
+        val rawNextMs = computeNextCalendarMs(task, now, zone)
+        if (rawNextMs <= now) {
             cancel(task.id)
             return
         }
+        val nextMs = applyQuietHours(rawNextMs, zone)
         val calPolicy = if (task.backoffExponential) BackoffPolicy.EXPONENTIAL else BackoffPolicy.LINEAR
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setInitialDelay(nextMs - now, TimeUnit.MILLISECONDS)
@@ -127,6 +135,30 @@ class SyncScheduler @Inject constructor(
             // current one; if none is running it behaves like a fresh enqueue.
             ExistingWorkPolicy.APPEND_OR_REPLACE,
             request,
+        )
+    }
+
+    private fun computeNextCalendarMs(task: SyncTask, now: Long, zone: ZoneId): Long =
+        if (task.scheduleTimes.isNotEmpty()) {
+            SyncSchedule.nextOccurrenceMs(task.scheduleDaysMask, task.scheduleTimes, now, zone)
+        } else {
+            SyncSchedule.nextOccurrenceMs(
+                task.scheduleDaysMask, task.scheduleHour, task.scheduleMinute, now, zone,
+            )
+        }
+
+    /**
+     * Reads quiet-hours prefs synchronously (blocking) via [runCatching] + [first].
+     * Called only from the scheduling path (not on the main thread). Returns the
+     * shifted candidate, or the original if quiet hours are disabled or prefs fail.
+     */
+    private fun applyQuietHours(candidateMs: Long, zone: ZoneId): Long {
+        val prefs = runCatching {
+            kotlinx.coroutines.runBlocking { preferencesRepository.preferences.first() }
+        }.getOrNull() ?: return candidateMs
+        if (!prefs.quietHoursEnabled) return candidateMs
+        return SyncSchedule.shiftPastBlackout(
+            candidateMs, prefs.quietHoursStartMinutes, prefs.quietHoursEndMinutes, zone,
         )
     }
 

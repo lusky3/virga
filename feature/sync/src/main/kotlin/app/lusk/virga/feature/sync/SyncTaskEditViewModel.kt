@@ -44,10 +44,16 @@ data class SyncTaskForm(
     val intervalMinutes: Int? = null,
     val customIntervalMinutes: Int? = null,
     /** Calendar schedule (when intervalMinutes == CALENDAR_SENTINEL): ISO weekdays
-     *  selected (1=Mon … 7=Sun) plus the local time-of-day to run at. */
+     *  selected (1=Mon … 7=Sun) plus the local time(s)-of-day to run at. */
     val scheduleDays: Set<Int> = emptySet(),
     val scheduleHour: Int = 9,
     val scheduleMinute: Int = 0,
+    /**
+     * Additional times for the calendar schedule, as minutes-of-day (0..1439).
+     * When non-empty the multi-time list is used instead of [scheduleHour]/[scheduleMinute].
+     * Empty = single-time fallback (behavior-preserving default).
+     */
+    val scheduleTimes: List<Int> = emptyList(),
     val wifiOnly: Boolean = true,
     val requiresCharging: Boolean = false,
     val bwLimitWifi: String = "",
@@ -232,6 +238,7 @@ class SyncTaskEditViewModel @Inject constructor(
                         scheduleDays = if (isCalendar) maskToDays(task.scheduleDaysMask) else emptySet(),
                         scheduleHour = task.scheduleHour,
                         scheduleMinute = task.scheduleMinute,
+                        scheduleTimes = if (isCalendar) task.scheduleTimes else emptyList(),
                         wifiOnly = task.wifiOnly,
                         requiresCharging = task.requiresCharging,
                         bwLimitWifi = task.bwLimitWifi.orEmpty(),
@@ -342,6 +349,18 @@ class SyncTaskEditViewModel @Inject constructor(
     fun setScheduleTime(hour: Int, minute: Int) =
         update { it.copy(scheduleHour = hour.coerceIn(0, 23), scheduleMinute = minute.coerceIn(0, 59)) }
 
+    /** Adds a time (minutes-of-day, 0..1439) to the multi-time list; ignores duplicates. */
+    fun addScheduleTime(minuteOfDay: Int) = update { f ->
+        val clamped = minuteOfDay.coerceIn(0, 1439)
+        if (clamped in f.scheduleTimes) f else f.copy(scheduleTimes = f.scheduleTimes + clamped)
+    }
+
+    /** Removes a time at [index] from the multi-time list; no-op for out-of-bounds. */
+    fun removeScheduleTime(index: Int) = update { f ->
+        if (index !in f.scheduleTimes.indices) f
+        else f.copy(scheduleTimes = f.scheduleTimes.toMutableList().also { it.removeAt(index) })
+    }
+
     fun save(onSaved: () -> Unit) {
         _form.update { it.copy(submitAttempted = true) }
         val form = _form.value
@@ -367,6 +386,7 @@ class SyncTaskEditViewModel @Inject constructor(
                 scheduleDaysMask = if (form.isCalendarSchedule) daysToMask(form.scheduleDays) else 0,
                 scheduleHour = form.scheduleHour,
                 scheduleMinute = form.scheduleMinute,
+                scheduleTimes = if (form.isCalendarSchedule) form.scheduleTimes else emptyList(),
                 wifiOnly = form.wifiOnly,
                 requiresCharging = form.requiresCharging,
                 bwLimitWifi = form.bwLimitWifi.trim().ifBlank { null },

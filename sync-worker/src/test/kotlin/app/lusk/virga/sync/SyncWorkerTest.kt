@@ -15,18 +15,22 @@ import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.data.StatsRepository
 import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.data.SyncTaskRepository
+import app.lusk.virga.core.datastore.AppPreferences
+import app.lusk.virga.core.datastore.PreferencesRepository
 import app.lusk.virga.core.rclone.RcloneEngine
 import com.google.common.truth.Truth.assertThat
 import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.coVerifyOrder
+import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.slot
 import io.mockk.unmockkObject
 import io.mockk.verify
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.runBlocking
@@ -58,6 +62,9 @@ class SyncWorkerTest {
     private val staging: LocalStaging = mockk(relaxed = true)
     private val scheduler: SyncScheduler = mockk(relaxed = true)
     private val remoteRepository: RemoteRepository = mockk(relaxed = true)
+    private val preferencesRepository: PreferencesRepository = mockk {
+        every { preferences } returns flowOf(AppPreferences())
+    }
 
     @Before
     fun setUp() {
@@ -103,13 +110,13 @@ class SyncWorkerTest {
                         SyncWorker(
                             appContext, workerParameters, executor, engine, taskRepository,
                             historyRepository, conflictRepository, statsRepository, staging, scheduler,
-                            remoteRepository,
+                            remoteRepository, preferencesRepository,
                         )
                     } else {
                         object : SyncWorker(
                             appContext, workerParameters, executor, engine, taskRepository,
                             historyRepository, conflictRepository, statsRepository, staging, scheduler,
-                            remoteRepository,
+                            remoteRepository, preferencesRepository,
                         ) {
                             override fun anotherRunInFlight(taskId: Long): Boolean = inFlightOverride
                         }
@@ -637,6 +644,83 @@ class SyncWorkerTest {
         assertThat(result).isEqualTo(ListenableWorker.Result.success())
         coVerify { remoteRepository.setNeedsReauth("gdrive", false) }
     }
+
+    // --- B4: quiet-hours worker tests ---
+
+    @Test
+    fun scheduledRun_insideQuietWindow_returnsSuccessWithoutCallingEngine() = runBlocking {
+        // A scheduled (non-manual) run during the blackout window must skip the sync
+        // and return success — WorkManager must not retry it.
+        every { preferencesRepository.preferences } returns flowOf(
+            AppPreferences(
+                quietHoursEnabled = true,
+                quietHoursStartMinutes = 0,   // midnight
+                quietHoursEndMinutes = 1439,  // 23:59 — always inside
+            ),
+        )
+        val t = calendarSyncTask()
+        coEvery { taskRepository.getTask(TASK_ID) } returns t
+
+        val result = buildWorker(manual = false).doWork()
+
+        assertThat(result).isEqualTo(ListenableWorker.Result.success())
+        coVerify(exactly = 0) { executor.run(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun manualRun_insideQuietWindow_runsNormally() = runBlocking {
+        // Manual "Sync now" bypasses quiet hours regardless of the window.
+        every { preferencesRepository.preferences } returns flowOf(
+            AppPreferences(
+                quietHoursEnabled = true,
+                quietHoursStartMinutes = 0,
+                quietHoursEndMinutes = 1439,
+            ),
+        )
+        val t = calendarSyncTask()
+        coEvery { taskRepository.getTask(TASK_ID) } returns t
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = t.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), any(), any()) } returns
+            flow { emit(progress(transferred = 1)) }
+
+        val result = buildWorker(manual = true).doWork()
+
+        assertThat(result).isEqualTo(ListenableWorker.Result.success())
+        coVerify(exactly = 1) { executor.run(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun scheduledRun_quietHoursDisabled_runsNormally() = runBlocking {
+        // When quiet hours are disabled a scheduled run must proceed as usual.
+        every { preferencesRepository.preferences } returns flowOf(
+            AppPreferences(quietHoursEnabled = false),
+        )
+        val t = calendarSyncTask()
+        coEvery { taskRepository.getTask(TASK_ID) } returns t
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = t.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), any(), any()) } returns
+            flow { emit(progress(transferred = 1)) }
+
+        val result = buildWorker(manual = false).doWork()
+
+        assertThat(result).isEqualTo(ListenableWorker.Result.success())
+        coVerify(exactly = 1) { executor.run(any(), any(), any(), any(), any()) }
+    }
+
+    private fun calendarSyncTask() = SyncTask(
+        id = TASK_ID,
+        name = "test",
+        sourcePath = "/sdcard/DCIM",
+        remoteName = "gdrive",
+        remotePath = "/Backup",
+        direction = SyncDirection.UPLOAD,
+        intervalMinutes = null,
+        scheduleDaysMask = 0x7F,
+        scheduleHour = 3,
+        scheduleMinute = 0,
+    )
 
     private fun task(direction: SyncDirection) = SyncTask(
         id = TASK_ID,
