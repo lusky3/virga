@@ -47,11 +47,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -68,10 +70,14 @@ import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.common.util.formatFileSize
 import app.lusk.virga.core.designsystem.component.rememberLongPressHaptic
 import app.lusk.virga.core.designsystem.theme.VirgaSpacing
+import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Thread-safe, locale-stable formatter for modified dates. */
 private val MOD_DATE_FORMATTER: DateTimeFormatter =
@@ -84,9 +90,6 @@ fun FileBrowserScreen(
     onBack: () -> Unit,
     onNavigateToRemotes: () -> Unit = {},
     onSyncFolder: (remote: String, path: String) -> Unit = { _, _ -> },
-    /** When true, the browser acts as a destination-folder picker: the action
-     *  records the current folder (via the ViewModel) and returns instead of
-     *  creating a sync task. */
     pickMode: Boolean = false,
     initialRemote: String? = null,
     viewModel: FileBrowserViewModel = hiltViewModel(),
@@ -142,27 +145,21 @@ fun FileBrowserScreen(
         floatingActionButton = {
             val remote = state.remoteName
             if (remote != null && !state.loading && state.error == null) {
-                // Selected folders (files can't be a sync source); drives the
-                // "Create sync task from selection" action (WS2.6).
                 val selectedFolders = entries.filter { it.path in state.selectedPaths && it.isDir }
                 when {
                     state.selectionMode && !pickMode -> {
                         if (selectedFolders.isNotEmpty()) {
-                            val label = stringResource(R.string.explorer_create_task_from_selection)
                             ExtendedFloatingActionButton(
                                 onClick = {
-                                    // The prefill editor takes one source folder; use the first
-                                    // selected. (Multi-folder fan-out is a future enhancement.)
                                     onSyncFolder(remote, selectedFolders.first().path)
                                     viewModel.clearSelection()
                                 },
                                 icon = { Icon(Icons.Filled.CloudSync, contentDescription = null) },
-                                text = { Text(label) },
+                                text = { Text(stringResource(R.string.explorer_create_task_from_selection)) },
                             )
                         }
                     }
                     pickMode -> {
-                        val pickLabel = stringResource(R.string.explorer_select_folder)
                         val newFolderDesc = stringResource(R.string.explorer_cd_new_folder)
                         Column(
                             horizontalAlignment = Alignment.End,
@@ -171,24 +168,19 @@ fun FileBrowserScreen(
                             FloatingActionButton(
                                 onClick = viewModel::openCreateFolderDialog,
                                 modifier = Modifier.semantics { contentDescription = newFolderDesc },
-                            ) {
-                                Icon(Icons.Filled.CreateNewFolder, contentDescription = null)
-                            }
+                            ) { Icon(Icons.Filled.CreateNewFolder, contentDescription = null) }
                             ExtendedFloatingActionButton(
                                 onClick = { viewModel.pickFolder(remote, state.path); onBack() },
                                 icon = { Icon(Icons.Filled.CheckCircle, contentDescription = null) },
-                                text = { Text(pickLabel) },
+                                text = { Text(stringResource(R.string.explorer_select_folder)) },
                             )
                         }
                     }
-                    else -> {
-                        val syncLabel = stringResource(R.string.explorer_sync_folder)
-                        ExtendedFloatingActionButton(
-                            onClick = { onSyncFolder(remote, state.path) },
-                            icon = { Icon(Icons.Filled.CloudSync, contentDescription = null) },
-                            text = { Text(syncLabel) },
-                        )
-                    }
+                    else -> ExtendedFloatingActionButton(
+                        onClick = { onSyncFolder(remote, state.path) },
+                        icon = { Icon(Icons.Filled.CloudSync, contentDescription = null) },
+                        text = { Text(stringResource(R.string.explorer_sync_folder)) },
+                    )
                 }
             }
         },
@@ -242,6 +234,7 @@ fun FileBrowserScreen(
                                 onLongPress = viewModel::enterSelectionMode,
                                 onToggleSelect = viewModel::toggleSelection,
                                 onShowProperties = viewModel::showProperties,
+                                onFileClick = viewModel::showActionSheet,
                             )
                         }
                     }
@@ -302,6 +295,52 @@ fun FileBrowserScreen(
             onDismiss = viewModel::dismissProperties,
         )
     }
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var pendingFile by remember { mutableStateOf<File?>(null) }
+    val transferFailedMsg = context.getString(R.string.explorer_transfer_failed)
+    val launchers = rememberTransferLaunchers(
+        onSaveUri = { destUri ->
+            pendingFile?.let { src ->
+                scope.launch {
+                    runCatching { withContext(Dispatchers.IO) { copyToSafUri(context, src, destUri) } }
+                        .onFailure { e -> snackbar.showSnackbar(e.message ?: transferFailedMsg) }
+                }
+            }
+        },
+        onPickUri = { srcUri ->
+            scope.launch {
+                val name = sanitizeSafName(safDisplayName(context, srcUri))
+                val tmp = File(File(context.cacheDir, "shared").also { it.mkdirs() }, name)
+                runCatching { withContext(Dispatchers.IO) { copyFromSafUri(context, srcUri, tmp) } }
+                    .fold(
+                        onSuccess = { viewModel.uploadLocalFile(tmp) },
+                        onFailure = { e -> snackbar.showSnackbar(e.message ?: transferFailedMsg) },
+                    )
+            }
+        },
+    )
+    val actionSheetItem = state.actionSheetItem
+    if (actionSheetItem != null) {
+        val dlDir = context.cacheDir
+        val mimeType = actionSheetItem.mimeType
+        FileBrowserActionSheet(
+            item = actionSheetItem,
+            onDismiss = viewModel::dismissActionSheet,
+            actions = FileActionCallbacks(
+                onOpen = { viewModel.downloadForAction(actionSheetItem, dlDir) { openFile(context, it, mimeType) } },
+                onShare = { viewModel.downloadForAction(actionSheetItem, dlDir) { shareFile(context, it, mimeType) } },
+                onSave = {
+                    val title = context.getString(R.string.explorer_save_document_title, actionSheetItem.name)
+                    viewModel.downloadForAction(actionSheetItem, dlDir) {
+                        pendingFile = it; launchers.createDocument.launch(title)
+                    }
+                },
+                onUpload = { launchers.openDocument.launch(arrayOf("*/*")) },
+            ),
+        )
+    }
 }
 
 @Composable
@@ -317,8 +356,6 @@ private fun CreateFolderDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.explorer_new_folder_title)) },
         text = {
-            // Error goes in the field's supportingText slot (not a sibling Text) so
-            // it's announced with the field by TalkBack and styled via isError.
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
@@ -360,12 +397,7 @@ private fun FileBrowserTopBar(
     onClearSelection: () -> Unit,
 ) {
     TopAppBar(
-        title = {
-            FileBrowserTitle(
-                state = state,
-                onSearchQuery = onSearchQuery,
-            )
-        },
+        title = { FileBrowserTitle(state = state, onSearchQuery = onSearchQuery) },
         navigationIcon = {
             IconButton(onClick = if (state.selectionMode) onClearSelection else onBack) {
                 Icon(
@@ -374,13 +406,7 @@ private fun FileBrowserTopBar(
                 )
             }
         },
-        actions = {
-            FileBrowserActions(
-                state = state,
-                onToggleSearch = onToggleSearch,
-                onSort = onSort,
-            )
-        },
+        actions = { FileBrowserActions(state = state, onToggleSearch = onToggleSearch, onSort = onSort) },
         scrollBehavior = scrollBehavior,
     )
 }
@@ -395,13 +421,11 @@ private fun FileList(
     onLongPress: (String) -> Unit,
     onToggleSelect: (String) -> Unit,
     onShowProperties: (FileItem) -> Unit,
+    onFileClick: (FileItem) -> Unit = {},
 ) {
     val longPressHaptic = rememberLongPressHaptic()
     val infoDesc = stringResource(R.string.explorer_cd_properties)
     LazyColumn(Modifier.fillMaxSize()) {
-        // Drive (and other backends) can hold multiple files with the SAME name
-        // in one folder, so path alone isn't a unique LazyColumn key — collisions
-        // crash with "Key … was already used". Disambiguate with the index.
         itemsIndexed(entries, key = { index, item -> "${item.path} $index" }) { _, item ->
             val isSelected = item.path in selectedPaths
             val openFolderLabel = stringResource(R.string.explorer_cd_open_folder)
@@ -433,10 +457,12 @@ private fun FileList(
                 },
                 modifier = Modifier
                     .combinedClickable(
-                        enabled = item.isDir || selectionMode,
                         onClick = {
-                            if (selectionMode) onToggleSelect(item.path)
-                            else onOpen(item)
+                            when {
+                                selectionMode -> onToggleSelect(item.path)
+                                item.isDir -> onOpen(item)
+                                else -> onFileClick(item)
+                            }
                         },
                         onLongClick = { longPressHaptic(); onLongPress(item.path) },
                     )
@@ -455,28 +481,16 @@ private fun FileList(
 
 @Composable
 private fun buildItemDescription(item: FileItem): String {
-    return if (item.isDir) {
-        stringResource(R.string.explorer_a11y_folder, item.name)
-    } else {
-        val sizeStr = if (item.size >= 0) formatFileSize(item.size) else ""
-        if (sizeStr.isNotEmpty()) {
-            stringResource(R.string.explorer_a11y_file_size, item.name, sizeStr)
-        } else {
-            stringResource(R.string.explorer_a11y_file, item.name)
-        }
-    }
+    if (item.isDir) return stringResource(R.string.explorer_a11y_folder, item.name)
+    val sizeStr = if (item.size >= 0) formatFileSize(item.size) else ""
+    return if (sizeStr.isNotEmpty()) stringResource(R.string.explorer_a11y_file_size, item.name, sizeStr)
+    else stringResource(R.string.explorer_a11y_file, item.name)
 }
 
 @Composable
 private fun ItemSupportingText(item: FileItem) {
-    val parts = buildList {
-        if (!item.isDir && item.size >= 0) add(formatFileSize(item.size))
-        item.modTimeEpochMs?.let { ms ->
-            if (ms > 0L) add(MOD_DATE_FORMATTER.format(Instant.ofEpochMilli(ms)))
-        }
-    }
-    if (parts.isNotEmpty()) {
-        Text(parts.joinToString(" · "))
-    }
+    val parts = mutableListOf<String>()
+    if (!item.isDir && item.size >= 0) parts.add(formatFileSize(item.size))
+    item.modTimeEpochMs?.takeIf { it > 0L }?.let { parts.add(MOD_DATE_FORMATTER.format(Instant.ofEpochMilli(it))) }
+    if (parts.isNotEmpty()) Text(parts.joinToString(" · "))
 }
-

@@ -475,8 +475,8 @@ class RcloneEngineImpl @Inject constructor(
         val (srcFs, srcRemote) = splitFs(source)
         val (dstFs, dstRemote) = splitFs(dest)
         rc(d, "operations/movefile", buildJsonObject {
-            put("srcFs", srcFs); put("srcRemote", srcRemote)
-            put("dstFs", dstFs); put("dstRemote", dstRemote)
+            put(KEY_SRC_FS, srcFs); put(KEY_SRC_REMOTE, srcRemote)
+            put(KEY_DST_FS, dstFs); put(KEY_DST_REMOTE, dstRemote)
         })
     }
 
@@ -491,8 +491,32 @@ class RcloneEngineImpl @Inject constructor(
         val (srcFs, srcRemote) = splitFs(source)
         val (dstFs, dstRemote) = splitFs(dest)
         rc(d, "operations/copyfile", buildJsonObject {
-            put("srcFs", srcFs); put("srcRemote", srcRemote)
-            put("dstFs", dstFs); put("dstRemote", dstRemote)
+            put(KEY_SRC_FS, srcFs); put(KEY_SRC_REMOTE, srcRemote)
+            put(KEY_DST_FS, dstFs); put(KEY_DST_REMOTE, dstRemote)
+        })
+    }
+
+    override suspend fun downloadFile(
+        remoteName: String,
+        remotePath: String,
+        destDir: String,
+        destName: String,
+    ): Unit = withLease { d ->
+        rc(d, "operations/copyfile", buildJsonObject {
+            put(KEY_SRC_FS, rootFs(remoteName)); put(KEY_SRC_REMOTE, remotePath)
+            put(KEY_DST_FS, destDir); put(KEY_DST_REMOTE, destName)
+        })
+    }
+
+    override suspend fun uploadFile(
+        srcDir: String,
+        srcName: String,
+        remoteName: String,
+        remotePath: String,
+    ): Unit = withLease { d ->
+        rc(d, "operations/copyfile", buildJsonObject {
+            put(KEY_SRC_FS, srcDir); put(KEY_SRC_REMOTE, srcName)
+            put(KEY_DST_FS, rootFs(remoteName)); put(KEY_DST_REMOTE, remotePath)
         })
     }
 
@@ -504,7 +528,7 @@ class RcloneEngineImpl @Inject constructor(
     }
 
     override suspend fun testConnectivity(remoteName: String): Result<Unit> = withLease { d ->
-        val fs = "$remoteName:"
+        val fs = rootFs(remoteName)
         try {
             rc(d, "operations/about", buildJsonObject { put("fs", fs) })
             Result.success(Unit)
@@ -546,7 +570,7 @@ class RcloneEngineImpl @Inject constructor(
             // dedupe itself failed even though the HTTP call succeeded.
             val resp = rc(d, "core/command", buildJsonObject {
                 put("command", "dedupe")
-                putJsonArray("arg") { add("$remoteName:") }
+                putJsonArray("arg") { add(rootFs(remoteName)) }
                 putJsonObject("opt") { put("dedupe-mode", dedupeMode) }
                 put("returnType", "COMBINED_OUTPUT")
             })
@@ -601,7 +625,7 @@ class RcloneEngineImpl @Inject constructor(
 
     override suspend fun about(remoteName: String): RemoteQuota = withLease { d ->
         val result = rc(d, "operations/about", buildJsonObject {
-            put("fs", "$remoteName:")
+            put("fs", rootFs(remoteName))
         })
         RemoteQuota(
             total = result["total"]?.jsonPrimitive?.longOrNull,
@@ -863,5 +887,13 @@ class RcloneEngineImpl @Inject constructor(
         const val POLL_INTERVAL_MS = 750L
         // Max time an in-flight job may make zero progress before we abort it.
         const val STALL_TIMEOUT_MS = 120_000L
+        // operations/copyfile and operations/movefile parameter keys.
+        const val KEY_SRC_FS = "srcFs"
+        const val KEY_SRC_REMOTE = "srcRemote"
+        const val KEY_DST_FS = "dstFs"
+        const val KEY_DST_REMOTE = "dstRemote"
+
+        /** rclone fs spec for a remote's root: the remote name followed by ':'. */
+        fun rootFs(remoteName: String): String = "$remoteName:"
     }
 }

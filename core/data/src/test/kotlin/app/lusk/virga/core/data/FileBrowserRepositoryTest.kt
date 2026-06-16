@@ -106,4 +106,44 @@ class FileBrowserRepositoryTest {
 
         coVerify { engine.stopDaemonIfIdle() }
     }
+
+    // -------------------------------------------------------------------------
+    // downloadToCache
+    // -------------------------------------------------------------------------
+
+    @Test fun `downloadToCache delegates with remoteName colon and local dir params`() = runTest {
+        val dir = java.io.File("/tmp/shared")
+        repo.downloadToCache("gdrive", "Photos/img.jpg", dir)
+
+        coVerify { engine.downloadFile("gdrive", "Photos/img.jpg", "/tmp/shared", "img.jpg") }
+    }
+
+    @Test fun `downloadToCache sanitizes dot-dot in filename to underscore`() = runTest {
+        val dir = java.io.File("/tmp/shared")
+        repo.downloadToCache("gdrive", "folder/../evil.sh", dir)
+
+        // ".." should be replaced with "_"
+        coVerify { engine.downloadFile("gdrive", "folder/../evil.sh", "/tmp/shared", any()) }
+        // The engine should NOT be called with a name containing ".."
+        coVerify(exactly = 0) { engine.downloadFile(any(), any(), any(), match { ".." in it }) }
+    }
+
+    @Test fun `downloadToCache returns File at cacheDir with derived name`() = runTest {
+        val dir = java.io.File("/tmp/shared")
+        val result = repo.downloadToCache("gdrive", "Documents/report.pdf", dir)
+
+        assertThat(result.parentFile?.absolutePath).isEqualTo("/tmp/shared")
+        assertThat(result.name).isEqualTo("report.pdf")
+    }
+
+    // -------------------------------------------------------------------------
+    // uploadFromLocal
+    // -------------------------------------------------------------------------
+
+    @Test fun `uploadFromLocal delegates with parent dir and filename`() = runTest {
+        val localFile = java.io.File("/tmp/shared/notes.txt")
+        repo.uploadFromLocal(localFile, "gdrive", "Uploads/notes.txt")
+
+        coVerify { engine.uploadFile("/tmp/shared", "notes.txt", "gdrive", "Uploads/notes.txt") }
+    }
 }

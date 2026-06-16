@@ -171,6 +171,33 @@ interface RcloneEngine {
     suspend fun copyFile(source: String, dest: String)
 
     /**
+     * Downloads a single file from a remote to a local directory.
+     * RC: operations/copyfile with srcFs="$remoteName:", srcRemote=remotePath,
+     * dstFs=destDir (absolute local directory, NO colon — local paths have no colon),
+     * dstRemote=destName.
+     * Throws [VirgaError] on failure.
+     */
+    suspend fun downloadFile(
+        remoteName: String,
+        remotePath: String,
+        destDir: String,
+        destName: String,
+    )
+
+    /**
+     * Uploads a single file from a local directory to a remote.
+     * RC: operations/copyfile with srcFs=srcDir (absolute local directory, NO colon),
+     * srcRemote=srcName, dstFs="$remoteName:", dstRemote=remotePath.
+     * Throws [VirgaError] on failure.
+     */
+    suspend fun uploadFile(
+        srcDir: String,
+        srcName: String,
+        remoteName: String,
+        remotePath: String,
+    )
+
+    /**
      * Recursively deletes [path] (directory and all contents) within [remote] via
      * `operations/purge`. This is the correct operation for removing a directory;
      * use [deleteFile] for single files. Throws [VirgaError] on failure.

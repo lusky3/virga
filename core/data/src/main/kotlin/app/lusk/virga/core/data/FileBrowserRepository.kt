@@ -51,6 +51,47 @@ class FileBrowserRepository @Inject constructor(
         engine.purge("$remoteName:", path)
 
     /**
+     * Downloads [remotePath] from [remoteName] into [cacheDir]/[name] and returns the staged [File].
+     * Caller must pass the absolute path to the shared cache subdirectory (e.g. File(context.cacheDir, "shared")).
+     * Throws [VirgaError] on failure.
+     */
+    suspend fun downloadToCache(
+        remoteName: String,
+        remotePath: String,
+        cacheDir: java.io.File,
+    ): java.io.File {
+        cacheDir.mkdirs()
+        val rawName = remotePath.substringAfterLast('/').substringAfterLast('\\')
+        val name = rawName.replace("..", "_").trim().ifBlank { "download" }
+        engine.downloadFile(remoteName, remotePath, cacheDir.absolutePath, name)
+        return java.io.File(cacheDir, name)
+    }
+
+    /**
+     * Uploads [localFile] to [remotePath] within [remoteName].
+     * [localFile] must be a plain filesystem file (not a content:// URI) — rclone cannot read content URIs.
+     * Throws [VirgaError] on failure.
+     */
+    suspend fun uploadFromLocal(
+        localFile: java.io.File,
+        remoteName: String,
+        remotePath: String,
+    ) {
+        // Resolve against the absolute path so a relative input (parent == null, e.g.
+        // File("notes.txt")) still yields a real directory as srcDir — passing the file's
+        // own path there would break operations/copyfile source resolution.
+        val absolute = localFile.absoluteFile
+        val srcDir = absolute.parent
+            ?: throw IllegalArgumentException("localFile must resolve to a parent directory: $localFile")
+        engine.uploadFile(
+            srcDir = srcDir,
+            srcName = absolute.name,
+            remoteName = remoteName,
+            remotePath = remotePath,
+        )
+    }
+
+    /**
      * Releases the daemon when browsing closes — best-effort: stops it only if no
      * sync is currently leasing it (the browser is a non-leasing consumer using the
      * warm daemon), so closing the browser can't kill an in-flight sync.
