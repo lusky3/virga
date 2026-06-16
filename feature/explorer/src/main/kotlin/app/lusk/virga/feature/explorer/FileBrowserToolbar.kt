@@ -14,7 +14,9 @@ import androidx.compose.material.icons.automirrored.filled.DriveFileMove
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.DropdownMenu
@@ -37,6 +39,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -241,4 +247,29 @@ internal fun RemotePicker(
             HorizontalDivider()
         }
     }
+}
+
+@Composable
+internal fun EmptyFolder() {
+    EmptyState(
+        title = stringResource(R.string.explorer_empty_folder),
+        body = stringResource(R.string.explorer_empty_folder_body),
+        icon = Icons.Filled.FolderOpen,
+    )
+}
+
+@Composable
+internal fun ErrorState(message: String, onRetry: () -> Unit) {
+    val errDesc = stringResource(R.string.explorer_error_label)
+    EmptyState(
+        title = message,
+        icon = Icons.Filled.Error,
+        modifier = Modifier.semantics {
+            liveRegion = LiveRegionMode.Assertive
+            contentDescription = "$errDesc $message"
+        },
+        action = {
+            TextButton(onClick = onRetry) { Text(stringResource(R.string.explorer_btn_retry)) }
+        },
+    )
 }

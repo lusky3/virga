@@ -50,6 +50,8 @@ data class FileBrowserUiState(
     val path: String = "",
     val rawEntries: List<FileItem> = emptyList(),
     val loading: Boolean = false,
+    /** True while a pull-to-refresh reload is in flight (distinct from [loading]). */
+    val isRefreshing: Boolean = false,
     val error: String? = null,
     /** True when the directory has more entries than [MAX_ENTRIES]. */
     val truncated: Boolean = false,
@@ -80,6 +82,8 @@ data class FileBrowserUiState(
     val showMoveDialog: Boolean = false,
     /** True while the copy-destination dialog is shown. */
     val showCopyDialog: Boolean = false,
+    /** The item whose properties sheet is open, or null when closed. */
+    val propertiesItem: FileItem? = null,
 ) {
     val atRoot: Boolean get() = path.isEmpty()
     val breadcrumb: List<String> get() = path.split('/').filter { it.isNotBlank() }
@@ -225,6 +229,22 @@ class FileBrowserViewModel @Inject constructor(
     fun retry() {
         val remote = _state.value.remoteName ?: return
         load(remote, _state.value.path)
+    }
+
+    /** Re-lists the current directory without showing the full-screen spinner. */
+    fun refresh() {
+        val remote = _state.value.remoteName ?: return
+        load(remote, _state.value.path, isRefresh = true)
+    }
+
+    /** Opens the properties sheet for [item]. */
+    fun showProperties(item: FileItem) {
+        _state.update { it.copy(propertiesItem = item) }
+    }
+
+    /** Closes the properties sheet. */
+    fun dismissProperties() {
+        _state.update { it.copy(propertiesItem = null) }
     }
 
     fun setSortConfig(config: SortConfig) {
@@ -418,24 +438,30 @@ class FileBrowserViewModel @Inject constructor(
      *  finishing after list(parent) can't overwrite the parent's entries. */
     private var loadJob: kotlinx.coroutines.Job? = null
 
-    private fun load(remote: String, path: String) {
+    private fun load(remote: String, path: String, isRefresh: Boolean = false) {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
-            _state.update { it.copy(remoteName = remote, path = path, loading = true, error = null) }
+            if (isRefresh) {
+                _state.update { it.copy(remoteName = remote, path = path, isRefreshing = true, error = null) }
+            } else {
+                _state.update { it.copy(remoteName = remote, path = path, loading = true, error = null) }
+            }
             try {
                 val raw = fileBrowser.list(remote, path)
                 val (capped, truncated) = withContext(dispatchers.default) {
                     val truncated = raw.size > MAX_ENTRIES
                     (if (truncated) raw.take(MAX_ENTRIES) else raw) to truncated
                 }
-                _state.update { it.copy(rawEntries = capped, loading = false, truncated = truncated) }
+                _state.update {
+                    it.copy(rawEntries = capped, loading = false, isRefreshing = false, truncated = truncated)
+                }
             } catch (e: VirgaError) {
-                _state.update { it.copy(loading = false, error = e.toUserMessage()) }
+                _state.update { it.copy(loading = false, isRefreshing = false, error = e.toUserMessage()) }
             } catch (e: Exception) {
                 // Navigating away cancels this load; a CancellationException is
                 // normal flow control, not an error to surface to the user.
                 if (e is CancellationException) throw e
-                _state.update { it.copy(loading = false, error = e.toUserMessage()) }
+                _state.update { it.copy(loading = false, isRefreshing = false, error = e.toUserMessage()) }
             }
         }
     }
