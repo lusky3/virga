@@ -1,12 +1,15 @@
 package app.lusk.virga.feature.explorer
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.semantics.Role
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -251,11 +254,15 @@ internal fun RemotePicker(
 
 @Composable
 internal fun EmptyFolder() {
-    EmptyState(
-        title = stringResource(R.string.explorer_empty_folder),
-        body = stringResource(R.string.explorer_empty_folder_body),
-        icon = Icons.Filled.FolderOpen,
-    )
+    // Wrapping in a scrollable Box gives PullToRefreshBox a nested-scroll
+    // source so the pull gesture registers even on an empty directory.
+    Box(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        EmptyState(
+            title = stringResource(R.string.explorer_empty_folder),
+            body = stringResource(R.string.explorer_empty_folder_body),
+            icon = Icons.Filled.FolderOpen,
+        )
+    }
 }
 
 @Composable

@@ -441,10 +441,16 @@ class FileBrowserViewModel @Inject constructor(
     private fun load(remote: String, path: String, isRefresh: Boolean = false) {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
-            if (isRefresh) {
-                _state.update { it.copy(remoteName = remote, path = path, isRefreshing = true, error = null) }
-            } else {
-                _state.update { it.copy(remoteName = remote, path = path, loading = true, error = null) }
+            // Always set both flags explicitly so a leftover from a cancelled opposing
+            // job is cleared atomically — prevents loading && isRefreshing both being true.
+            _state.update {
+                it.copy(
+                    remoteName = remote,
+                    path = path,
+                    loading = !isRefresh,
+                    isRefreshing = isRefresh,
+                    error = null,
+                )
             }
             try {
                 val raw = fileBrowser.list(remote, path)

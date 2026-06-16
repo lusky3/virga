@@ -141,6 +141,26 @@ class FileBrowserRefreshPropertiesViewModelTest {
     }
 
     @Test
+    fun `refresh cancelling an in-flight load never shows both spinners`() = runTest(mainDispatcher.dispatcher) {
+        // Initial load gets stuck so loading=true with the load coroutine still alive.
+        coEvery { engine.listDir(any(), any()) } coAnswers { kotlinx.coroutines.awaitCancellation() }
+        val vm = viewModel()
+        vm.selectRemote("gdrive")
+        advanceUntilIdle()
+        assertThat(vm.state.value.loading).isTrue()
+
+        // refresh() cancels that load and starts a refresh that also stays in-flight.
+        vm.refresh()
+        advanceUntilIdle()
+
+        // The fix: starting the refresh clears the opposing `loading` flag atomically,
+        // so the full-screen spinner and pull-to-refresh indicator are never both shown.
+        assertThat(vm.state.value.loading && vm.state.value.isRefreshing).isFalse()
+        assertThat(vm.state.value.loading).isFalse()
+        assertThat(vm.state.value.isRefreshing).isTrue()
+    }
+
+    @Test
     fun `refresh is a no-op when no remote is selected`() = runTest(mainDispatcher.dispatcher) {
         val vm = viewModel()
 

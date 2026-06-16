@@ -52,7 +52,8 @@ internal fun PropertiesContent(item: FileItem) {
         stringResource(R.string.explorer_properties_type_file)
     }
     val sizeLabel = if (item.isDir) dash else formatFileSize(item.size)
-    val modLabel = item.modTimeEpochMs?.let { formatModTime(it) } ?: dash
+    // Treat 0 (and negative) epoch as "unknown" to match the list row's `ms > 0L` threshold.
+    val modLabel = item.modTimeEpochMs?.takeIf { it > 0L }?.let { formatModTime(it) } ?: dash
 
     Column(
         modifier = Modifier
