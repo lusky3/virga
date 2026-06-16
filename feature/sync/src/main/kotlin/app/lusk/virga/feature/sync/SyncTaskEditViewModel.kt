@@ -101,6 +101,10 @@ data class SyncTaskForm(
     /** Ordering hint within a syncAll run; lower values run first. Default 0. */
     val sortOrder: Int = 0,
     val sortOrderText: String = "0",
+    /** Bisync conflict-resolve: none/newer/older/larger/smaller/path1/path2 or blank = default. */
+    val conflictResolve: String = "",
+    /** When true and direction is one-way, run a pre-sync advisory check before sync. */
+    val conflictCheck: Boolean = false,
     val bwLimitWifiError: String? = null,
     val bwLimitMeteredError: String? = null,
     val bufferSizeError: String? = null,
@@ -276,6 +280,8 @@ class SyncTaskEditViewModel @Inject constructor(
                         groupTag = task.groupTag,
                         sortOrder = task.sortOrder,
                         sortOrderText = task.sortOrder.toString(),
+                        conflictResolve = task.conflictResolve,
+                        conflictCheck = task.conflictCheck,
                     )
                 }
             }
@@ -432,6 +438,8 @@ class SyncTaskEditViewModel @Inject constructor(
                 backoffExponential = form.backoffExponential,
                 groupTag = form.groupTag.trim(),
                 sortOrder = form.sortOrder,
+                conflictResolve = form.conflictResolve.trim(),
+                conflictCheck = form.conflictCheck,
             )
             val id = taskRepository.save(task)
             scheduler.schedule(task.copy(id = id))

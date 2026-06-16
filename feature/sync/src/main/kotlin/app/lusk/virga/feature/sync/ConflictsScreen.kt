@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -240,6 +241,9 @@ private fun ConflictCard(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
+                if (conflict.conflictType.isNotBlank()) {
+                    ConflictTypeBadge(conflict.conflictType)
+                }
             }
             Text(
                 stringResource(R.string.conflicts_on_remote, conflict.remoteName),
@@ -291,6 +295,18 @@ private fun ConflictCard(
                 }
             }
         }
+    }
+}
+
+/** Small badge showing the conflict origin type ("bisync" or "one-way"). */
+@Composable
+internal fun ConflictTypeBadge(conflictType: String) {
+    Badge(
+        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        modifier = Modifier.padding(start = VirgaSpacing.xs),
+    ) {
+        Text(conflictType, style = MaterialTheme.typography.labelSmall)
     }
 }
 

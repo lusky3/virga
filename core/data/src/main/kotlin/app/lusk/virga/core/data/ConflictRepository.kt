@@ -10,6 +10,12 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** Constants for [ConflictEntity.conflictType] / [Conflict.conflictType]. */
+object ConflictType {
+    const val BISYNC = "bisync"
+    const val ONE_WAY = "one-way"
+}
+
 /** Choices the user makes for resolving a [Conflict]. */
 enum class ConflictChoice { KEEP_VARIANT_1, KEEP_VARIANT_2, KEEP_BOTH }
 
@@ -30,8 +36,11 @@ class ConflictRepository @Inject constructor(
     val unresolved: Flow<List<Conflict>> =
         conflictDao.observeUnresolved().map { rows -> rows.map { it.toDomain() } }
 
-    /** Walks the destination of [task] for conflict-suffixed files and records them. */
-    suspend fun detectFor(task: SyncTask): Result<Int> = runCatching {
+    /**
+     * Walks the destination of [task] for conflict-suffixed files and records them.
+     * [conflictType] is stored on each new [ConflictEntity]; defaults to [ConflictType.BISYNC].
+     */
+    suspend fun detectFor(task: SyncTask, conflictType: String = ConflictType.BISYNC): Result<Int> = runCatching {
         // Use a filter so rclone returns only conflict-suffixed files instead of
         // materialising the entire subtree.
         val entries = engine.listDir(
@@ -64,6 +73,7 @@ class ConflictRepository @Inject constructor(
                 variant2Path = v2.path,
                 variant1Size = v1.size,
                 variant2Size = v2.size,
+                conflictType = conflictType,
             )
         }
         // Atomically drop previously-resolved conflicts and record the current set,
@@ -97,6 +107,25 @@ class ConflictRepository @Inject constructor(
             }
             conflictDao.markResolved(conflict.id)
         }
+    }
+
+    /**
+     * Records an advisory one-way conflict for [task] with [differences] differing files.
+     * Stores a single row with basePath = "<differences> file(s) differ" so the user sees
+     * the count in ConflictsScreen. DETECTION-ONLY: does not affect sync outcome.
+     */
+    suspend fun recordOneWayAdvisory(task: SyncTask, differences: Int): Result<Unit> = runCatching {
+        val entity = ConflictEntity(
+            taskId = task.id,
+            remoteName = task.remoteName,
+            basePath = "$differences file(s) differ (advisory)",
+            variant1Path = "",
+            variant2Path = "",
+            variant1Size = 0,
+            variant2Size = 0,
+            conflictType = ConflictType.ONE_WAY,
+        )
+        conflictDao.pruneResolvedAndUpsert(task.id, listOf(entity))
     }
 
     private suspend fun promote(remoteFs: String, winnerPath: String, basePath: String, loserPath: String) {

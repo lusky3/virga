@@ -8,6 +8,7 @@ import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.database.dao.ConflictDao
 import app.lusk.virga.core.database.entity.ConflictEntity
 import app.lusk.virga.core.rclone.RcloneEngine
+import app.lusk.virga.core.data.ConflictType
 import com.google.common.truth.Truth.assertThat
 import io.mockk.Runs
 import io.mockk.coEvery
@@ -133,6 +134,47 @@ class ConflictRepositoryTest {
         assertThat(result.isFailure).isTrue()
         assertThat(result.exceptionOrNull()).isInstanceOf(VirgaError.Network::class.java)
         coVerify(exactly = 0) { conflictDao.pruneResolvedAndUpsert(any(), any()) }
+    }
+
+    // --- B7: conflictType on detectFor rows ---
+
+    @Test fun `B7 detectFor sets conflictType BISYNC by default`() = runTest {
+        coEvery { engine.listDir(any(), any(), any(), any()) } returns listOf(
+            file("doc.txt.conflict1", "doc.txt.conflict1"),
+            file("doc.txt.conflict2", "doc.txt.conflict2"),
+        )
+        val captured = slot<List<ConflictEntity>>()
+        coEvery { conflictDao.pruneResolvedAndUpsert(any(), capture(captured)) } just Runs
+
+        repo.detectFor(task())
+
+        assertThat(captured.captured.single().conflictType).isEqualTo(ConflictType.BISYNC)
+    }
+
+    @Test fun `B7 detectFor accepts explicit conflictType override`() = runTest {
+        coEvery { engine.listDir(any(), any(), any(), any()) } returns listOf(
+            file("doc.txt.conflict1", "doc.txt.conflict1"),
+            file("doc.txt.conflict2", "doc.txt.conflict2"),
+        )
+        val captured = slot<List<ConflictEntity>>()
+        coEvery { conflictDao.pruneResolvedAndUpsert(any(), capture(captured)) } just Runs
+
+        repo.detectFor(task(), conflictType = ConflictType.ONE_WAY)
+
+        assertThat(captured.captured.single().conflictType).isEqualTo(ConflictType.ONE_WAY)
+    }
+
+    @Test fun `B7 recordOneWayAdvisory stores a single advisory row with ONE_WAY type`() = runTest {
+        val captured = slot<List<ConflictEntity>>()
+        coEvery { conflictDao.pruneResolvedAndUpsert(any(), capture(captured)) } just Runs
+
+        val result = repo.recordOneWayAdvisory(task(), differences = 3)
+
+        assertThat(result.isSuccess).isTrue()
+        val entity = captured.captured.single()
+        assertThat(entity.conflictType).isEqualTo(ConflictType.ONE_WAY)
+        assertThat(entity.taskId).isEqualTo(task().id)
+        assertThat(entity.remoteName).isEqualTo(task().remoteName)
     }
 
     // --- resolve ---

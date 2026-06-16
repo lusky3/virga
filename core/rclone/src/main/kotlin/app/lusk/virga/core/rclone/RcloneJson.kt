@@ -145,6 +145,10 @@ internal fun JsonObjectBuilder.putConfig(config: RcloneRunConfig) {
             put("MaxTransfer", config.maxTransfer)
             put("CutoffMode", "CAUTIOUS")
         }
+        // B7: bisync conflict-resolve strategy.
+        if (config is BisyncOptions && !config.conflictResolve.isNullOrBlank()) {
+            put("ConflictResolve", config.conflictResolve)
+        }
         // Merge power-user extra config entries. The Map<String, Any> contract
         // guarantees values are Boolean, Number, or String (enforced by
         // ExtraConfigParser before this point). Applied LAST, so an explicit

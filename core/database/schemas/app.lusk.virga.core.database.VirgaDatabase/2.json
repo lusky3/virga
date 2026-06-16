@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 2,
-    "identityHash": "63d847e6111f3ad9bc4099184c0309d8",
+    "identityHash": "PLACEHOLDER_REGENERATED_BY_ROOM",
     "entities": [
       {
         "tableName": "remotes",
@@ -36,7 +36,7 @@
       },
       {
         "tableName": "sync_tasks",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `sourcePath` TEXT NOT NULL, `remoteName` TEXT NOT NULL, `remotePath` TEXT NOT NULL, `direction` TEXT NOT NULL, `intervalMinutes` INTEGER, `scheduleDaysMask` INTEGER NOT NULL, `scheduleHour` INTEGER NOT NULL, `scheduleMinute` INTEGER NOT NULL, `filters` TEXT NOT NULL, `minSize` TEXT NOT NULL, `maxSize` TEXT NOT NULL, `minAge` TEXT NOT NULL, `maxAge` TEXT NOT NULL, `bwLimitWifi` TEXT, `bwLimitMetered` TEXT, `transfers` INTEGER NOT NULL, `checkers` INTEGER NOT NULL, `bufferSize` TEXT NOT NULL, `deleteExtraneous` INTEGER NOT NULL, `deleteSource` INTEGER NOT NULL, `wifiOnly` INTEGER NOT NULL, `requiresCharging` INTEGER NOT NULL, `enabled` INTEGER NOT NULL, `createdAtEpochMs` INTEGER NOT NULL, `checksum` INTEGER NOT NULL, `backupDir` TEXT, `maxDelete` INTEGER, `extraConfig` TEXT NOT NULL, `maxTransfer` TEXT NOT NULL, `maxRetries` INTEGER NOT NULL, `retryOnRclone` INTEGER NOT NULL, `backoffSeconds` INTEGER NOT NULL, `backoffExponential` INTEGER NOT NULL, `scheduleTimes` TEXT NOT NULL, `groupTag` TEXT NOT NULL, `sortOrder` INTEGER NOT NULL)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `sourcePath` TEXT NOT NULL, `remoteName` TEXT NOT NULL, `remotePath` TEXT NOT NULL, `direction` TEXT NOT NULL, `intervalMinutes` INTEGER, `scheduleDaysMask` INTEGER NOT NULL, `scheduleHour` INTEGER NOT NULL, `scheduleMinute` INTEGER NOT NULL, `filters` TEXT NOT NULL, `minSize` TEXT NOT NULL, `maxSize` TEXT NOT NULL, `minAge` TEXT NOT NULL, `maxAge` TEXT NOT NULL, `bwLimitWifi` TEXT, `bwLimitMetered` TEXT, `transfers` INTEGER NOT NULL, `checkers` INTEGER NOT NULL, `bufferSize` TEXT NOT NULL, `deleteExtraneous` INTEGER NOT NULL, `deleteSource` INTEGER NOT NULL, `wifiOnly` INTEGER NOT NULL, `requiresCharging` INTEGER NOT NULL, `enabled` INTEGER NOT NULL, `createdAtEpochMs` INTEGER NOT NULL, `checksum` INTEGER NOT NULL, `backupDir` TEXT, `maxDelete` INTEGER, `extraConfig` TEXT NOT NULL, `maxTransfer` TEXT NOT NULL, `maxRetries` INTEGER NOT NULL, `retryOnRclone` INTEGER NOT NULL, `backoffSeconds` INTEGER NOT NULL, `backoffExponential` INTEGER NOT NULL, `scheduleTimes` TEXT NOT NULL, `groupTag` TEXT NOT NULL, `sortOrder` INTEGER NOT NULL, `conflictResolve` TEXT NOT NULL, `conflictCheck` INTEGER NOT NULL)",
         "fields": [
           {
             "fieldPath": "id",
@@ -260,6 +260,18 @@
             "columnName": "sortOrder",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "conflictResolve",
+            "columnName": "conflictResolve",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conflictCheck",
+            "columnName": "conflictCheck",
+            "affinity": "INTEGER",
+            "notNull": true
           }
         ],
         "primaryKey": {
@@ -380,7 +392,7 @@
       },
       {
         "tableName": "conflicts",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `taskId` INTEGER NOT NULL, `remoteName` TEXT NOT NULL, `basePath` TEXT NOT NULL, `variant1Path` TEXT NOT NULL, `variant2Path` TEXT NOT NULL, `variant1Size` INTEGER NOT NULL, `variant2Size` INTEGER NOT NULL, `detectedAtEpochMs` INTEGER NOT NULL, `resolved` INTEGER NOT NULL, FOREIGN KEY(`taskId`) REFERENCES `sync_tasks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `taskId` INTEGER NOT NULL, `remoteName` TEXT NOT NULL, `basePath` TEXT NOT NULL, `variant1Path` TEXT NOT NULL, `variant2Path` TEXT NOT NULL, `variant1Size` INTEGER NOT NULL, `variant2Size` INTEGER NOT NULL, `detectedAtEpochMs` INTEGER NOT NULL, `resolved` INTEGER NOT NULL, `conflictType` TEXT NOT NULL, FOREIGN KEY(`taskId`) REFERENCES `sync_tasks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "id",
@@ -440,6 +452,12 @@
             "fieldPath": "resolved",
             "columnName": "resolved",
             "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conflictType",
+            "columnName": "conflictType",
+            "affinity": "TEXT",
             "notNull": true
           }
         ],
@@ -586,7 +604,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '63d847e6111f3ad9bc4099184c0309d8')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'PLACEHOLDER_REGENERATED_BY_ROOM')"
     ]
   }
 }

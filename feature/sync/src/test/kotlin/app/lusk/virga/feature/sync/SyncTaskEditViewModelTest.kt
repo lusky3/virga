@@ -1170,6 +1170,65 @@ class SyncTaskEditViewModelTest {
         assertThat(vm.form.value.sortOrder).isEqualTo(0)
     }
 
+    // --- B7: conflictResolve / conflictCheck --------------------------------
+
+    @Test
+    fun load_existingTask_hydratesConflictResolveAndConflictCheck() = runTest(mainDispatcher.dispatcher) {
+        val entity = SyncTask(
+            id = 90,
+            name = "BisyncTask",
+            sourcePath = "/sdcard/DCIM",
+            remoteName = "gdrive",
+            remotePath = "/dst",
+            direction = SyncDirection.BISYNC,
+            intervalMinutes = null,
+            conflictResolve = "newer",
+            conflictCheck = true,
+        )
+        coEvery { taskRepository.getTask(90) } returns entity
+        val vm = viewModel()
+        vm.load(taskId = 90)
+        advanceUntilIdle()
+
+        assertThat(vm.form.value.conflictResolve).isEqualTo("newer")
+        assertThat(vm.form.value.conflictCheck).isTrue()
+    }
+
+    @Test
+    fun save_persistsConflictResolveAndConflictCheck() = runTest(mainDispatcher.dispatcher) {
+        coEvery { taskRepository.save(any()) } returns 1L
+        val vm = viewModel()
+        vm.update {
+            it.copy(
+                name = "BisyncTask",
+                sourcePath = "/sdcard/DCIM",
+                remoteName = "gdrive",
+                remotePath = "Backups",
+                direction = SyncDirection.BISYNC,
+                conflictResolve = "older",
+                conflictCheck = false,
+            )
+        }
+        vm.save {}
+        advanceUntilIdle()
+
+        coVerify {
+            taskRepository.save(
+                match<SyncTask> { it.conflictResolve == "older" && !it.conflictCheck },
+            )
+        }
+    }
+
+    @Test
+    fun newTask_defaultConflictResolveIsEmpty_defaultConflictCheckIsFalse() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        vm.load(taskId = 0)
+        advanceUntilIdle()
+
+        assertThat(vm.form.value.conflictResolve).isEmpty()
+        assertThat(vm.form.value.conflictCheck).isFalse()
+    }
+
     // --- helpers ------------------------------------------------------------
 
     private fun task(

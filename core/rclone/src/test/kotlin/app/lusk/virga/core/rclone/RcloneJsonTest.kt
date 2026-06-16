@@ -235,4 +235,43 @@ class RcloneJsonTest {
         assertThat(filter.containsKey("MinAge")).isFalse()
         assertThat(filter.containsKey("MaxAge")).isFalse()
     }
+
+    // --- B7: putConfig ConflictResolve (bisync only) -----------------------
+
+    @Test
+    fun `putConfig emits ConflictResolve when BisyncOptions conflictResolve is set`() {
+        val obj = buildJsonObject {
+            putConfig(BisyncOptions(conflictResolve = "newer"))
+        }
+        val cfg = obj["_config"]!!.jsonObject
+        assertThat(cfg["ConflictResolve"]?.jsonPrimitive?.contentOrNull).isEqualTo("newer")
+    }
+
+    @Test
+    fun `putConfig omits ConflictResolve when BisyncOptions conflictResolve is null`() {
+        val obj = buildJsonObject {
+            putConfig(BisyncOptions(conflictResolve = null))
+        }
+        val cfg = obj["_config"]!!.jsonObject
+        assertThat(cfg.containsKey("ConflictResolve")).isFalse()
+    }
+
+    @Test
+    fun `putConfig omits ConflictResolve when BisyncOptions conflictResolve is blank`() {
+        val obj = buildJsonObject {
+            putConfig(BisyncOptions(conflictResolve = ""))
+        }
+        val cfg = obj["_config"]!!.jsonObject
+        assertThat(cfg.containsKey("ConflictResolve")).isFalse()
+    }
+
+    @Test
+    fun `putConfig does not emit ConflictResolve for SyncOptions even with extraConfig`() {
+        // SyncOptions is a one-way options type; ConflictResolve only applies to bisync.
+        val obj = buildJsonObject {
+            putConfig(SyncOptions(direction = SyncDirection.UPLOAD))
+        }
+        val cfg = obj["_config"]!!.jsonObject
+        assertThat(cfg.containsKey("ConflictResolve")).isFalse()
+    }
 }

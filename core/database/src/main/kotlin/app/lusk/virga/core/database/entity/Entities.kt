@@ -129,6 +129,18 @@ data class SyncTaskEntity(
      * guarantee. Lower values enqueue first; ties broken by id. Default 0.
      */
     val sortOrder: Int = 0,
+    /**
+     * Bisync conflict-resolve strategy (rclone `_config` "ConflictResolve"). Accepted
+     * values: none, newer, older, larger, smaller, path1, path2. Empty = rclone default.
+     */
+    val conflictResolve: String = "",
+    /**
+     * When true and direction is one-way (UPLOAD/DOWNLOAD), run a pre-sync check
+     * and record differing files as advisory conflicts before the normal sync.
+     * DETECTION-ONLY: does NOT block or auto-resolve — the sync proceeds unchanged.
+     * Default false = existing behavior.
+     */
+    val conflictCheck: Boolean = false,
 )
 
 /**
@@ -166,6 +178,13 @@ data class ConflictEntity(
     val variant2Size: Long,
     val detectedAtEpochMs: Long = System.currentTimeMillis(),
     val resolved: Boolean = false,
+    /**
+     * Origin of the conflict. "bisync" = detected after a bisync run via rclone
+     * conflict-suffix scan; "one-way" = advisory detection before a one-way sync
+     * (conflictCheck=true). Empty string = legacy rows recorded before this field
+     * was added.
+     */
+    val conflictType: String = "",
 )
 
 /** A single execution of a [SyncTaskEntity]. */
