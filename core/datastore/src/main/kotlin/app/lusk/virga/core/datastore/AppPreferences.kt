@@ -87,4 +87,21 @@ data class AppPreferences(
      * is true and this value is > 0. Default 0 (no cap).
      */
     val meteredCapMb: Long = 0,
+    // B3: event-driven sync triggers -----------------------------------------------
+    /**
+     * When true, a FileObserver watches each enabled sync task's source directory
+     * (non-SAF paths only) and triggers a sync after a quiet window of no changes.
+     * Only active while the watchdog FGS is running. Default off.
+     */
+    val triggerOnFolderChange: Boolean = false,
+    /**
+     * When true, connecting to a Wi-Fi network triggers syncAllEnabled after a short
+     * debounce. Only active while the watchdog FGS is running. Default off.
+     */
+    val triggerOnWifiConnect: Boolean = false,
+    /**
+     * When true, connecting the charger triggers syncAllEnabled after a short
+     * debounce. Only active while the watchdog FGS is running. Default off.
+     */
+    val triggerOnCharge: Boolean = false,
 )

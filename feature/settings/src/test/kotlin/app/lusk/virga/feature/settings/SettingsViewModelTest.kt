@@ -330,6 +330,97 @@ class SettingsViewModelTest {
         job.cancel()
     }
 
+    // --- B3: event-driven trigger setters ---
+
+    @Test
+    fun setTriggerOnFolderChange_true_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setTriggerOnFolderChange(true)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { repository.setTriggerOnFolderChange(true) }
+    }
+
+    @Test
+    fun setTriggerOnFolderChange_false_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setTriggerOnFolderChange(false)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { repository.setTriggerOnFolderChange(false) }
+    }
+
+    @Test
+    fun setTriggerOnWifiConnect_true_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setTriggerOnWifiConnect(true)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { repository.setTriggerOnWifiConnect(true) }
+    }
+
+    @Test
+    fun setTriggerOnWifiConnect_false_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setTriggerOnWifiConnect(false)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { repository.setTriggerOnWifiConnect(false) }
+    }
+
+    @Test
+    fun setTriggerOnCharge_true_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setTriggerOnCharge(true)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { repository.setTriggerOnCharge(true) }
+    }
+
+    @Test
+    fun setTriggerOnCharge_false_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setTriggerOnCharge(false)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { repository.setTriggerOnCharge(false) }
+    }
+
+    @Test
+    fun triggerOnFolderChange_defaultsFalse() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.state.collect {} }
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.triggerOnFolderChange).isFalse()
+        job.cancel()
+    }
+
+    @Test
+    fun triggerOnWifiConnect_defaultsFalse() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.state.collect {} }
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.triggerOnWifiConnect).isFalse()
+        job.cancel()
+    }
+
+    @Test
+    fun triggerOnCharge_defaultsFalse() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.state.collect {} }
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.triggerOnCharge).isFalse()
+        job.cancel()
+    }
+
+    @Test
+    fun triggerPrefs_trueReflectedInState() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.state.collect {} }
+        prefsFlow.value = AppPreferences(
+            triggerOnFolderChange = true,
+            triggerOnWifiConnect = true,
+            triggerOnCharge = true,
+        )
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.triggerOnFolderChange).isTrue()
+        assertThat(vm.state.value.triggerOnWifiConnect).isTrue()
+        assertThat(vm.state.value.triggerOnCharge).isTrue()
+        job.cancel()
+    }
+
     @Test
     fun monthlyMeteredBytes_reflectsRepositoryFlow() = runTest(mainDispatcher.dispatcher) {
         val usageFlow = kotlinx.coroutines.flow.MutableStateFlow(0L)

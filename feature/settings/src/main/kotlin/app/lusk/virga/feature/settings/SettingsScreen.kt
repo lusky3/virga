@@ -215,6 +215,14 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            EventTriggersSection(
+                triggerOnFolderChange = prefs.triggerOnFolderChange,
+                triggerOnWifiConnect = prefs.triggerOnWifiConnect,
+                triggerOnCharge = prefs.triggerOnCharge,
+                onFolderChangeToggle = viewModel::setTriggerOnFolderChange,
+                onWifiConnectToggle = viewModel::setTriggerOnWifiConnect,
+                onChargeToggle = viewModel::setTriggerOnCharge,
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
                 TextButton(onClick = {
                     runCatching {

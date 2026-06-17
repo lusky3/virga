@@ -54,6 +54,11 @@ class PreferencesRepository @Inject constructor(
     suspend fun setMeteredCapEnabled(enabled: Boolean) = edit { it[Keys.METERED_CAP_ENABLED] = enabled }
     suspend fun setMeteredCapMb(mb: Long) = edit { it[Keys.METERED_CAP_MB] = mb.coerceAtLeast(0L) }
 
+    // B3: event-driven sync triggers
+    suspend fun setTriggerOnFolderChange(enabled: Boolean) = edit { it[Keys.TRIGGER_FOLDER] = enabled }
+    suspend fun setTriggerOnWifiConnect(enabled: Boolean) = edit { it[Keys.TRIGGER_WIFI] = enabled }
+    suspend fun setTriggerOnCharge(enabled: Boolean) = edit { it[Keys.TRIGGER_CHARGE] = enabled }
+
     suspend fun setDefaultBwLimits(wifi: String?, metered: String?) = edit { prefs ->
         if (wifi.isNullOrBlank()) prefs.remove(Keys.BW_WIFI) else prefs[Keys.BW_WIFI] = wifi
         if (metered.isNullOrBlank()) prefs.remove(Keys.BW_METERED) else prefs[Keys.BW_METERED] = metered
@@ -85,6 +90,9 @@ class PreferencesRepository @Inject constructor(
         notifyOnFailureOnly = this[Keys.NOTIFY_ON_FAILURE_ONLY] ?: false,
         meteredCapEnabled = this[Keys.METERED_CAP_ENABLED] ?: false,
         meteredCapMb = this[Keys.METERED_CAP_MB] ?: 0L,
+        triggerOnFolderChange = this[Keys.TRIGGER_FOLDER] ?: false,
+        triggerOnWifiConnect = this[Keys.TRIGGER_WIFI] ?: false,
+        triggerOnCharge = this[Keys.TRIGGER_CHARGE] ?: false,
     )
 
     /** Clamp a stored/incoming retention value to a value the UI knows how to render
@@ -113,6 +121,9 @@ class PreferencesRepository @Inject constructor(
         val NOTIFY_ON_FAILURE_ONLY = booleanPreferencesKey("notify_on_failure_only")
         val METERED_CAP_ENABLED = booleanPreferencesKey("metered_cap_enabled")
         val METERED_CAP_MB = longPreferencesKey("metered_cap_mb")
+        val TRIGGER_FOLDER = booleanPreferencesKey("trigger_on_folder_change")
+        val TRIGGER_WIFI = booleanPreferencesKey("trigger_on_wifi_connect")
+        val TRIGGER_CHARGE = booleanPreferencesKey("trigger_on_charge")
     }
 
     private companion object {
