@@ -169,25 +169,28 @@ private fun SftpSubForm(values: MutableMap<String, String>) {
     val keyLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        val result = runCatching {
-            context.contentResolver.openInputStream(uri)
-                ?.bufferedReader(Charsets.UTF_8)
-                ?.use { it.readText() }
-                ?.trim()
-                ?: error("null stream")
+        // Guard with a positive `if` (not a labeled early-return) — detekt's
+        // LabeledExpression rule flags `return@rememberLauncherForActivityResult`.
+        if (uri != null) {
+            val result = runCatching {
+                context.contentResolver.openInputStream(uri)
+                    ?.bufferedReader(Charsets.UTF_8)
+                    ?.use { it.readText() }
+                    ?.trim()
+                    ?: error("null stream")
+            }
+            result.fold(
+                onSuccess = { pem ->
+                    values[KEY_PEM] = pem
+                    keyError = null
+                    keyStatus = context.getString(R.string.remotes_sftp_key_loaded, pem.length)
+                },
+                onFailure = {
+                    keyError = context.getString(R.string.remotes_sftp_key_error)
+                    keyStatus = ""
+                },
+            )
         }
-        result.fold(
-            onSuccess = { pem ->
-                values[KEY_PEM] = pem
-                keyError = null
-                keyStatus = context.getString(R.string.remotes_sftp_key_loaded, pem.length)
-            },
-            onFailure = {
-                keyError = context.getString(R.string.remotes_sftp_key_error)
-                keyStatus = ""
-            },
-        )
     }
 
     Button(
