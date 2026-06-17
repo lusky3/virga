@@ -116,21 +116,25 @@ class ShareReceiverViewModel @Inject constructor(
         var failed = 0
         val usedNames = mutableSetOf<String>()
         for (uri in uris) {
+            var staged: File? = null
             try {
-                val staged = withContext(dispatchers.io) { stageUri(context, uri, stagingDir) }
-                if (staged == null) { failed++; continue }
-                val uniqueName = disambiguate(staged.name, usedNames)
+                val s = withContext(dispatchers.io) { stageUri(context, uri, stagingDir) }
+                if (s == null) { failed++; continue }
+                staged = s
+                val uniqueName = disambiguate(s.name, usedNames)
                 usedNames += uniqueName
                 val remotePath = buildRemotePath(destPath, uniqueName)
                 withContext(dispatchers.io) {
-                    fileBrowserRepository.uploadFromLocal(staged, remoteName, remotePath)
+                    fileBrowserRepository.uploadFromLocal(s, remoteName, remotePath)
                 }
-                staged.delete()
                 succeeded++
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
                 failed++
+            } finally {
+                // Always remove the cache copy — also on upload failure / cancellation.
+                staged?.delete()
             }
         }
         return UploadStatus.Done(succeeded, failed)
@@ -148,9 +152,11 @@ class ShareReceiverViewModel @Inject constructor(
  */
 internal fun disambiguate(name: String, used: Set<String>): String {
     if (name !in used) return name
+    // dot > 0 so a leading-dot file (e.g. ".gitignore") is treated as extension-less
+    // and disambiguates to ".gitignore (2)" rather than " (2).gitignore".
     val dot = name.lastIndexOf('.')
-    val base = if (dot >= 0) name.substring(0, dot) else name
-    val ext = if (dot >= 0) name.substring(dot) else ""
+    val base = if (dot > 0) name.substring(0, dot) else name
+    val ext = if (dot > 0) name.substring(dot) else ""
     var n = 2
     while (true) {
         val candidate = "$base ($n)$ext"

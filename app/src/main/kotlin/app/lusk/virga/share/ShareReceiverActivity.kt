@@ -60,11 +60,9 @@ class ShareReceiverActivity : AppCompatActivity() {
                 val uri = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
                 listOfNotNull(uri)
             }
-            Intent.ACTION_SEND_MULTIPLE -> {
-                @Suppress("DEPRECATION")
-                intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)?.filterNotNull()
+            Intent.ACTION_SEND_MULTIPLE ->
+                IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
                     ?: emptyList()
-            }
             else -> emptyList()
         }
     }
