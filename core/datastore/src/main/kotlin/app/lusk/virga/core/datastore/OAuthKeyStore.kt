@@ -14,16 +14,23 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Stores per-provider, user-supplied OAuth **client IDs** ("bring your own keys").
+ * Stores per-provider, user-supplied OAuth **client IDs and client secrets**
+ * ("bring your own keys").
  *
  * The built-in client IDs are shared across every Virga install, so they share a
  * single OAuth client's rate-limit/quota and (for Google) the unverified-app user
  * cap. Power users avoid that by registering their own OAuth client and entering
  * its client ID here; it takes precedence over the built-in default.
  *
- * Only the client ID is stored. Virga authenticates with PKCE (public clients),
- * so no client secret is required for the supported providers — the user just
- * creates an "Android"/installed-app OAuth client.
+ * **Client IDs** are stored for all BYO providers (prefix [ID_PREFIX]). Most
+ * providers use PKCE public clients, so no client secret is needed — the user
+ * just creates an "Android"/installed-app OAuth client.
+ *
+ * **Client secrets** (prefix [SECRET_PREFIX]) are the user's OWN secret for
+ * a client they registered with a provider that requires one (e.g. Google when
+ * routing through the rclone daemon flow). Stored app-private in the same
+ * plain DataStore as the client ID — same plaintext-app-private posture; no
+ * additional crypto is introduced here. Never log, toast, or echo secrets.
  */
 @Singleton
 class OAuthKeyStore @Inject constructor(
@@ -31,7 +38,8 @@ class OAuthKeyStore @Inject constructor(
 ) {
     // Built from the same PREFIX the read path (clientIds) strips, so the write and
     // read sides can't drift if the prefix is ever renamed.
-    private fun key(providerId: String) = stringPreferencesKey(PREFIX + providerId)
+    private fun idKey(providerId: String) = stringPreferencesKey(ID_PREFIX + providerId)
+    private fun secretKey(providerId: String) = stringPreferencesKey(SECRET_PREFIX + providerId)
 
     // Degrade a corrupt/unreadable prefs file to empty instead of throwing — mirrors
     // PreferencesRepository, so a bad DataStore can't crash the OAuth flow.
@@ -43,8 +51,20 @@ class OAuthKeyStore @Inject constructor(
         prefs.asMap().entries
             .mapNotNull { (k, v) ->
                 val name = k.name
-                if (name.startsWith(PREFIX) && v is String && v.isNotBlank()) {
-                    name.removePrefix(PREFIX) to v
+                if (name.startsWith(ID_PREFIX) && v is String && v.isNotBlank()) {
+                    name.removePrefix(ID_PREFIX) to v
+                } else null
+            }
+            .toMap()
+    }
+
+    /** Map of providerId → user client secret, for every provider that has one set. */
+    val clientSecrets: Flow<Map<String, String>> = data.map { prefs ->
+        prefs.asMap().entries
+            .mapNotNull { (k, v) ->
+                val name = k.name
+                if (name.startsWith(SECRET_PREFIX) && v is String && v.isNotBlank()) {
+                    name.removePrefix(SECRET_PREFIX) to v
                 } else null
             }
             .toMap()
@@ -52,20 +72,37 @@ class OAuthKeyStore @Inject constructor(
 
     /** The user-supplied client ID for [providerId], or null if none/blank. */
     suspend fun clientId(providerId: String): String? =
-        data.first()[key(providerId)]?.takeIf { it.isNotBlank() }
+        data.first()[idKey(providerId)]?.takeIf { it.isNotBlank() }
+
+    /** The user-supplied client secret for [providerId], or null if none/blank. */
+    suspend fun clientSecret(providerId: String): String? =
+        data.first()[secretKey(providerId)]?.takeIf { it.isNotBlank() }
 
     suspend fun setClientId(providerId: String, clientId: String) {
         val trimmed = clientId.trim()
         dataStore.edit { prefs ->
-            if (trimmed.isEmpty()) prefs.remove(key(providerId)) else prefs[key(providerId)] = trimmed
+            if (trimmed.isEmpty()) prefs.remove(idKey(providerId)) else prefs[idKey(providerId)] = trimmed
+        }
+    }
+
+    /** Stores (or clears, when [secret] is blank after trimming) the user's own client secret. */
+    suspend fun setClientSecret(providerId: String, secret: String) {
+        val trimmed = secret.trim()
+        dataStore.edit { prefs ->
+            if (trimmed.isEmpty()) prefs.remove(secretKey(providerId)) else prefs[secretKey(providerId)] = trimmed
         }
     }
 
     suspend fun clearClientId(providerId: String) {
-        dataStore.edit { it.remove(key(providerId)) }
+        dataStore.edit { it.remove(idKey(providerId)) }
+    }
+
+    suspend fun clearClientSecret(providerId: String) {
+        dataStore.edit { it.remove(secretKey(providerId)) }
     }
 
     private companion object {
-        const val PREFIX = "oauth_client_id_"
+        const val ID_PREFIX = "oauth_client_id_"
+        const val SECRET_PREFIX = "oauth_client_secret_"
     }
 }

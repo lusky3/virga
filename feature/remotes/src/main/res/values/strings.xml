@@ -79,8 +79,9 @@
     <!-- Bring-your-own OAuth keys -->
     <string name="remotes_byo_chip_custom">%1$s (your key)</string>
     <string name="remotes_byo_toggle">Use your own keys (recommended for regular use)</string>
-    <string name="remotes_byo_explainer">The built-in sign-in keys are shared by all Virga users, so they share one app\'s rate limits (and Google\'s 100-user cap on unverified apps). For regular use, register your own OAuth client and paste its Client ID below. Virga signs in with PKCE, so no client secret is needed — create an \"Android\"/installed-app client. Note: a custom Google client ID can\'t be used in this build (its redirect scheme isn\'t registered) — use the bundled Google sign-in instead.</string>
+    <string name="remotes_byo_explainer">The built-in sign-in keys are shared by all Virga users, so they share one app\'s rate limits (and Google\'s 100-user cap on unverified apps). For regular use, register your own OAuth client and paste its Client ID below. Virga signs in with PKCE — no client secret required — except for Google: enter both your Client ID and Client Secret to use the rclone daemon flow, which works around the manifest redirect constraint.</string>
     <string name="remotes_byo_client_id">Your client ID</string>
+    <string name="remotes_byo_client_secret">Your client secret (Google only — enables daemon flow)</string>
     <string name="remotes_byo_save">Save key</string>
     <string name="remotes_byo_clear">Clear</string>
     <string name="remotes_add_field_type">Provider</string>

@@ -443,6 +443,8 @@ fun RemotesScreen(
             onCancelDaemonOAuth = viewModel::cancelDaemonOAuth,
             onSaveClientId = viewModel::saveClientId,
             onClearClientId = viewModel::clearClientId,
+            onSaveClientSecret = viewModel::saveClientSecret,
+            onClearClientSecret = viewModel::clearClientSecret,
         )
     }
 }

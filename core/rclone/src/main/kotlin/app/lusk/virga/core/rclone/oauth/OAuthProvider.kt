@@ -50,4 +50,10 @@ object OAuthProviders {
     val All = listOf(GoogleDrive, OneDrive, Dropbox)
 
     fun byId(id: String): OAuthProvider? = All.firstOrNull { it.id == id }
+
+    // Box is intentionally absent from this list. Virga has no registered Box OAuth
+    // application, and embedding a Box client secret in a FOSS APK would be a public
+    // secret (not a real secret). Box stays on the rclone daemon paste-token flow
+    // (DaemonOAuthFlow / DaemonOAuthOrchestrator). Do NOT add Box here without first
+    // registering a real Box app and storing its secret outside the open-source tree.
 }
