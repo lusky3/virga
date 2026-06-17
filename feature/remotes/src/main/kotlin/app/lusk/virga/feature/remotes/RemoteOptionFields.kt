@@ -45,7 +45,12 @@ internal fun TypedOptionFields(
     values: MutableMap<String, String>,
     showAdvanced: Boolean,
     onToggleAdvanced: () -> Unit,
+    backendType: String? = null,
 ) {
+    if (backendType != null) {
+        BackendSubForm(type = backendType, values = values)
+    }
+
     val normalOptions = options.filter { !it.advanced }
     val advancedOptions = options.filter { it.advanced }
 

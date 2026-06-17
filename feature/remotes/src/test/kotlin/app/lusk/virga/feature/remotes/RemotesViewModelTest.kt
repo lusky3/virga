@@ -1453,6 +1453,44 @@ class RemotesViewModelTest {
         collector.cancel()
     }
 
+    @Test
+    fun `addRemote map overload preserves multiline key_pem intact`() = runTest(mainDispatcher.dispatcher) {
+        // Verifies C2 fix: the typed-values map path must NOT serialise through
+        // newline-delimited text, so a multi-line PEM survives to repository.addRemote().
+        val pemOpt = RemoteOption(
+            name = "key_pem", help = "", type = "string",
+            required = false, isPassword = true, default = null,
+            examples = emptyList(), advanced = false,
+        )
+        coEvery { repository.providers() } returns listOf(
+            RemoteProvider("sftp", "SFTP", listOf(pemOpt)),
+        )
+        coEvery { repository.addRemote(any(), any(), any(), any()) } returns Result.success(Unit)
+        coEvery { repository.testConnectivity(any()) } returns Result.success(Unit)
+
+        val vm = viewModel()
+        vm.ensureProvidersLoaded()
+        advanceUntilIdle()
+
+        // Realistic fake PEM — obviously not a real key; used only to assert line preservation.
+        val fakePem = "-----BEGIN RSA PRIVATE KEY-----\nMIIFakeLine1\nMIIFakeLine2\n-----END RSA PRIVATE KEY-----"
+
+        val paramsSlot = slot<Map<String, String>>()
+        coEvery { repository.addRemote(any(), any(), capture(paramsSlot), any()) } returns Result.success(Unit)
+
+        vm.addRemote(
+            name = "myserver",
+            type = "sftp",
+            params = mapOf("host" to "server.example.com", "key_pem" to fakePem),
+            onResult = { _, _ -> },
+        )
+        advanceUntilIdle()
+
+        // key_pem must arrive at the repository with newlines intact — no shattering.
+        assertThat(paramsSlot.captured["key_pem"]).isEqualTo(fakePem)
+        assertThat(paramsSlot.captured["key_pem"]).contains("\n")
+    }
+
     // --- startDaemonOAuth / cancelDaemonOAuth -----------------------------------
 
     @Test

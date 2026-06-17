@@ -93,7 +93,7 @@ internal fun AddRemoteDialog(
     /** Non-null when the dialog is opened in edit mode for an existing remote. */
     editMode: EditModeState? = null,
     onDismiss: () -> Unit,
-    onManualConfirm: (name: String, type: String, params: String) -> Unit,
+    onManualConfirm: (name: String, type: String, params: Map<String, String>) -> Unit,
     /** Called with the submitted key→value map when confirming an edit. Only used when [editMode] != null. */
     onEditConfirm: (values: Map<String, String>) -> Unit = {},
     onCryptConfirm: (name: String, baseRemote: String, basePath: String, password: String, salt: String) -> Unit = { _, _, _, _, _ -> },
@@ -240,6 +240,7 @@ internal fun AddRemoteDialog(
                         values = editTypedValues,
                         showAdvanced = editShowAdvanced,
                         onToggleAdvanced = { editShowAdvanced = !editShowAdvanced },
+                        backendType = editMode.remoteType.ifEmpty { null },
                     )
                     // Show hint for password fields — they are blank by default
                     val passwordOpts = editSchemaOptions.filter { it.isPassword }
