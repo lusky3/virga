@@ -226,4 +226,6 @@ data class SyncRunEntity(
     val direction: String = "",
     /** Wall-clock duration of this run in milliseconds. */
     val durationMs: Long = 0,
+    /** True when the run was performed over a metered (non-Wi-Fi) connection. */
+    val metered: Boolean = false,
 )

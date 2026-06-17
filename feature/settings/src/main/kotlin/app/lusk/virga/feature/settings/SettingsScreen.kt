@@ -72,11 +72,15 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val prefs by viewModel.state.collectAsStateWithLifecycle()
+    val monthlyMeteredBytes by viewModel.monthlyMeteredBytes.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val noBrowserMsg = stringResource(R.string.settings_snack_no_browser)
     val noBatterySettingsMsg = stringResource(R.string.settings_snack_no_battery_settings)
+    val cacheClearedMsg = stringResource(R.string.settings_snack_cache_cleared)
+    val logsClearedMsg = stringResource(R.string.settings_snack_logs_cleared)
+    val resetFailedMsg = stringResource(R.string.settings_snack_reset_failed)
 
     // Draft state for bandwidth fields — committed on focus-loss rather than
     // requiring an explicit Save button. reset() keys on the persisted value so
@@ -260,6 +264,31 @@ fun SettingsScreen(
             NotificationsSection(
                 notifyOnFailureOnly = prefs.notifyOnFailureOnly,
                 onNotifyOnFailureOnlyChange = viewModel::setNotifyOnFailureOnly,
+            )
+
+            // Data usage — metered cap config + monthly usage display.
+            DataUsageSection(
+                state = prefs,
+                monthlyUsedBytes = monthlyMeteredBytes,
+                onCapEnabledChange = viewModel::setMeteredCapEnabled,
+                onCapMbChange = viewModel::setMeteredCapMb,
+            )
+
+            // Data & reset — cache/log clearing and full app reset.
+            DataSection(
+                onCacheClear = {
+                    viewModel.clearCache(context)
+                    scope.launch { snackbarHostState.showSnackbar(cacheClearedMsg) }
+                },
+                onLogsClear = {
+                    viewModel.clearLogs(context)
+                    scope.launch { snackbarHostState.showSnackbar(logsClearedMsg) }
+                },
+                onReset = {
+                    viewModel.clearAppData(context) { success ->
+                        if (!success) scope.launch { snackbarHostState.showSnackbar(resetFailedMsg) }
+                    }
+                },
             )
 
             HorizontalDivider()

@@ -76,4 +76,15 @@ data class AppPreferences(
      * Default false = current behaviour (always post the success notification).
      */
     val notifyOnFailureOnly: Boolean = false,
+    /**
+     * When true, syncs over metered connections are blocked once the monthly
+     * metered data total reaches [meteredCapMb]. Enforced for all runs including
+     * manual (the cap is a safety limit, not a soft preference). Default off.
+     */
+    val meteredCapEnabled: Boolean = false,
+    /**
+     * Monthly metered data cap in megabytes. Only enforced when [meteredCapEnabled]
+     * is true and this value is > 0. Default 0 (no cap).
+     */
+    val meteredCapMb: Long = 0,
 )

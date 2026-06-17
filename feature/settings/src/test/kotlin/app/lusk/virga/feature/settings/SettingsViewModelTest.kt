@@ -1,5 +1,6 @@
 package app.lusk.virga.feature.settings
 
+import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.datastore.AppPreferences
 import app.lusk.virga.core.datastore.PreferencesRepository
 import app.lusk.virga.core.datastore.ThemeMode
@@ -27,8 +28,11 @@ class SettingsViewModelTest {
     private val repository: PreferencesRepository = mockk(relaxed = true) {
         every { preferences } returns prefsFlow
     }
+    private val historyRepository: SyncHistoryRepository = mockk(relaxed = true) {
+        every { monthlyMeteredBytes(any()) } returns kotlinx.coroutines.flow.flowOf(0L)
+    }
 
-    private fun viewModel() = SettingsViewModel(repository)
+    private fun viewModel() = SettingsViewModel(repository, historyRepository)
 
     @Test
     fun state_reflectsRepositoryPreferences() = runTest(mainDispatcher.dispatcher) {

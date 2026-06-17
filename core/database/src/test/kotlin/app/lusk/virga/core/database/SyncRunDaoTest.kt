@@ -180,6 +180,40 @@ class SyncRunDaoTest {
     }
 
     @Test
+    fun sumMeteredBytesFrom_sumsOnlyMeteredRowsAfterCutoff() = runTest {
+        val dao = db.syncRunDao()
+        val taskId = seedTask()
+        val cutoffMs = 1_000L
+
+        // Metered run after cutoff — should be counted.
+        dao.insert(SyncRunEntity(taskId = taskId, startedAtEpochMs = 2_000L,
+            status = SyncStatus.SUCCESS, bytesTransferred = 1024L, metered = true))
+        // Metered run before cutoff — should be excluded.
+        dao.insert(SyncRunEntity(taskId = taskId, startedAtEpochMs = 500L,
+            status = SyncStatus.SUCCESS, bytesTransferred = 4096L, metered = true))
+        // Non-metered run after cutoff — should be excluded.
+        dao.insert(SyncRunEntity(taskId = taskId, startedAtEpochMs = 3_000L,
+            status = SyncStatus.SUCCESS, bytesTransferred = 2048L, metered = false))
+
+        val result = dao.sumMeteredBytesFrom(cutoffMs).first()
+
+        assertThat(result).isEqualTo(1024L)
+    }
+
+    @Test
+    fun sumMeteredBytesFrom_returnsNullWhenNoMatchingRows() = runTest {
+        val dao = db.syncRunDao()
+        val taskId = seedTask()
+        // Only non-metered run — sum should be null (SQLite SUM returns null for empty set).
+        dao.insert(SyncRunEntity(taskId = taskId, startedAtEpochMs = 2_000L,
+            status = SyncStatus.SUCCESS, bytesTransferred = 512L, metered = false))
+
+        val result = dao.sumMeteredBytesFrom(1_000L).first()
+
+        assertThat(result).isNull()
+    }
+
+    @Test
     fun deleteByRemoteName_removesOnlyMatchingRows() = runTest {
         val dao = db.syncRunDao()
         val taskId = seedTask()

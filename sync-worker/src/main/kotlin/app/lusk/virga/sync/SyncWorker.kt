@@ -87,12 +87,24 @@ open class SyncWorker @AssistedInject constructor(
             return Result.success()
         }
 
+        // Detect metered status early so cap check can use it before startForeground.
+        val metered = applicationContext.getSystemService<ConnectivityManager>()
+            ?.isActiveNetworkMetered ?: false
+
+        // Metered data cap: skip if the monthly metered total >= cap (enforced for all runs
+        // including manual — the cap is a safety limit, not a soft preference).
+        if (metered && isMeteredCapReached()) {
+            Log.i(TAG, "Skipped: monthly metered data cap reached for task $taskId")
+            reenqueueCalendar(task, isManualRun)
+            return Result.success()
+        }
+
         // SAF sources cannot bisync: rclone needs read/write access to a real path
         // on both sides, which staging cannot provide symmetrically.
         if (task.sourcePath.startsWith("content://") && task.direction == SyncDirection.BISYNC) {
             val msg = "Two-way sync isn't supported for this folder on this device."
             val earlyStartMs = System.currentTimeMillis()
-            finishFailed(historyRepository.startRun(taskId), null, msg, direction = task.direction, runStartMs = earlyStartMs, remoteName = task.remoteName)
+            finishFailed(historyRepository.startRun(taskId), null, msg, direction = task.direction, runStartMs = earlyStartMs, remoteName = task.remoteName, metered = false)
             runCatching {
                 NotificationManagerCompat.from(applicationContext)
                     .notify(SyncNotifications.resultId(taskId), notifications.error(task.name, msg, taskId))
@@ -127,8 +139,6 @@ open class SyncWorker @AssistedInject constructor(
 
         val runStartMs = System.currentTimeMillis()
         val runId = historyRepository.startRun(taskId)
-        val metered = applicationContext.getSystemService<ConnectivityManager>()
-            ?.isActiveNetworkMetered ?: false
 
         // Per-run log (WS2.5): built from observed events, written on finish.
         val log = RunLogWriter(applicationContext.filesDir, runId)
@@ -268,7 +278,7 @@ open class SyncWorker @AssistedInject constructor(
             // it stays stuck RUNNING. Cancellation must still propagate so
             // WorkManager can stop the worker cleanly.
             kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-                runCatching { finishCancelled(runId, last, task.direction, runStartMs, task.remoteName) }
+                runCatching { finishCancelled(runId, last, task.direction, runStartMs, task.remoteName, metered) }
             }
             throw t
         } catch (t: Throwable) {
@@ -310,7 +320,7 @@ open class SyncWorker @AssistedInject constructor(
             } else {
                 log.line("Completed: ${last?.transferredFiles ?: 0} file(s) transferred")
             }
-            finishSucceeded(runId, last, log.path.takeIf { log.flush() }, task.direction, runStartMs, failedFiles, task.remoteName)
+            finishSucceeded(runId, last, log.path.takeIf { log.flush() }, task.direction, runStartMs, failedFiles, task.remoteName, metered)
             // After a bisync, scan the destination for rclone conflict files
             // and queue them for user resolution. detectFor → engine.listDir needs
             // a daemon; the worker's own lease was already released in the finally
@@ -373,7 +383,7 @@ open class SyncWorker @AssistedInject constructor(
         } else {
             val msg = failure.message ?: "Sync failed"
             log.line("Failed: $msg")
-            finishFailed(runId, last, msg, log.path.takeIf { log.flush() }, task.direction, runStartMs, task.remoteName)
+            finishFailed(runId, last, msg, log.path.takeIf { log.flush() }, task.direction, runStartMs, task.remoteName, metered)
             runCatching {
                 NotificationManagerCompat.from(applicationContext)
                     .notify(SyncNotifications.resultId(taskId), notifications.error(task.name, msg, taskId))
@@ -498,6 +508,7 @@ open class SyncWorker @AssistedInject constructor(
         runStartMs: Long,
         failedFiles: String = "",
         remoteName: String = "",
+        metered: Boolean = false,
     ) {
         historyRepository.finishRun(
             runId = runId,
@@ -510,6 +521,7 @@ open class SyncWorker @AssistedInject constructor(
             remoteName = remoteName,
             direction = direction.name,
             startedAtEpochMs = runStartMs,
+            metered = metered,
         )
         val finishedAt = System.currentTimeMillis()
         runCatching {
@@ -533,6 +545,7 @@ open class SyncWorker @AssistedInject constructor(
         direction: SyncDirection,
         runStartMs: Long,
         remoteName: String = "",
+        metered: Boolean = false,
     ) {
         historyRepository.finishRun(
             runId = runId,
@@ -545,6 +558,7 @@ open class SyncWorker @AssistedInject constructor(
             remoteName = remoteName,
             direction = direction.name,
             startedAtEpochMs = runStartMs,
+            metered = metered,
         )
         val finishedAt = System.currentTimeMillis()
         runCatching {
@@ -566,6 +580,7 @@ open class SyncWorker @AssistedInject constructor(
         direction: SyncDirection,
         runStartMs: Long,
         remoteName: String = "",
+        metered: Boolean = false,
     ) {
         historyRepository.finishRun(
             runId = runId,
@@ -576,6 +591,7 @@ open class SyncWorker @AssistedInject constructor(
             remoteName = remoteName,
             direction = direction.name,
             startedAtEpochMs = runStartMs,
+            metered = metered,
         )
         val finishedAt = System.currentTimeMillis()
         runCatching {
@@ -627,6 +643,29 @@ open class SyncWorker @AssistedInject constructor(
         return SyncSchedule.isWithinBlackout(
             minuteOfDay, prefs.quietHoursStartMinutes, prefs.quietHoursEndMinutes,
         )
+    }
+
+    /**
+     * True when the monthly metered usage meets or exceeds the configured cap.
+     * Returns false when the cap is disabled, not configured, or prefs are unreadable.
+     * CancellationException is rethrown so structured concurrency is preserved.
+     */
+    private suspend fun isMeteredCapReached(): Boolean {
+        val prefs = runCatching { preferencesRepository.preferences.first() }
+            .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+            .getOrNull() ?: return false
+        if (!prefs.meteredCapEnabled || prefs.meteredCapMb <= 0) return false
+        val cal = java.util.Calendar.getInstance()
+        cal.set(java.util.Calendar.DAY_OF_MONTH, 1)
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        cal.set(java.util.Calendar.MINUTE, 0)
+        cal.set(java.util.Calendar.SECOND, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        val monthStart = cal.timeInMillis
+        val usedBytes = runCatching { historyRepository.monthlyMeteredBytes(monthStart).first() }
+            .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+            .getOrElse { 0L }
+        return usedBytes >= prefs.meteredCapMb * 1024 * 1024
     }
 
     /**

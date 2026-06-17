@@ -152,7 +152,7 @@ interface SyncRunDao {
             "filesTransferred = :filesTransferred, bytesTransferred = :bytesTransferred, " +
             "errorCount = :errorCount, errorMessage = :errorMessage, logPath = :logPath, " +
             "failedFiles = :failedFiles, remoteName = :remoteName, direction = :direction, " +
-            "durationMs = :durationMs " +
+            "durationMs = :durationMs, metered = :metered " +
             "WHERE id = :runId",
     )
     suspend fun finishRun(
@@ -168,7 +168,12 @@ interface SyncRunDao {
         remoteName: String = "",
         direction: String = "",
         durationMs: Long = 0,
+        metered: Boolean = false,
     )
+
+    /** Sum of bytes transferred over metered connections since [monthStartMs]. Returns null when no rows match. */
+    @Query("SELECT SUM(bytesTransferred) FROM sync_runs WHERE metered = 1 AND startedAtEpochMs >= :monthStartMs")
+    fun sumMeteredBytesFrom(monthStartMs: Long): Flow<Long?>
 
     @Query("DELETE FROM sync_runs WHERE startedAtEpochMs < :beforeEpochMs")
     suspend fun pruneOlderThan(beforeEpochMs: Long)

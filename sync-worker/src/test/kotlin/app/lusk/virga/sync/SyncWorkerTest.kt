@@ -149,7 +149,7 @@ class SyncWorkerTest {
             staging.writeBack(staged)
             staging.cleanup(staged)
         }
-        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.SUCCESS, any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.SUCCESS, any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -170,7 +170,7 @@ class SyncWorkerTest {
         val result = buildWorker().doWork()
 
         assertThat(result).isEqualTo(ListenableWorker.Result.failure())
-        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
         // Cleanup still runs even though write-back failed.
         coVerify { staging.cleanup(staged) }
     }
@@ -225,10 +225,10 @@ class SyncWorkerTest {
         // Recorded SUCCESS (with errorCount=2), not retried, not failed.
         assertThat(result).isEqualTo(ListenableWorker.Result.success())
         coVerify {
-            historyRepository.finishRun(RUN_ID, SyncStatus.SUCCESS, 5, any(), 2, any(), any(), any(), any(), any(), any())
+            historyRepository.finishRun(RUN_ID, SyncStatus.SUCCESS, 5, any(), 2, any(), any(), any(), any(), any(), any(), any())
         }
         coVerify(exactly = 0) {
-            historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any(), any(), any(), any())
+            historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -332,7 +332,7 @@ class SyncWorkerTest {
         val result = buildWorker(runAttemptCount = 0).doWork()
 
         assertThat(result).isEqualTo(ListenableWorker.Result.retry())
-        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -420,7 +420,7 @@ class SyncWorkerTest {
         // Lease released under NonCancellable so it isn't itself cancelled.
         coVerify { engine.releaseDaemon() }
         // Run finalized CANCELLED rather than left stuck RUNNING.
-        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.CANCELLED, any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.CANCELLED, any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -443,7 +443,7 @@ class SyncWorkerTest {
         coEvery {
             historyRepository.finishRun(
                 any(), any(), any(), any(), any(), any(), any(), capture(failedFilesSlot),
-                any(), any(), any(),
+                any(), any(), any(), any(),
             )
         } just Runs
 
@@ -471,7 +471,7 @@ class SyncWorkerTest {
         )
         val failedFilesSlot = slot<String>()
         coEvery {
-            historyRepository.finishRun(any(), any(), any(), any(), any(), any(), any(), capture(failedFilesSlot), any(), any(), any())
+            historyRepository.finishRun(any(), any(), any(), any(), any(), any(), any(), capture(failedFilesSlot), any(), any(), any(), any())
         } just Runs
 
         buildWorker().doWork()
@@ -497,7 +497,7 @@ class SyncWorkerTest {
         coEvery {
             historyRepository.finishRun(
                 any(), any(), any(), any(), any(), any(), any(), capture(failedFilesSlot),
-                any(), any(), any(),
+                any(), any(), any(), any(),
             )
         } just Runs
 
@@ -614,7 +614,7 @@ class SyncWorkerTest {
         val result = buildWorker().doWork()
 
         assertThat(result).isEqualTo(ListenableWorker.Result.failure())
-        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
         coVerify { remoteRepository.setNeedsReauth("gdrive", true) }
     }
 
@@ -788,6 +788,29 @@ class SyncWorkerTest {
 
         coVerify(exactly = 0) { executor.runCheck(any()) }
         coVerify(exactly = 0) { conflictRepository.recordOneWayAdvisory(any(), any()) }
+    }
+
+    // --- D4: metered data cap enforcement ---
+
+    @Test
+    fun meteredCapConfig_capDisabled_runsProceedsNormally() = runBlocking {
+        // When meteredCapEnabled=false the cap is not enforced regardless of usage.
+        val t = calendarSyncTask()
+        coEvery { taskRepository.getTask(TASK_ID) } returns t
+        every { preferencesRepository.preferences } returns flowOf(
+            AppPreferences(meteredCapEnabled = false, meteredCapMb = 100L),
+        )
+        coEvery { historyRepository.monthlyMeteredBytes(any()) } returns flowOf(200L * 1024 * 1024)
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = t.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), any(), any()) } returns
+            flow { emit(progress(transferred = 1)) }
+
+        val result = buildWorker(manual = false).doWork()
+
+        // Cap disabled: run should proceed and succeed.
+        assertThat(result).isEqualTo(ListenableWorker.Result.success())
+        coVerify(exactly = 1) { executor.run(any(), any(), any(), any(), any()) }
     }
 
     /** Current local minute-of-day (0..1439), matching the worker's quiet-hours clock. */
