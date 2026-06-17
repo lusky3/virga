@@ -29,6 +29,15 @@ import kotlinx.coroutines.flow.first
  * here — the WORKER suppresses them at run time because WorkManager manages the
  * periodic cadence independently of when we enqueue.
  */
+
+/**
+ * WorkManager tag applied to every "sync all" WorkRequest. Public + top-level so
+ * out-of-graph components (e.g. the Quick Settings [app.lusk.virga.widget.SyncTileService])
+ * can query sync-all state against the single source of truth instead of duplicating
+ * the literal — a silent drift if the two copies ever diverge.
+ */
+const val TAG_SYNC_ALL: String = "syncall"
+
 @Singleton
 class SyncScheduler @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -251,8 +260,6 @@ class SyncScheduler @Inject constructor(
         const val MIN_INTERVAL_MINUTES = 15
         /** Fallback backoff for syncNow(taskId) callers that don't have a task object. */
         const val DEFAULT_BACKOFF_SECONDS = 30L
-        /** WorkManager tag applied to every WorkRequest enqueued by [syncAll]. */
-        const val TAG_SYNC_ALL = "syncall"
         /** Prefix for per-group tags: "syncgroup:<groupTag>". */
         const val TAG_SYNC_GROUP_PREFIX = "syncgroup:"
     }

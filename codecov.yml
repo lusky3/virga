@@ -1,0 +1,15 @@
+# Codecov configuration. Coverage is produced by Kover (JaCoCo-format XML) and
+# uploaded in CI; Sonar reads the same report independently and is unaffected by
+# anything here.
+#
+# `ignore` drops files from Codecov's project/patch math. We list only thin
+# Android framework entry points whose sole branching logic is already unit-tested
+# in isolation (e.g. `isSyncActive`, `MainActivity.readDeepLink`). The remainder is
+# Hilt `EntryPointAccessors`, TileService/Activity lifecycle, and detached
+# coroutines that can't be exercised by Robolectric unit tests without the full
+# Hilt graph (DataStore/WorkManager) — see app/src/test/.../ReadDeepLinkTest.kt for
+# the documented rationale. They are covered by manual/instrumentation paths, not
+# unit tests, so counting them only penalises the patch with unreachable lines.
+ignore:
+  - "app/src/main/kotlin/app/lusk/virga/widget/SyncAllShortcutActivity.kt"
+  - "app/src/main/kotlin/app/lusk/virga/widget/SyncTileService.kt"

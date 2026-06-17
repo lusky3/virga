@@ -81,6 +81,42 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- D7b (0.3.0): Add-remote shortcut action. The "Add remote" static
+                 launcher shortcut fires this action so MainActivity can map it to
+                 pendingRoute = ROUTE_ADD_REMOTE without relying on extras (which are
+                 not reliable in static shortcut intents across all OEM launchers). -->
+            <intent-filter>
+                <action android:name="app.lusk.virga.action.SHORTCUT_ADD_REMOTE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <!-- D7b (0.3.0): Static launcher shortcuts (sync all + add remote). -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
+        </activity>
+
+        <!-- D7b (0.3.0): Sync-all launcher shortcut trampoline.
+             SEC: exported=true is required for the launcher to start this activity
+             from outside the app process. It exposes no privileged internals; it
+             only enqueues the same work as tapping "Back up now" in the app.
+             excludeFromRecents keeps it out of the task switcher. The
+             Theme.NoDisplay system theme suppresses the window entirely so there
+             is no UI flash.
+             The SHORTCUT_SYNC_ALL intent-filter is the resolution target for the
+             static shortcut: using only android:action (no targetPackage/Class)
+             makes the shortcut work on any build variant including debug
+             (applicationId = app.lusk.virga.debug). -->
+        <activity
+            android:name=".widget.SyncAllShortcutActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.NoDisplay"
+            android:taskAffinity=""
+            tools:ignore="ExportedActivity">
+            <intent-filter>
+                <action android:name="app.lusk.virga.action.SHORTCUT_SYNC_ALL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
 
         <!-- On-demand WorkManager initialisation (we supply the config via
