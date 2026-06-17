@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -50,6 +51,8 @@ class PreferencesRepository @Inject constructor(
     }
 
     suspend fun setNotifyOnFailureOnly(enabled: Boolean) = edit { it[Keys.NOTIFY_ON_FAILURE_ONLY] = enabled }
+    suspend fun setMeteredCapEnabled(enabled: Boolean) = edit { it[Keys.METERED_CAP_ENABLED] = enabled }
+    suspend fun setMeteredCapMb(mb: Long) = edit { it[Keys.METERED_CAP_MB] = mb.coerceAtLeast(0L) }
 
     suspend fun setDefaultBwLimits(wifi: String?, metered: String?) = edit { prefs ->
         if (wifi.isNullOrBlank()) prefs.remove(Keys.BW_WIFI) else prefs[Keys.BW_WIFI] = wifi
@@ -80,6 +83,8 @@ class PreferencesRepository @Inject constructor(
         runRetentionDays = normalizeRetention(this[Keys.RUN_RETENTION_DAYS] ?: 0),
         appLanguageTag = this[Keys.APP_LANGUAGE_TAG],
         notifyOnFailureOnly = this[Keys.NOTIFY_ON_FAILURE_ONLY] ?: false,
+        meteredCapEnabled = this[Keys.METERED_CAP_ENABLED] ?: false,
+        meteredCapMb = this[Keys.METERED_CAP_MB] ?: 0L,
     )
 
     /** Clamp a stored/incoming retention value to a value the UI knows how to render
@@ -106,6 +111,8 @@ class PreferencesRepository @Inject constructor(
         val RUN_RETENTION_DAYS = intPreferencesKey("run_retention_days")
         val APP_LANGUAGE_TAG = stringPreferencesKey("app_language_tag")
         val NOTIFY_ON_FAILURE_ONLY = booleanPreferencesKey("notify_on_failure_only")
+        val METERED_CAP_ENABLED = booleanPreferencesKey("metered_cap_enabled")
+        val METERED_CAP_MB = longPreferencesKey("metered_cap_mb")
     }
 
     private companion object {

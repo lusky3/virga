@@ -61,6 +61,7 @@ class SyncHistoryRepository @Inject constructor(
         remoteName: String = "",
         direction: String = "",
         startedAtEpochMs: Long = 0,
+        metered: Boolean = false,
     ) {
         val endedAt = System.currentTimeMillis()
         runDao.finishRun(
@@ -76,8 +77,13 @@ class SyncHistoryRepository @Inject constructor(
             remoteName = remoteName,
             direction = direction,
             durationMs = if (startedAtEpochMs > 0) maxOf(0L, endedAt - startedAtEpochMs) else 0,
+            metered = metered,
         )
     }
+
+    /** Flow of bytes transferred over metered connections since [monthStartMs]. */
+    fun monthlyMeteredBytes(monthStartMs: Long): Flow<Long> =
+        runDao.sumMeteredBytesFrom(monthStartMs).map { it ?: 0L }
 
     suspend fun pruneOlderThan(beforeEpochMs: Long) = runDao.pruneOlderThan(beforeEpochMs)
 

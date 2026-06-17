@@ -1,5 +1,6 @@
 package app.lusk.virga.feature.settings
 
+import app.lusk.virga.core.data.SyncHistoryRepository
 import app.lusk.virga.core.datastore.AppPreferences
 import app.lusk.virga.core.datastore.PreferencesRepository
 import app.lusk.virga.core.datastore.ThemeMode
@@ -27,8 +28,11 @@ class SettingsViewModelTest {
     private val repository: PreferencesRepository = mockk(relaxed = true) {
         every { preferences } returns prefsFlow
     }
+    private val historyRepository: SyncHistoryRepository = mockk(relaxed = true) {
+        every { monthlyMeteredBytes(any()) } returns kotlinx.coroutines.flow.flowOf(0L)
+    }
 
-    private fun viewModel() = SettingsViewModel(repository)
+    private fun viewModel() = SettingsViewModel(repository, historyRepository)
 
     @Test
     fun state_reflectsRepositoryPreferences() = runTest(mainDispatcher.dispatcher) {
@@ -266,6 +270,81 @@ class SettingsViewModelTest {
         advanceUntilIdle()
 
         assertThat(vm.state.value.notifyOnFailureOnly).isTrue()
+        job.cancel()
+    }
+
+    // --- D4: metered cap setters ---
+
+    @Test
+    fun setMeteredCapEnabled_true_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setMeteredCapEnabled(true)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { repository.setMeteredCapEnabled(true) }
+    }
+
+    @Test
+    fun setMeteredCapEnabled_false_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setMeteredCapEnabled(false)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { repository.setMeteredCapEnabled(false) }
+    }
+
+    @Test
+    fun setMeteredCapMb_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setMeteredCapMb(500L)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { repository.setMeteredCapMb(500L) }
+    }
+
+    @Test
+    fun meteredCapEnabled_defaultsFalse() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.state.collect {} }
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.meteredCapEnabled).isFalse()
+        job.cancel()
+    }
+
+    @Test
+    fun meteredCapEnabled_trueReflectedInState() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.state.collect {} }
+        prefsFlow.value = AppPreferences(meteredCapEnabled = true, meteredCapMb = 1000L)
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.meteredCapEnabled).isTrue()
+        assertThat(vm.state.value.meteredCapMb).isEqualTo(1000L)
+        job.cancel()
+    }
+
+    // --- D4: monthlyMeteredBytes state ---
+
+    @Test
+    fun monthlyMeteredBytes_defaultsZero() = runTest(mainDispatcher.dispatcher) {
+        val vm = viewModel()
+        val job = backgroundScope.launch { vm.monthlyMeteredBytes.collect {} }
+        advanceUntilIdle()
+
+        assertThat(vm.monthlyMeteredBytes.value).isEqualTo(0L)
+        job.cancel()
+    }
+
+    @Test
+    fun monthlyMeteredBytes_reflectsRepositoryFlow() = runTest(mainDispatcher.dispatcher) {
+        val usageFlow = kotlinx.coroutines.flow.MutableStateFlow(0L)
+        val localHistoryRepo: SyncHistoryRepository = mockk(relaxed = true) {
+            every { monthlyMeteredBytes(any()) } returns usageFlow
+        }
+        val localPrefsRepo: PreferencesRepository = mockk(relaxed = true) {
+            every { preferences } returns prefsFlow
+        }
+        val vm = SettingsViewModel(localPrefsRepo, localHistoryRepo)
+        val job = backgroundScope.launch { vm.monthlyMeteredBytes.collect {} }
+        usageFlow.value = 52_428_800L // 50 MB
+        advanceUntilIdle()
+
+        assertThat(vm.monthlyMeteredBytes.value).isEqualTo(52_428_800L)
         job.cancel()
     }
 }

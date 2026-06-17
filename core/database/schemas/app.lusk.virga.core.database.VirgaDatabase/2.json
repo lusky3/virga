@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 2,
-    "identityHash": "8383f5097229542e383dc9f67221d9fe",
+    "identityHash": "c806cd7fa726bf1ec4b74f14aec998d2",
     "entities": [
       {
         "tableName": "remotes",
@@ -283,7 +283,7 @@
       },
       {
         "tableName": "sync_runs",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `taskId` INTEGER NOT NULL, `startedAtEpochMs` INTEGER NOT NULL, `endedAtEpochMs` INTEGER, `status` TEXT NOT NULL, `filesTransferred` INTEGER NOT NULL, `bytesTransferred` INTEGER NOT NULL, `errorCount` INTEGER NOT NULL, `errorMessage` TEXT, `logPath` TEXT, `failedFiles` TEXT NOT NULL, `remoteName` TEXT NOT NULL, `direction` TEXT NOT NULL, `durationMs` INTEGER NOT NULL, FOREIGN KEY(`taskId`) REFERENCES `sync_tasks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `taskId` INTEGER NOT NULL, `startedAtEpochMs` INTEGER NOT NULL, `endedAtEpochMs` INTEGER, `status` TEXT NOT NULL, `filesTransferred` INTEGER NOT NULL, `bytesTransferred` INTEGER NOT NULL, `errorCount` INTEGER NOT NULL, `errorMessage` TEXT, `logPath` TEXT, `failedFiles` TEXT NOT NULL, `remoteName` TEXT NOT NULL, `direction` TEXT NOT NULL, `durationMs` INTEGER NOT NULL, `metered` INTEGER NOT NULL, FOREIGN KEY(`taskId`) REFERENCES `sync_tasks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "id",
@@ -363,6 +363,12 @@
           {
             "fieldPath": "durationMs",
             "columnName": "durationMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metered",
+            "columnName": "metered",
             "affinity": "INTEGER",
             "notNull": true
           }
@@ -622,7 +628,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8383f5097229542e383dc9f67221d9fe')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c806cd7fa726bf1ec4b74f14aec998d2')"
     ]
   }
 }

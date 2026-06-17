@@ -76,6 +76,7 @@ class SyncHistoryRepositoryTest {
                 remoteName = "",
                 direction = "",
                 durationMs = 0L,
+                metered = false,
             )
         }
     }
@@ -104,6 +105,7 @@ class SyncHistoryRepositoryTest {
                 remoteName = "",
                 direction = "",
                 durationMs = 0L,
+                metered = false,
             )
         }
     }
@@ -133,6 +135,7 @@ class SyncHistoryRepositoryTest {
                 remoteName = "",
                 direction = "",
                 durationMs = 0L,
+                metered = false,
             )
         }
     }
@@ -164,6 +167,7 @@ class SyncHistoryRepositoryTest {
                 remoteName = "gdrive",
                 direction = "UPLOAD",
                 durationMs = match { it >= 0L },
+                metered = false,
             )
         }
     }
@@ -321,6 +325,24 @@ class SyncHistoryRepositoryTest {
         repo.exportRows(taskId = 5L, status = SyncStatus.FAILED, query = "photo")
 
         coVerify { runDao.exportRunsWithTask(5L, SyncStatus.FAILED, "photo") }
+    }
+
+    // --- monthlyMeteredBytes ---
+
+    @Test fun `monthlyMeteredBytes maps null DAO result to zero`() = runTest {
+        every { runDao.sumMeteredBytesFrom(any()) } returns flowOf(null)
+
+        val result = SyncHistoryRepository(runDao).monthlyMeteredBytes(0L).first()
+
+        assertThat(result).isEqualTo(0L)
+    }
+
+    @Test fun `monthlyMeteredBytes forwards a non-null DAO value`() = runTest {
+        every { runDao.sumMeteredBytesFrom(any()) } returns flowOf(12_345L)
+
+        val result = SyncHistoryRepository(runDao).monthlyMeteredBytes(0L).first()
+
+        assertThat(result).isEqualTo(12_345L)
     }
 
     // --- pagedRuns ---

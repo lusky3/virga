@@ -77,7 +77,10 @@ class SettingsScreenshotTest {
         val repository: PreferencesRepository = mockk(relaxed = true) {
             every { preferences } returns MutableStateFlow(AppPreferences())
         }
-        return SettingsViewModel(repository)
+        val historyRepository: app.lusk.virga.core.data.SyncHistoryRepository = mockk(relaxed = true) {
+            every { monthlyMeteredBytes(any()) } returns kotlinx.coroutines.flow.flowOf(0L)
+        }
+        return SettingsViewModel(repository, historyRepository)
     }
 
     @Test

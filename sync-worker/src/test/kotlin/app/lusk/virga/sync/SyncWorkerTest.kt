@@ -1,6 +1,8 @@
 package app.lusk.virga.sync
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkInfo
 import androidx.work.ListenableWorker
 import androidx.work.WorkerParameters
 import androidx.work.testing.TestListenableWorkerBuilder
@@ -40,7 +42,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowNetworkInfo
 
 /**
  * Robolectric coverage for [SyncWorker]'s orchestration (audit sync-M3). Locks in
@@ -149,7 +153,7 @@ class SyncWorkerTest {
             staging.writeBack(staged)
             staging.cleanup(staged)
         }
-        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.SUCCESS, any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.SUCCESS, any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -170,7 +174,7 @@ class SyncWorkerTest {
         val result = buildWorker().doWork()
 
         assertThat(result).isEqualTo(ListenableWorker.Result.failure())
-        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
         // Cleanup still runs even though write-back failed.
         coVerify { staging.cleanup(staged) }
     }
@@ -225,10 +229,10 @@ class SyncWorkerTest {
         // Recorded SUCCESS (with errorCount=2), not retried, not failed.
         assertThat(result).isEqualTo(ListenableWorker.Result.success())
         coVerify {
-            historyRepository.finishRun(RUN_ID, SyncStatus.SUCCESS, 5, any(), 2, any(), any(), any(), any(), any(), any())
+            historyRepository.finishRun(RUN_ID, SyncStatus.SUCCESS, 5, any(), 2, any(), any(), any(), any(), any(), any(), any())
         }
         coVerify(exactly = 0) {
-            historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any(), any(), any(), any())
+            historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -332,7 +336,7 @@ class SyncWorkerTest {
         val result = buildWorker(runAttemptCount = 0).doWork()
 
         assertThat(result).isEqualTo(ListenableWorker.Result.retry())
-        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -420,7 +424,7 @@ class SyncWorkerTest {
         // Lease released under NonCancellable so it isn't itself cancelled.
         coVerify { engine.releaseDaemon() }
         // Run finalized CANCELLED rather than left stuck RUNNING.
-        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.CANCELLED, any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.CANCELLED, any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -443,7 +447,7 @@ class SyncWorkerTest {
         coEvery {
             historyRepository.finishRun(
                 any(), any(), any(), any(), any(), any(), any(), capture(failedFilesSlot),
-                any(), any(), any(),
+                any(), any(), any(), any(),
             )
         } just Runs
 
@@ -471,7 +475,7 @@ class SyncWorkerTest {
         )
         val failedFilesSlot = slot<String>()
         coEvery {
-            historyRepository.finishRun(any(), any(), any(), any(), any(), any(), any(), capture(failedFilesSlot), any(), any(), any())
+            historyRepository.finishRun(any(), any(), any(), any(), any(), any(), any(), capture(failedFilesSlot), any(), any(), any(), any())
         } just Runs
 
         buildWorker().doWork()
@@ -497,7 +501,7 @@ class SyncWorkerTest {
         coEvery {
             historyRepository.finishRun(
                 any(), any(), any(), any(), any(), any(), any(), capture(failedFilesSlot),
-                any(), any(), any(),
+                any(), any(), any(), any(),
             )
         } just Runs
 
@@ -614,7 +618,7 @@ class SyncWorkerTest {
         val result = buildWorker().doWork()
 
         assertThat(result).isEqualTo(ListenableWorker.Result.failure())
-        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
         coVerify { remoteRepository.setNeedsReauth("gdrive", true) }
     }
 
@@ -788,6 +792,140 @@ class SyncWorkerTest {
 
         coVerify(exactly = 0) { executor.runCheck(any()) }
         coVerify(exactly = 0) { conflictRepository.recordOneWayAdvisory(any(), any()) }
+    }
+
+    // --- D4: metered data cap enforcement ---
+
+    @Test
+    fun meteredCapConfig_capDisabled_runsProceedsNormally() = runBlocking {
+        // When meteredCapEnabled=false the cap is not enforced regardless of usage.
+        val t = calendarSyncTask()
+        coEvery { taskRepository.getTask(TASK_ID) } returns t
+        every { preferencesRepository.preferences } returns flowOf(
+            AppPreferences(meteredCapEnabled = false, meteredCapMb = 100L),
+        )
+        coEvery { historyRepository.monthlyMeteredBytes(any()) } returns flowOf(200L * 1024 * 1024)
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = t.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), any(), any()) } returns
+            flow { emit(progress(transferred = 1)) }
+
+        val result = buildWorker(manual = false).doWork()
+
+        // Cap disabled: run should proceed and succeed.
+        assertThat(result).isEqualTo(ListenableWorker.Result.success())
+        coVerify(exactly = 1) { executor.run(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun meteredCap_meteredNetwork_usageAtCap_skipsRunWithoutStartingHistory() = runBlocking {
+        // Safety-critical positive-skip path: when the network is metered AND the monthly
+        // usage meets the cap, the worker must bail before startRun (no DB row) and before
+        // calling the executor (no sync). It still re-arms the calendar schedule and returns
+        // Result.success() so WorkManager doesn't retry the skipped run.
+        forceMeteredNetwork()
+
+        val capMb = 100L
+        val t = calendarSyncTask()
+        coEvery { taskRepository.getTask(TASK_ID) } returns t
+        every { preferencesRepository.preferences } returns flowOf(
+            AppPreferences(meteredCapEnabled = true, meteredCapMb = capMb),
+        )
+        // Usage exactly at the cap boundary: usedBytes == capMb * 1024 * 1024.
+        coEvery { historyRepository.monthlyMeteredBytes(any()) } returns
+            flowOf(capMb * 1024L * 1024L)
+
+        val result = buildWorker(manual = false).doWork()
+
+        assertThat(result).isEqualTo(ListenableWorker.Result.success())
+        // No sync_runs row was created: startRun must NOT be called.
+        coVerify(exactly = 0) { historyRepository.startRun(any()) }
+        // No sync ran: executor must NOT be called.
+        coVerify(exactly = 0) { executor.run(any(), any(), any(), any(), any()) }
+        // Calendar re-armed so the schedule isn't dropped by the skip.
+        coVerify(exactly = 1) { scheduler.schedule(t) }
+    }
+
+    @Test
+    fun meteredCap_meteredNetwork_usageBelowCap_runProceeds() = runBlocking {
+        // Positive proceed path: metered network, cap enabled, but usage is strictly
+        // below the cap — the worker must NOT skip and must call the executor normally.
+        forceMeteredNetwork()
+
+        val capMb = 100L
+        val t = calendarSyncTask()
+        coEvery { taskRepository.getTask(TASK_ID) } returns t
+        every { preferencesRepository.preferences } returns flowOf(
+            AppPreferences(meteredCapEnabled = true, meteredCapMb = capMb),
+        )
+        // Usage one byte below the cap: (capMb * 1024 * 1024) - 1.
+        coEvery { historyRepository.monthlyMeteredBytes(any()) } returns
+            flowOf(capMb * 1024L * 1024L - 1L)
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = t.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), any(), any()) } returns
+            flow { emit(progress(transferred = 1)) }
+
+        val result = buildWorker(manual = false).doWork()
+
+        assertThat(result).isEqualTo(ListenableWorker.Result.success())
+        // Run proceeded: startRun AND executor were both called.
+        coVerify(exactly = 1) { historyRepository.startRun(any()) }
+        coVerify(exactly = 1) { executor.run(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun meteredCap_wifiNetwork_usageOverCap_runProceeds() = runBlocking {
+        // Wi-Fi bypass: when the active network is NOT metered the cap is never
+        // consulted even if usage is way above the configured limit. The worker
+        // must NOT skip: startRun is called (a DB row is opened), and the
+        // run succeeds normally.
+        //
+        // ShadowConnectivityManager state can persist across tests when earlier tests
+        // call forceMeteredNetwork(). Explicitly reset to non-metered (null active-info)
+        // so this test is not polluted by the mobile-network fixture from the prior test.
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        Shadows.shadowOf(cm).setActiveNetworkInfo(null)
+
+        val capMb = 100L
+        val t = calendarSyncTask()
+        coEvery { taskRepository.getTask(TASK_ID) } returns t
+        every { preferencesRepository.preferences } returns flowOf(
+            AppPreferences(meteredCapEnabled = true, meteredCapMb = capMb),
+        )
+        // Usage massively over cap: 10× the limit — cap must still be ignored on Wi-Fi.
+        coEvery { historyRepository.monthlyMeteredBytes(any()) } returns
+            flowOf(capMb * 10L * 1024L * 1024L)
+        coEvery { staging.prepare(any(), any(), any()) } returns
+            LocalStaging.StagedSource(localPath = t.sourcePath, isStaged = false)
+        coEvery { executor.run(any(), any(), any(), any(), any()) } returns
+            flow { emit(progress(transferred = 1)) }
+
+        // Use inFlightOverride=false to pin the mutual-exclusion guard deterministically.
+        val result = buildWorker(inFlightOverride = false, manual = false).doWork()
+
+        assertThat(result).isEqualTo(ListenableWorker.Result.success())
+        // startRun is the first real action after all the skip gates; its invocation
+        // proves the cap gate was NOT triggered on a non-metered network.
+        coVerify(exactly = 1) { historyRepository.startRun(any()) }
+    }
+
+    /**
+     * Makes [ConnectivityManager.isActiveNetworkMetered] return true for the
+     * current Robolectric test by installing a TYPE_MOBILE active NetworkInfo via
+     * ShadowConnectivityManager. Robolectric resets shadow state between tests
+     * (via @Resetter), so this does not leak across tests.
+     */
+    private fun forceMeteredNetwork() {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val mobileInfo = ShadowNetworkInfo.newInstance(
+            NetworkInfo.DetailedState.CONNECTED,
+            ConnectivityManager.TYPE_MOBILE, // type 0 → isActiveNetworkMetered() returns true
+            0,    // subType
+            true, // isAvailable
+            true, // isConnected (passed as Boolean overload)
+        )
+        Shadows.shadowOf(cm).setActiveNetworkInfo(mobileInfo)
     }
 
     /** Current local minute-of-day (0..1439), matching the worker's quiet-hours clock. */
