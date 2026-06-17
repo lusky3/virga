@@ -88,12 +88,13 @@ class SyncTileService : TileService() {
 
         /** Upper bound on the blocking WorkInfo query so a stalled WorkManager can't hang us. */
         const val WORK_QUERY_TIMEOUT_SECONDS = 2L
-
-        /**
-         * Returns true when any of [infos] represents in-progress or queued sync work.
-         * Pure function — extracted so it can be unit-tested without a live WorkManager.
-         */
-        fun isSyncActive(infos: List<WorkInfo>): Boolean =
-            infos.any { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED }
     }
 }
+
+/**
+ * Returns true when any of [infos] represents in-progress or queued sync work.
+ * Pure + top-level `internal` (like [app.lusk.virga.share.disambiguate]) so it can be
+ * unit-tested directly without a live WorkManager or the TileService framework lifecycle.
+ */
+internal fun isSyncActive(infos: List<WorkInfo>): Boolean =
+    infos.any { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED }
