@@ -140,30 +140,29 @@ private fun IdleContent(
 
         if (state.remotes.isEmpty()) {
             NoRemotesContent(onDismiss = callbacks.onDismiss)
-            return@Column
-        }
+        } else {
+            RemotePicker(
+                remotes = state.remotes,
+                selected = state.selectedRemote,
+                onSelected = callbacks.onRemoteSelected,
+            )
 
-        RemotePicker(
-            remotes = state.remotes,
-            selected = state.selectedRemote,
-            onSelected = callbacks.onRemoteSelected,
-        )
+            OutlinedTextField(
+                value = state.destPath,
+                onValueChange = callbacks.onDestPathChanged,
+                label = { Text(stringResource(R.string.share_dest_path_hint)) },
+                placeholder = { Text(stringResource(R.string.share_dest_path_placeholder)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
 
-        OutlinedTextField(
-            value = state.destPath,
-            onValueChange = callbacks.onDestPathChanged,
-            label = { Text(stringResource(R.string.share_dest_path_hint)) },
-            placeholder = { Text(stringResource(R.string.share_dest_path_placeholder)) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        Button(
-            onClick = callbacks.onUpload,
-            enabled = state.selectedRemote != null,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(stringResource(R.string.share_upload_button))
+            Button(
+                onClick = callbacks.onUpload,
+                enabled = state.selectedRemote != null,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.share_upload_button))
+            }
         }
     }
 }
