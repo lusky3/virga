@@ -125,6 +125,8 @@ fun AboutScreen(
             HorizontalDivider()
             AboutReferenceLinks(openUrl = openUrl)
             HorizontalDivider()
+            AboutPrivacyPosture()
+            HorizontalDivider()
             AboutBuildDetails(
                 distribution = distribution,
                 versionName = versionName,
@@ -289,6 +291,28 @@ private fun AboutBuildDetails(
         Text(stringResource(R.string.about_build_distribution, distribution), style = muted, color = mutedColor)
         Text(stringResource(R.string.about_build_version, versionName, versionCode), style = muted, color = mutedColor)
         Text(stringResource(R.string.about_build_rclone, rcloneVersion), style = muted, color = mutedColor)
+    }
+}
+
+private val PRIVACY_POSTURE_STRING_IDS = listOf(
+    R.string.about_privacy_no_analytics,
+    R.string.about_privacy_no_ads,
+    R.string.about_privacy_local,
+    R.string.about_privacy_crash_optin,
+    R.string.about_privacy_open_source,
+)
+
+/** Static informational block describing Virga's FOSS privacy stance. */
+@Composable
+private fun AboutPrivacyPosture() {
+    SectionTitle(stringResource(R.string.about_section_privacy))
+    Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.xs)) {
+        val muted = MaterialTheme.typography.bodySmall
+        val mutedColor = MaterialTheme.colorScheme.onSurfaceVariant
+        Text(stringResource(R.string.about_privacy_intro), style = muted, color = mutedColor)
+        PRIVACY_POSTURE_STRING_IDS.forEach { resId ->
+            Text(stringResource(resId), style = muted, color = mutedColor)
+        }
     }
 }
 
