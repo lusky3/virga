@@ -27,7 +27,8 @@ import org.robolectric.annotation.GraphicsMode
  *  - section title renders
  *  - hint text renders
  *  - each toggle label renders
- *  - tapping each toggle invokes its callback
+ *  - tapping the first toggle invokes onToggle with FOLDER_CHANGE (all three
+ *    toggles share the single onToggle path, so one tap covers the wiring)
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(

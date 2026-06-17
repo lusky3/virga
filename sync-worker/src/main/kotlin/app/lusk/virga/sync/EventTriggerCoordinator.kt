@@ -172,7 +172,7 @@ class EventTriggerCoordinator @Inject constructor(
                             val s = scope ?: return@registerWifiCallback
                             s.launch(confinement) {
                                 debounceJob?.cancel()
-                                debounceJob = requireNotNull(scope).launch(confinement) {
+                                debounceJob = s.launch(confinement) {
                                     runCatching {
                                         delay(WIFI_DEBOUNCE_MS)
                                         scheduler.syncAllEnabled()
@@ -220,7 +220,7 @@ class EventTriggerCoordinator @Inject constructor(
                             val s = scope ?: return@registerChargeReceiver
                             s.launch(confinement) {
                                 debounceJob?.cancel()
-                                debounceJob = requireNotNull(scope).launch(confinement) {
+                                debounceJob = s.launch(confinement) {
                                     runCatching {
                                         delay(CHARGE_DEBOUNCE_MS)
                                         scheduler.syncAllEnabled()

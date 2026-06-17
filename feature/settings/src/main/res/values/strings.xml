@@ -81,7 +81,7 @@
     <string name="settings_section_event_triggers">Event triggers</string>
     <string name="settings_event_triggers_hint">Trigger syncs automatically when real-world events occur. Requires the watchdog to be on — best-effort while the watchdog service is running.</string>
     <string name="settings_toggle_trigger_folder">Sync on folder change</string>
-    <string name="settings_trigger_folder_hint">Watches local source folders for file changes and triggers a sync after a 15-second quiet window. Not available for cloud (SAF) sources.</string>
+    <string name="settings_trigger_folder_hint">Watches local source folders for file changes and triggers a sync after a 15-second quiet window. Only works for direct filesystem folders, not folders added through the system file picker.</string>
     <string name="settings_toggle_trigger_wifi">Sync when Wi-Fi connects</string>
     <string name="settings_trigger_wifi_hint">Runs all enabled syncs when your device connects to a Wi-Fi network.</string>
     <string name="settings_toggle_trigger_charge">Sync when charging starts</string>
