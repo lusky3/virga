@@ -70,6 +70,15 @@ class SettingsViewModel @Inject constructor(
     fun setMeteredCapMb(mb: Long) =
         viewModelScope.launch { preferences.setMeteredCapMb(mb) }
 
+    // B3: event-driven sync triggers
+    fun setTrigger(kind: EventTriggerKind, enabled: Boolean) = viewModelScope.launch {
+        when (kind) {
+            EventTriggerKind.FOLDER_CHANGE -> preferences.setTriggerOnFolderChange(enabled)
+            EventTriggerKind.WIFI_CONNECT -> preferences.setTriggerOnWifiConnect(enabled)
+            EventTriggerKind.CHARGE -> preferences.setTriggerOnCharge(enabled)
+        }
+    }
+
     fun clearCache(context: Context, onComplete: (Boolean) -> Unit) = viewModelScope.launch(Dispatchers.IO) {
         val ok = runCatching { context.cacheDir.listFiles()?.forEach { it.deleteRecursively() } }.isSuccess
         withContext(Dispatchers.Main) { onComplete(ok) }

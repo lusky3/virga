@@ -77,6 +77,16 @@
     <string name="settings_notify_on_failure_only_hint">When on, quiet successful syncs are silenced — you\'ll only see a notification when something goes wrong. Progress and error notifications always appear.</string>
     <string name="settings_item_notification_settings">Notification settings</string>
 
+    <!-- Event triggers section (SettingsEventTriggersSection) -->
+    <string name="settings_section_event_triggers">Event triggers</string>
+    <string name="settings_event_triggers_hint">Trigger syncs automatically when real-world events occur. Requires the watchdog to be on — best-effort while the watchdog service is running.</string>
+    <string name="settings_toggle_trigger_folder">Sync on folder change</string>
+    <string name="settings_trigger_folder_hint">Watches local source folders for file changes and triggers a sync after a 15-second quiet window. Only works for direct filesystem folders, not folders added through the system file picker.</string>
+    <string name="settings_toggle_trigger_wifi">Sync when Wi-Fi connects</string>
+    <string name="settings_trigger_wifi_hint">Runs all enabled syncs when your device connects to a Wi-Fi network.</string>
+    <string name="settings_toggle_trigger_charge">Sync when charging starts</string>
+    <string name="settings_trigger_charge_hint">Runs all enabled syncs when your device starts charging.</string>
+
     <!-- Data usage section (SettingsDataUsageSection) -->
     <string name="settings_section_data_usage">Data usage</string>
     <string name="settings_toggle_metered_cap">Limit monthly metered data</string>

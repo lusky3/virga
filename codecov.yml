@@ -20,3 +20,12 @@ ignore:
   # unit tests without the full Hilt graph (same limitation as above).
   - "app/src/main/kotlin/app/lusk/virga/widget/TaskWidget.kt"
   - "app/src/main/kotlin/app/lusk/virga/widget/TaskWidgetConfigActivity.kt"
+  # B3 event-driven triggers: the persistent foreground service + the
+  # FileObserver / ConnectivityManager.NetworkCallback / ACTION_POWER_CONNECTED
+  # receiver wiring. The pure predicates (shouldObserveTask/isSafPath), the
+  # start/stop lifecycle transitions, the prefs and the Settings section ARE
+  # unit-tested; the OS-callback registration and the Service lifecycle need the
+  # Android runtime + a live FGS and can't run under Robolectric unit tests.
+  - "sync-worker/src/main/kotlin/app/lusk/virga/sync/WatchdogService.kt"
+  - "sync-worker/src/main/kotlin/app/lusk/virga/sync/EventTriggerCoordinator.kt"
+  - "sync-worker/src/main/kotlin/app/lusk/virga/sync/FolderWatchSet.kt"

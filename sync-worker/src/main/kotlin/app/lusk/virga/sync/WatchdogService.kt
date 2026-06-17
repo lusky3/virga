@@ -11,6 +11,10 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import app.lusk.virga.core.common.notification.NotificationChannelIds
 import app.lusk.virga.core.common.notification.NotificationDeepLinks
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
 
 /**
  * Optional persistent foreground "watchdog" service that keeps Virga's process
@@ -35,13 +39,37 @@ import app.lusk.virga.core.common.notification.NotificationDeepLinks
  */
 class WatchdogService : Service() {
 
+    @EntryPoint
+    @InstallIn(SingletonComponent::class)
+    interface WatchdogServiceEntryPoint {
+        fun eventTriggerCoordinator(): EventTriggerCoordinator
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForegroundCompat()
+        // Resolve and start the event-trigger coordinator. The AtomicBoolean guard
+        // inside the coordinator makes this idempotent for START_STICKY re-delivery.
+        runCatching {
+            EntryPointAccessors.fromApplication(
+                applicationContext,
+                WatchdogServiceEntryPoint::class.java,
+            ).eventTriggerCoordinator().start()
+        }
         // START_STICKY: if the OS kills us for memory, recreate the service so the
         // keep-alive resumes without the user reopening the app.
         return START_STICKY
+    }
+
+    override fun onDestroy() {
+        runCatching {
+            EntryPointAccessors.fromApplication(
+                applicationContext,
+                WatchdogServiceEntryPoint::class.java,
+            ).eventTriggerCoordinator().stop()
+        }
+        super.onDestroy()
     }
 
     private fun startForegroundCompat() {

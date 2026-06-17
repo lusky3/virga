@@ -402,4 +402,156 @@ class PreferencesRepositoryTest {
             cancelAndIgnoreRemainingEvents()
         }
     }
+
+    // --- B3: triggerOnFolderChange ---
+
+    @Test fun `triggerOnFolderChange defaults to false`() = testScope.runTest {
+        val repo = createRepo()
+        repo.preferences.test {
+            assertThat(awaitItem().triggerOnFolderChange).isFalse()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `setTriggerOnFolderChange true is persisted`() = testScope.runTest {
+        val repo = createRepo()
+
+        repo.setTriggerOnFolderChange(true)
+
+        repo.preferences.test {
+            assertThat(awaitItem().triggerOnFolderChange).isTrue()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `setTriggerOnFolderChange false after true reverts to false`() = testScope.runTest {
+        val repo = createRepo()
+        repo.setTriggerOnFolderChange(true)
+
+        repo.setTriggerOnFolderChange(false)
+
+        repo.preferences.test {
+            assertThat(awaitItem().triggerOnFolderChange).isFalse()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `setTriggerOnFolderChange does not affect triggerOnWifiConnect`() = testScope.runTest {
+        val repo = createRepo()
+        repo.setTriggerOnFolderChange(true)
+
+        repo.preferences.test {
+            val prefs = awaitItem()
+            assertThat(prefs.triggerOnFolderChange).isTrue()
+            assertThat(prefs.triggerOnWifiConnect).isFalse()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    // --- B3: triggerOnWifiConnect ---
+
+    @Test fun `triggerOnWifiConnect defaults to false`() = testScope.runTest {
+        val repo = createRepo()
+        repo.preferences.test {
+            assertThat(awaitItem().triggerOnWifiConnect).isFalse()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `setTriggerOnWifiConnect true is persisted`() = testScope.runTest {
+        val repo = createRepo()
+
+        repo.setTriggerOnWifiConnect(true)
+
+        repo.preferences.test {
+            assertThat(awaitItem().triggerOnWifiConnect).isTrue()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `setTriggerOnWifiConnect false after true reverts to false`() = testScope.runTest {
+        val repo = createRepo()
+        repo.setTriggerOnWifiConnect(true)
+
+        repo.setTriggerOnWifiConnect(false)
+
+        repo.preferences.test {
+            assertThat(awaitItem().triggerOnWifiConnect).isFalse()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `setTriggerOnWifiConnect does not affect triggerOnCharge`() = testScope.runTest {
+        val repo = createRepo()
+        repo.setTriggerOnWifiConnect(true)
+
+        repo.preferences.test {
+            val prefs = awaitItem()
+            assertThat(prefs.triggerOnWifiConnect).isTrue()
+            assertThat(prefs.triggerOnCharge).isFalse()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    // --- B3: triggerOnCharge ---
+
+    @Test fun `triggerOnCharge defaults to false`() = testScope.runTest {
+        val repo = createRepo()
+        repo.preferences.test {
+            assertThat(awaitItem().triggerOnCharge).isFalse()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `setTriggerOnCharge true is persisted`() = testScope.runTest {
+        val repo = createRepo()
+
+        repo.setTriggerOnCharge(true)
+
+        repo.preferences.test {
+            assertThat(awaitItem().triggerOnCharge).isTrue()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `setTriggerOnCharge false after true reverts to false`() = testScope.runTest {
+        val repo = createRepo()
+        repo.setTriggerOnCharge(true)
+
+        repo.setTriggerOnCharge(false)
+
+        repo.preferences.test {
+            assertThat(awaitItem().triggerOnCharge).isFalse()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `setTriggerOnCharge does not affect triggerOnFolderChange`() = testScope.runTest {
+        val repo = createRepo()
+        repo.setTriggerOnCharge(true)
+
+        repo.preferences.test {
+            val prefs = awaitItem()
+            assertThat(prefs.triggerOnCharge).isTrue()
+            assertThat(prefs.triggerOnFolderChange).isFalse()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    // --- B3: all three triggers are independent ---
+
+    @Test fun `all three trigger prefs are independent of each other`() = testScope.runTest {
+        val repo = createRepo()
+        repo.setTriggerOnFolderChange(true)
+        repo.setTriggerOnWifiConnect(true)
+        repo.setTriggerOnCharge(true)
+
+        repo.preferences.test {
+            val prefs = awaitItem()
+            assertThat(prefs.triggerOnFolderChange).isTrue()
+            assertThat(prefs.triggerOnWifiConnect).isTrue()
+            assertThat(prefs.triggerOnCharge).isTrue()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
 }
