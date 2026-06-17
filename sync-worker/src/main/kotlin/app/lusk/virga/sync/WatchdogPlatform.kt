@@ -6,9 +6,13 @@ import android.content.Context
 import android.content.Intent
 import dagger.Binds
 import dagger.Module
+import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -87,4 +91,19 @@ class RealWatchdogPlatform @Inject constructor(
 abstract class WatchdogModule {
     @Binds
     abstract fun bindWatchdogPlatform(impl: RealWatchdogPlatform): WatchdogPlatform
+}
+
+/**
+ * Provides the [TriggerConfinement]-qualified [CoroutineDispatcher] for
+ * [EventTriggerCoordinator]. Kept separate from [WatchdogModule] because Dagger
+ * requires `@Provides` functions to live in concrete (non-abstract) modules.
+ */
+@Module
+@InstallIn(SingletonComponent::class)
+object WatchdogProvidesModule {
+    @Provides
+    @TriggerConfinement
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun provideTriggerConfinement(): CoroutineDispatcher =
+        Dispatchers.Default.limitedParallelism(1)
 }

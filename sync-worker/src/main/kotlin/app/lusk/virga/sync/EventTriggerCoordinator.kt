@@ -13,9 +13,9 @@ import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.data.SyncTaskRepository
 import app.lusk.virga.core.datastore.PreferencesRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Qualifier
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -25,6 +25,11 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/** Qualifies the single-threaded [CoroutineDispatcher] used by [EventTriggerCoordinator]. */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class TriggerConfinement
 
 /**
  * Owns all event-driven sync trigger machinery for B3. Activated by
@@ -77,11 +82,10 @@ class EventTriggerCoordinator @Inject constructor(
     private val preferencesRepository: PreferencesRepository,
     /**
      * Single-threaded dispatcher all mutable state accesses are confined to.
-     * Production default: `Dispatchers.Default.limitedParallelism(1)`.
-     * Tests: inject `UnconfinedTestDispatcher` so flows drain under `runTest`.
+     * Production binding provided by [WatchdogProvidesModule] via [@TriggerConfinement].
+     * Tests pass their own dispatcher directly (no Hilt involvement).
      */
-    internal val confinement: kotlinx.coroutines.CoroutineDispatcher =
-        Dispatchers.Default.limitedParallelism(1),
+    @param:TriggerConfinement internal val confinement: kotlinx.coroutines.CoroutineDispatcher,
 ) {
 
     // @GuardedBy("this") — only touched inside @Synchronized start()/stop().
