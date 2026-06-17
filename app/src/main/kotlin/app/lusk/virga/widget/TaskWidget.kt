@@ -1,6 +1,7 @@
 package app.lusk.virga.widget
 
 import android.content.Context
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,11 +60,31 @@ internal sealed interface TaskWidgetContent {
     /** No task has been configured for this widget instance yet. */
     data object Unconfigured : TaskWidgetContent
 
-    /** The previously-configured task was deleted. */
+    /** The previously-configured task was deleted (lookup succeeded, returned null). */
     data object TaskRemoved : TaskWidgetContent
+
+    /** The task lookup failed transiently (DI/repository error) — distinct from deletion. */
+    data object LoadFailed : TaskWidgetContent
 
     /** The task exists and can be rendered. */
     data class Ready(val taskId: Long, val name: String, val statusLine: String) : TaskWidgetContent
+}
+
+/**
+ * Resolves widget content from a task [lookup] result. Distinguishes a transient
+ * failure ([TaskWidgetContent.LoadFailed]) from a genuine deletion
+ * ([TaskWidgetContent.TaskRemoved], lookup succeeded with null) so a momentary
+ * repository/DI error is not mis-rendered as "task removed".
+ *
+ * Pure: no Glance, no coroutines, no Android APIs. Safe to unit test.
+ */
+internal fun resolveTaskWidgetContent(
+    boundTaskId: Long,
+    lookup: Result<SyncTask?>,
+): TaskWidgetContent = when {
+    boundTaskId == NO_TASK_ID -> TaskWidgetContent.Unconfigured
+    lookup.isFailure -> TaskWidgetContent.LoadFailed
+    else -> resolveTaskWidgetContent(boundTaskId, lookup.getOrNull())
 }
 
 /**
@@ -108,41 +129,45 @@ class TaskWidget : GlanceAppWidget() {
         val prefs = getAppWidgetState(context, PreferencesGlanceStateDefinition, id)
         val boundTaskId = prefs[boundTaskIdKey] ?: NO_TASK_ID
 
-        val task = if (boundTaskId != NO_TASK_ID) {
+        val lookup: Result<SyncTask?> = if (boundTaskId != NO_TASK_ID) {
             runCatching {
                 EntryPointAccessors.fromApplication(
                     context.applicationContext,
                     VirgaWidgetEntryPoint::class.java,
                 ).syncTaskRepository().getTask(boundTaskId)
-            }.getOrNull()
+            }
         } else {
-            null
+            Result.success(null)
         }
 
-        val content = resolveTaskWidgetContent(boundTaskId, task)
-        val unconfiguredLabel = context.getString(R.string.widget_task_unconfigured)
-        val taskRemovedLabel = context.getString(R.string.widget_task_removed)
-        val backUpLabel = context.getString(R.string.widget_task_back_up)
+        val content = resolveTaskWidgetContent(boundTaskId, lookup)
+        val labels = TaskWidgetLabels(
+            unconfigured = context.getString(R.string.widget_task_unconfigured),
+            taskRemoved = context.getString(R.string.widget_task_removed),
+            loadFailed = context.getString(R.string.widget_task_load_failed),
+            backUp = context.getString(R.string.widget_task_back_up),
+        )
 
         provideContent {
             GlanceTheme {
-                TaskWidgetContent(
-                    content = content,
-                    unconfiguredLabel = unconfiguredLabel,
-                    taskRemovedLabel = taskRemovedLabel,
-                    backUpLabel = backUpLabel,
-                )
+                TaskWidgetContent(content = content, labels = labels)
             }
         }
     }
 }
 
+/** Pre-resolved widget strings, grouped to keep composable param counts under detekt's limit. */
+private data class TaskWidgetLabels(
+    val unconfigured: String,
+    val taskRemoved: String,
+    val loadFailed: String,
+    val backUp: String,
+)
+
 @Composable
 private fun TaskWidgetContent(
     content: TaskWidgetContent,
-    unconfiguredLabel: String,
-    taskRemovedLabel: String,
-    backUpLabel: String,
+    labels: TaskWidgetLabels,
 ) {
     Column(
         modifier = GlanceModifier
@@ -152,9 +177,10 @@ private fun TaskWidgetContent(
         verticalAlignment = Alignment.Vertical.CenterVertically,
     ) {
         when (content) {
-            is TaskWidgetContent.Unconfigured -> PlaceholderText(unconfiguredLabel)
-            is TaskWidgetContent.TaskRemoved -> PlaceholderText(taskRemovedLabel)
-            is TaskWidgetContent.Ready -> ReadyContent(content, backUpLabel)
+            is TaskWidgetContent.Unconfigured -> PlaceholderText(labels.unconfigured)
+            is TaskWidgetContent.TaskRemoved -> PlaceholderText(labels.taskRemoved)
+            is TaskWidgetContent.LoadFailed -> PlaceholderText(labels.loadFailed)
+            is TaskWidgetContent.Ready -> ReadyContent(content, labels.backUp)
         }
     }
 }
@@ -214,6 +240,8 @@ class TaskSyncActionCallback : ActionCallback {
             }
             ?: NO_TASK_ID
 
+        // Reject both the NO_TASK_ID sentinel (-1) and the unsaved-row id 0 (Room
+        // autogen ids start at 1), so we never enqueue a sync for a non-task.
         if (taskId <= 0L) return
 
         val scheduler = EntryPointAccessors.fromApplication(
@@ -222,6 +250,11 @@ class TaskSyncActionCallback : ActionCallback {
         ).syncScheduler()
 
         runCatching { scheduler.syncNow(taskId) }
+            .onFailure { Log.w(TAG, "syncNow failed for taskId=$taskId", it) }
+    }
+
+    private companion object {
+        const val TAG = "TaskWidget"
     }
 }
 

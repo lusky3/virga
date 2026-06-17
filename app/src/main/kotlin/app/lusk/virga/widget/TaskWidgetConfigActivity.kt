@@ -4,6 +4,7 @@ import android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID
 import android.appwidget.AppWidgetManager.INVALID_APPWIDGET_ID
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -102,13 +103,18 @@ class TaskWidgetConfigActivity : AppCompatActivity() {
 
     private fun bindTaskAndFinish(appWidgetId: Int, taskId: Long) {
         lifecycleScope.launch {
-            val glanceManager = GlanceAppWidgetManager(applicationContext)
-            val glanceId = glanceManager.getGlanceIdBy(appWidgetId)
-            updateAppWidgetState(applicationContext, PreferencesGlanceStateDefinition, glanceId) { prefs ->
-                prefs.toMutablePreferences().apply { this[boundTaskIdKey] = taskId }
-            }
-            TaskWidget().update(applicationContext, glanceId)
-            setResult(RESULT_OK, Intent().putExtra(EXTRA_APPWIDGET_ID, appWidgetId))
+            // getGlanceIdBy throws IllegalArgumentException if the widget was removed
+            // between placement and selection. Guard the whole bind so we always
+            // finish() — the initial RESULT_CANCELED then takes effect on failure.
+            runCatching {
+                val glanceManager = GlanceAppWidgetManager(applicationContext)
+                val glanceId = glanceManager.getGlanceIdBy(appWidgetId)
+                updateAppWidgetState(applicationContext, PreferencesGlanceStateDefinition, glanceId) { prefs ->
+                    prefs.toMutablePreferences().apply { this[boundTaskIdKey] = taskId }
+                }
+                TaskWidget().update(applicationContext, glanceId)
+                setResult(RESULT_OK, Intent().putExtra(EXTRA_APPWIDGET_ID, appWidgetId))
+            }.onFailure { Log.w("TaskWidgetConfig", "Failed to bind widget $appWidgetId", it) }
             finish()
         }
     }

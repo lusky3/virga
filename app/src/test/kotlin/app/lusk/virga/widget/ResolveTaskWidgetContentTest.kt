@@ -124,6 +124,34 @@ class ResolveTaskWidgetContentTest {
         assertThat(line).isEqualTo("Disabled · Bisync")
     }
 
+    // ── resolveTaskWidgetContent(Result) overload ─────────────────────────────
+
+    @Test
+    fun `Result overload returns Unconfigured for NO_TASK_ID regardless of result`() {
+        val result = resolveTaskWidgetContent(NO_TASK_ID, Result.success<SyncTask?>(null))
+        assertThat(result).isEqualTo(TaskWidgetContent.Unconfigured)
+    }
+
+    @Test
+    fun `Result overload returns LoadFailed when the lookup failed`() {
+        val failed: Result<SyncTask?> = Result.failure(IllegalStateException("repo down"))
+        val result = resolveTaskWidgetContent(boundTaskId = 5L, lookup = failed)
+        assertThat(result).isEqualTo(TaskWidgetContent.LoadFailed)
+    }
+
+    @Test
+    fun `Result overload maps a successful null lookup to TaskRemoved (not LoadFailed)`() {
+        val result = resolveTaskWidgetContent(boundTaskId = 5L, lookup = Result.success(null))
+        assertThat(result).isEqualTo(TaskWidgetContent.TaskRemoved)
+    }
+
+    @Test
+    fun `Result overload delegates to Ready for a successful present task`() {
+        val t = task(id = 9L)
+        val result = resolveTaskWidgetContent(boundTaskId = 9L, lookup = Result.success(t))
+        assertThat((result as TaskWidgetContent.Ready).taskId).isEqualTo(9L)
+    }
+
     // ── sentinel value sanity ─────────────────────────────────────────────────
 
     @Test
