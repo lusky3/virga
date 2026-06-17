@@ -1,8 +1,7 @@
-package app.lusk.virga.widget
+package app.lusk.virga
 
 import android.content.Intent
 import androidx.compose.runtime.MutableState
-import app.lusk.virga.MainActivity
 import app.lusk.virga.core.common.notification.NotificationDeepLinks
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test

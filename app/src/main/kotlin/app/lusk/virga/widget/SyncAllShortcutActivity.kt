@@ -2,6 +2,7 @@ package app.lusk.virga.widget
 
 import android.app.Activity
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import app.lusk.virga.R
 import dagger.hilt.android.EntryPointAccessors
@@ -41,6 +42,11 @@ class SyncAllShortcutActivity : Activity() {
                 VirgaWidgetEntryPoint::class.java,
             )
             runCatching { entryPoint.syncScheduler().syncAllEnabled() }
+                .onFailure { Log.w(TAG, "Shortcut sync-all enqueue failed", it) }
         }
+    }
+
+    private companion object {
+        const val TAG = "SyncAllShortcut"
     }
 }
