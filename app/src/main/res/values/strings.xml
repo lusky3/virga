@@ -96,6 +96,16 @@
         <item>More reliable encrypted-config handling and a keyboard-free launch</item>
     </string-array>
 
+    <!-- ShareReceiverActivity (D7a) -->
+    <string name="share_receiver_label">Upload to Virga</string>
+    <string name="share_receiver_title">Share to Virga</string>
+    <string name="share_pick_remote_label">Destination remote</string>
+    <string name="share_no_remotes">No remotes configured. Add a remote first.</string>
+    <string name="share_no_remotes_dismiss">Close</string>
+    <string name="share_dest_path_hint">Destination folder (optional)</string>
+    <string name="share_dest_path_placeholder">Remote root</string>
+    <string name="share_upload_button">Upload</string>
+
     <!-- LockScreen + BiometricGate -->
     <string name="lock_screen_title">Virga is locked</string>
     <string name="lock_screen_message">Authenticate to continue</string>

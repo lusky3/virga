@@ -131,6 +131,32 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- D7a (0.3.0): Share-target receiver — lets users share files from
+             any app into Virga for upload to a configured remote.
+             SEC: exported is required for ACTION_SEND share targets; the system
+             and sharing apps must be able to start this activity. The activity
+             only reads the incoming EXTRA_STREAM URI(s); it exposes no privileged
+             Virga internals and performs no writes beyond copying the URI into
+             the app's own cache directory. -->
+        <activity
+            android:name=".share.ShareReceiverActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Virga"
+            android:label="@string/share_receiver_label"
+            android:excludeFromRecents="true"
+            tools:ignore="ExportedActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
+
         <!-- Phase 3 WS3.6: Glance home-screen widget.
              SEC: exported is required by the AppWidget framework — the launcher
              must be able to send APPWIDGET_UPDATE. The receiver exposes no
