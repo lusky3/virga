@@ -37,65 +37,58 @@ internal fun DataSection(
 
     HorizontalDivider()
     SectionTitle(stringResource(R.string.settings_section_data_reset))
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
-    ) {
-        TextButton(onClick = { showCacheDialog = true }) {
-            Text(stringResource(R.string.settings_btn_clear_cache))
-        }
-        TextButton(onClick = { showLogsDialog = true }) {
-            Text(stringResource(R.string.settings_btn_clear_logs))
-        }
-    }
-
-    TextButton(onClick = { showResetDialog = true }) {
-        Text(
-            text = stringResource(R.string.settings_btn_reset_app),
-            color = MaterialTheme.colorScheme.error,
-        )
-    }
+    DataActionButtons(
+        onCache = { showCacheDialog = true },
+        onLogs = { showLogsDialog = true },
+        onReset = { showResetDialog = true },
+    )
 
     if (showCacheDialog) {
         ConfirmDialog(
             title = stringResource(R.string.settings_dialog_clear_cache_title),
             body = stringResource(R.string.settings_dialog_clear_cache_body),
             confirmLabel = stringResource(R.string.settings_dialog_confirm),
-            cancelLabel = stringResource(R.string.settings_dialog_cancel),
-            onConfirm = {
-                showCacheDialog = false
-                onCacheClear()
-            },
+            onConfirm = { showCacheDialog = false; onCacheClear() },
             onDismiss = { showCacheDialog = false },
         )
     }
-
     if (showLogsDialog) {
         ConfirmDialog(
             title = stringResource(R.string.settings_dialog_clear_logs_title),
             body = stringResource(R.string.settings_dialog_clear_logs_body),
             confirmLabel = stringResource(R.string.settings_dialog_confirm),
-            cancelLabel = stringResource(R.string.settings_dialog_cancel),
-            onConfirm = {
-                showLogsDialog = false
-                onLogsClear()
-            },
+            onConfirm = { showLogsDialog = false; onLogsClear() },
             onDismiss = { showLogsDialog = false },
         )
     }
-
     if (showResetDialog) {
         DestructiveConfirmDialog(
             title = stringResource(R.string.settings_dialog_reset_app_title),
             body = stringResource(R.string.settings_dialog_reset_app_body),
             confirmLabel = stringResource(R.string.settings_dialog_confirm),
-            cancelLabel = stringResource(R.string.settings_dialog_cancel),
-            onConfirm = {
-                showResetDialog = false
-                onReset()
-            },
+            onConfirm = { showResetDialog = false; onReset() },
             onDismiss = { showResetDialog = false },
+        )
+    }
+}
+
+@Composable
+private fun DataActionButtons(
+    onCache: () -> Unit,
+    onLogs: () -> Unit,
+    onReset: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
+    ) {
+        TextButton(onClick = onCache) { Text(stringResource(R.string.settings_btn_clear_cache)) }
+        TextButton(onClick = onLogs) { Text(stringResource(R.string.settings_btn_clear_logs)) }
+    }
+    TextButton(onClick = onReset) {
+        Text(
+            text = stringResource(R.string.settings_btn_reset_app),
+            color = MaterialTheme.colorScheme.error,
         )
     }
 }
@@ -105,7 +98,6 @@ private fun ConfirmDialog(
     title: String,
     body: String,
     confirmLabel: String,
-    cancelLabel: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -113,11 +105,9 @@ private fun ConfirmDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { Text(body) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) { Text(confirmLabel) }
-        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text(confirmLabel) } },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(cancelLabel) }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.settings_dialog_cancel)) }
         },
     )
 }
@@ -128,7 +118,6 @@ private fun DestructiveConfirmDialog(
     title: String,
     body: String,
     confirmLabel: String,
-    cancelLabel: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -142,7 +131,7 @@ private fun DestructiveConfirmDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(cancelLabel) }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.settings_dialog_cancel)) }
         },
     )
 }
