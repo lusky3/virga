@@ -62,6 +62,16 @@
     <!-- Quick Settings tile (Phase 3 WS3.6) -->
     <string name="tile_label">Virga sync</string>
     <string name="tile_subtitle">Back up now</string>
+    <!-- Shown as the tile subtitle while a sync is in progress (D7b). -->
+    <string name="tile_subtitle_syncing">Syncing…</string>
+
+    <!-- Static launcher shortcuts (D7b) -->
+    <string name="shortcut_sync_all_short">Sync all</string>
+    <string name="shortcut_sync_all_long">Back up all enabled tasks</string>
+    <string name="shortcut_add_remote_short">Add remote</string>
+    <string name="shortcut_add_remote_long">Add a new sync remote</string>
+    <!-- Toast shown by the sync-all trampoline activity when shortcut is tapped. -->
+    <string name="shortcut_sync_all_toast">Backing up…</string>
 
     <!-- WhatsNewScreen -->
     <string name="whats_new_title">What\'s new</string>

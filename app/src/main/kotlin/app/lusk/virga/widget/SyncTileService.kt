@@ -4,6 +4,8 @@ import android.graphics.drawable.Icon
 import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import app.lusk.virga.R
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.CoroutineScope
@@ -20,7 +22,7 @@ class SyncTileService : TileService() {
 
     override fun onStartListening() {
         super.onStartListening()
-        updateTileState()
+        refreshTileState()
     }
 
     override fun onClick() {
@@ -42,14 +44,37 @@ class SyncTileService : TileService() {
         }
     }
 
-    private fun updateTileState() {
+    private fun refreshTileState() {
+        val appContext = applicationContext
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            // WorkManager.getInstance is the same pattern used by SyncScheduler itself;
+            // no Hilt binding exists for WorkManager so we call it directly here.
+            val infos = runCatching {
+                // getWorkInfosByTag returns a ListenableFuture; .get() is a blocking
+                // call, safe here because this coroutine runs on Dispatchers.IO.
+                WorkManager.getInstance(appContext)
+                    .getWorkInfosByTag(TAG_SYNC_ALL)
+                    .get()
+            }.getOrDefault(emptyList())
+            val syncing = infos.any { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED }
+            updateTileState(syncing)
+        }
+    }
+
+    private fun updateTileState(syncing: Boolean) {
         val tile = qsTile ?: return
         tile.state = Tile.STATE_ACTIVE
         tile.label = getString(R.string.tile_label)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            tile.subtitle = getString(R.string.tile_subtitle)
+            tile.subtitle = getString(
+                if (syncing) R.string.tile_subtitle_syncing else R.string.tile_subtitle,
+            )
         }
         tile.icon = Icon.createWithResource(this, R.drawable.ic_tile_sync)
         tile.updateTile()
+    }
+
+    private companion object {
+        const val TAG_SYNC_ALL = "syncall"
     }
 }

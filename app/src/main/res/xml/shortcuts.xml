@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Static launcher shortcuts (D7b, 0.3.0).
+
+  "Add remote" routing note: static shortcut <intent> elements technically
+  support <extra> child elements (API 25+), but Android's shortcut manifest
+  parser does not guarantee that string extras in static shortcuts survive
+  across activity re-uses / singleTask re-launches reliably on all OEM
+  launchers. Using a dedicated intent action
+  (app.lusk.virga.action.SHORTCUT_ADD_REMOTE) is robust — MainActivity.onCreate
+  maps this action to pendingRoute = ROUTE_ADD_REMOTE, mirroring how it already
+  reads EXTRA_OPEN_ROUTE from notification intents.
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Shortcut 1: Sync all — triggers the no-UI trampoline activity. -->
+    <shortcut
+        android:shortcutId="sync_all"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_sync"
+        android:shortcutShortLabel="@string/shortcut_sync_all_short"
+        android:shortcutLongLabel="@string/shortcut_sync_all_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="app.lusk.virga"
+            android:targetClass="app.lusk.virga.widget.SyncAllShortcutActivity" />
+    </shortcut>
+
+    <!-- Shortcut 2: Add remote — opens MainActivity and deep-links to Add-Remote. -->
+    <shortcut
+        android:shortcutId="add_remote"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_add_remote"
+        android:shortcutShortLabel="@string/shortcut_add_remote_short"
+        android:shortcutLongLabel="@string/shortcut_add_remote_long">
+        <intent
+            android:action="app.lusk.virga.action.SHORTCUT_ADD_REMOTE"
+            android:targetPackage="app.lusk.virga"
+            android:targetClass="app.lusk.virga.MainActivity" />
+    </shortcut>
+
+</shortcuts>

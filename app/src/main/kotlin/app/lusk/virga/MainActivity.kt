@@ -55,8 +55,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun readDeepLink(intent: Intent?) {
+        // D7b: the "Add remote" static shortcut fires a dedicated action rather than
+        // carrying EXTRA_OPEN_ROUTE as a string extra. Static shortcut extras are not
+        // reliably delivered across all OEM launchers, so we use the action instead.
+        if (intent?.action == ACTION_SHORTCUT_ADD_REMOTE) {
+            pendingRoute = NotificationDeepLinks.ROUTE_ADD_REMOTE
+            pendingTaskId = -1L
+            return
+        }
         pendingRoute = intent?.getStringExtra(NotificationDeepLinks.EXTRA_OPEN_ROUTE)
         pendingTaskId = intent?.getLongExtra(NotificationDeepLinks.EXTRA_TASK_ID, -1L) ?: -1L
+    }
+
+    private companion object {
+        const val ACTION_SHORTCUT_ADD_REMOTE = "app.lusk.virga.action.SHORTCUT_ADD_REMOTE"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
