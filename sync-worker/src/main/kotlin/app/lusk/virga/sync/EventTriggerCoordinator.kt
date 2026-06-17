@@ -169,16 +169,19 @@ class EventTriggerCoordinator @Inject constructor(
                     }
                     if (enabled) {
                         networkCallback = registerWifiCallback(context) {
-                            val s = scope ?: return@registerWifiCallback
-                            s.launch(confinement) {
-                                debounceJob?.cancel()
-                                debounceJob = s.launch(confinement) {
-                                    runCatching {
-                                        delay(WIFI_DEBOUNCE_MS)
-                                        scheduler.syncAllEnabled()
-                                    }.onFailure { e ->
-                                        if (e is CancellationException) throw e
-                                        Log.w(TAG, "wifi-connect trigger failed", e)
+                            // Capture the volatile scope; a post-stop() null is a safe no-op
+                            // (positive `let` avoids a detekt-flagged labeled return).
+                            scope?.let { s ->
+                                s.launch(confinement) {
+                                    debounceJob?.cancel()
+                                    debounceJob = s.launch(confinement) {
+                                        runCatching {
+                                            delay(WIFI_DEBOUNCE_MS)
+                                            scheduler.syncAllEnabled()
+                                        }.onFailure { e ->
+                                            if (e is CancellationException) throw e
+                                            Log.w(TAG, "wifi-connect trigger failed", e)
+                                        }
                                     }
                                 }
                             }
@@ -217,16 +220,19 @@ class EventTriggerCoordinator @Inject constructor(
                     }
                     if (enabled) {
                         chargeReceiver = registerChargeReceiver(context) {
-                            val s = scope ?: return@registerChargeReceiver
-                            s.launch(confinement) {
-                                debounceJob?.cancel()
-                                debounceJob = s.launch(confinement) {
-                                    runCatching {
-                                        delay(CHARGE_DEBOUNCE_MS)
-                                        scheduler.syncAllEnabled()
-                                    }.onFailure { e ->
-                                        if (e is CancellationException) throw e
-                                        Log.w(TAG, "charge-connect trigger failed", e)
+                            // Capture the volatile scope; a post-stop() null is a safe no-op
+                            // (positive `let` avoids a detekt-flagged labeled return).
+                            scope?.let { s ->
+                                s.launch(confinement) {
+                                    debounceJob?.cancel()
+                                    debounceJob = s.launch(confinement) {
+                                        runCatching {
+                                            delay(CHARGE_DEBOUNCE_MS)
+                                            scheduler.syncAllEnabled()
+                                        }.onFailure { e ->
+                                            if (e is CancellationException) throw e
+                                            Log.w(TAG, "charge-connect trigger failed", e)
+                                        }
                                     }
                                 }
                             }
