@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  AppWidget provider metadata for TaskWidget (per-task widget).
+  minWidth/minHeight match a ~2×2 cell footprint to accommodate the task name,
+  status line, and button. updatePeriodMillis=0 means the system does not push
+  periodic updates; the widget updates itself via GlanceAppWidget.update() after
+  sync events or after the config activity binds a task.
+  targetCellWidth/targetCellHeight are used on Android 12+ for the widget
+  placement grid.
+  configure: the launcher starts TaskWidgetConfigActivity immediately after
+  placement so the user can choose which task this instance controls.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="110dp"
+    android:minHeight="100dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/glance_default_loading_layout"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:configure="app.lusk.virga.widget.TaskWidgetConfigActivity"
+    android:description="@string/widget_task_description"
+    android:label="@string/widget_task_label" />

@@ -59,6 +59,17 @@
     <string name="widget_back_up_now">Back up now</string>
     <string name="widget_description">Virga sync widget</string>
 
+    <!-- Per-task home-screen widget (D7c) -->
+    <string name="widget_task_label">Virga task</string>
+    <string name="widget_task_description">Shows a single sync task and lets you back it up with one tap</string>
+    <string name="widget_task_unconfigured">Pick a task when adding this widget</string>
+    <string name="widget_task_removed">Task was deleted</string>
+    <string name="widget_task_load_failed">Couldn\'t load task</string>
+    <string name="widget_task_back_up">Back up now</string>
+    <string name="widget_task_config_title">Pick a task for this widget</string>
+    <string name="widget_task_config_empty">No sync tasks configured yet</string>
+    <string name="widget_task_config_dismiss">Dismiss</string>
+
     <!-- Quick Settings tile (Phase 3 WS3.6) -->
     <string name="tile_label">Virga sync</string>
     <string name="tile_subtitle">Back up now</string>

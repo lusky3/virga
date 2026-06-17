@@ -13,3 +13,10 @@
 ignore:
   - "app/src/main/kotlin/app/lusk/virga/widget/SyncAllShortcutActivity.kt"
   - "app/src/main/kotlin/app/lusk/virga/widget/SyncTileService.kt"
+  # D7c per-task widget: Glance GlanceAppWidget + AppWidget config activity.
+  # Their pure logic (resolveTaskWidgetContent/formatTaskStatusLine) and the
+  # TaskWidgetConfigViewModel ARE unit-tested; the rest is Glance runtime + the
+  # APPWIDGET_CONFIGURE activity lifecycle + a Compose screen, none reachable by
+  # unit tests without the full Hilt graph (same limitation as above).
+  - "app/src/main/kotlin/app/lusk/virga/widget/TaskWidget.kt"
+  - "app/src/main/kotlin/app/lusk/virga/widget/TaskWidgetConfigActivity.kt"

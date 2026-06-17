@@ -210,6 +210,40 @@
                 android:resource="@xml/sync_widget_info" />
         </receiver>
 
+        <!-- D7c: per-task Glance widget. Each placed instance is bound to one
+             sync task via the configuration activity below.
+             SEC: exported is required by the AppWidget framework — the launcher
+             must be able to send APPWIDGET_UPDATE. The receiver only renders the
+             widget UI for the bound task; no privileged operations. -->
+        <receiver
+            android:name=".widget.TaskWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_task_label"
+            tools:ignore="ExportedReceiver">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/task_widget_info" />
+        </receiver>
+
+        <!-- D7c: per-task widget configuration activity.
+             SEC: exported is required because the launcher starts this activity
+             during widget placement (APPWIDGET_CONFIGURE). It honors no
+             caller-supplied params beyond the launcher-issued appWidgetId and
+             only reads the user's own task list to bind a taskId — no privileged
+             surface. -->
+        <activity
+            android:name=".widget.TaskWidgetConfigActivity"
+            android:exported="true"
+            android:label="@string/widget_task_label"
+            tools:ignore="ExportedActivity">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
         <!-- Phase 3 WS3.6: Quick Settings tile.
              SEC: exported is required by the QS framework — the system binds
              this service. The android:permission attribute restricts callers to
