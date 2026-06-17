@@ -2270,4 +2270,141 @@ class RemotesViewModelTest {
             assertThat(vm.uiState.value.reauthInProgress).doesNotContain("gdrive")
             collector.cancel()
         }
+
+    // --- saveClientSecret / clearClientSecret (A6) --------------------------------
+
+    @Test
+    fun `saveClientSecret delegates to keyStore setClientSecret with correct args`() =
+        runTest(mainDispatcher.dispatcher) {
+            val vm = viewModel()
+
+            vm.saveClientSecret(OAuthProviders.GoogleDrive.id, "test-secret")
+            advanceUntilIdle()
+
+            coVerify { keyStore.setClientSecret(OAuthProviders.GoogleDrive.id, "test-secret") }
+        }
+
+    @Test
+    fun `saveClientSecret passes the value verbatim to keyStore without pre-trimming`() =
+        runTest(mainDispatcher.dispatcher) {
+            // Trimming is the store's responsibility (setClientSecret strips whitespace);
+            // the VM must forward the raw value so the store's own semantics apply.
+            val vm = viewModel()
+
+            vm.saveClientSecret(OAuthProviders.GoogleDrive.id, "  padded-secret  ")
+            advanceUntilIdle()
+
+            coVerify { keyStore.setClientSecret(OAuthProviders.GoogleDrive.id, "  padded-secret  ") }
+        }
+
+    @Test
+    fun `saveClientSecret with blank value forwards blank to keyStore to trigger removal`() =
+        runTest(mainDispatcher.dispatcher) {
+            val vm = viewModel()
+
+            vm.saveClientSecret(OAuthProviders.GoogleDrive.id, "   ")
+            advanceUntilIdle()
+
+            coVerify { keyStore.setClientSecret(OAuthProviders.GoogleDrive.id, "   ") }
+        }
+
+    @Test
+    fun `clearClientSecret delegates to keyStore clearClientSecret with correct provider id`() =
+        runTest(mainDispatcher.dispatcher) {
+            val vm = viewModel()
+
+            vm.clearClientSecret(OAuthProviders.GoogleDrive.id)
+            advanceUntilIdle()
+
+            coVerify { keyStore.clearClientSecret(OAuthProviders.GoogleDrive.id) }
+        }
+
+    @Test
+    fun `clearClientSecret does not call setClientSecret`() =
+        runTest(mainDispatcher.dispatcher) {
+            val vm = viewModel()
+
+            vm.clearClientSecret(OAuthProviders.GoogleDrive.id)
+            advanceUntilIdle()
+
+            coVerify(exactly = 0) { keyStore.setClientSecret(any(), any()) }
+        }
+
+    @Test
+    fun `saveClientSecret and clearClientSecret target independent provider ids`() =
+        runTest(mainDispatcher.dispatcher) {
+            val vm = viewModel()
+
+            vm.saveClientSecret(OAuthProviders.GoogleDrive.id, "test-secret")
+            vm.clearClientSecret(OAuthProviders.OneDrive.id)
+            advanceUntilIdle()
+
+            coVerify { keyStore.setClientSecret(OAuthProviders.GoogleDrive.id, "test-secret") }
+            coVerify { keyStore.clearClientSecret(OAuthProviders.OneDrive.id) }
+            // setClientSecret must not have been called for the onedrive provider.
+            coVerify(exactly = 0) { keyStore.setClientSecret(OAuthProviders.OneDrive.id, any()) }
+        }
+
+    // --- reauthRemote via daemon flow (BYO-Google-with-secret, H1) ----------------
+
+    @Test
+    fun `reauthRemote with BYO Google secret routes to daemon, clears needsReauth and reauthInProgress on success`() =
+        runTest(mainDispatcher.dispatcher) {
+            remotesFlow.value = listOf(Remote(name = "gdrive", type = "drive", needsReauth = true))
+            // BYO client id + secret — shouldUseDaemonForByoGoogle returns true.
+            coEvery { keyStore.clientId(OAuthProviders.GoogleDrive.id) } returns "byo-client-id"
+            coEvery { keyStore.clientSecret(OAuthProviders.GoogleDrive.id) } returns "byo-secret"
+            val states = MutableStateFlow<DaemonOAuthOrchestrator.State>(
+                DaemonOAuthOrchestrator.State.Complete("gdrive"),
+            )
+            executeDaemonBlock()
+            coEvery { repository.testConnectivity("gdrive") } returns Result.success(Unit)
+            coEvery { repository.refresh() } returns Result.success(Unit)
+            every {
+                context.getString(R.string.remotes_msg_reauth_success, "gdrive")
+            } returns "Re-authenticated \"gdrive\" successfully."
+            val vm = viewModel()
+            vm.daemonOAuthOrchestratorFactory = { scriptedOrchestrator(states) }
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            vm.reauthRemote("gdrive")
+            advanceUntilIdle()
+
+            // On success: setNeedsReauth(false) must be called.
+            coVerify { repository.setNeedsReauth("gdrive", false) }
+            // The pre-existing remote must NOT be deleted.
+            coVerify(exactly = 0) { repository.deleteRemote(any()) }
+            // reauthInProgress must be cleared.
+            assertThat(vm.uiState.value.reauthInProgress).doesNotContain("gdrive")
+            assertThat(vm.uiState.value.message).contains("Re-authenticated")
+            collector.cancel()
+        }
+
+    @Test
+    fun `reauthRemote with BYO Google secret does NOT delete remote on daemon failure`() =
+        runTest(mainDispatcher.dispatcher) {
+            remotesFlow.value = listOf(Remote(name = "gdrive", type = "drive", needsReauth = true))
+            coEvery { keyStore.clientId(OAuthProviders.GoogleDrive.id) } returns "byo-client-id"
+            coEvery { keyStore.clientSecret(OAuthProviders.GoogleDrive.id) } returns "byo-secret"
+            val states = MutableStateFlow<DaemonOAuthOrchestrator.State>(
+                DaemonOAuthOrchestrator.State.Failed("token rejected"),
+            )
+            executeDaemonBlock()
+            val vm = viewModel()
+            vm.daemonOAuthOrchestratorFactory = { scriptedOrchestrator(states) }
+            val collector = backgroundScope.launch { vm.uiState.collect {} }
+            advanceUntilIdle()
+
+            vm.reauthRemote("gdrive")
+            advanceUntilIdle()
+
+            // Pre-existing remote must NOT be deleted on a failed re-auth daemon flow.
+            coVerify(exactly = 0) { repository.deleteRemote(any()) }
+            // setNeedsReauth(false) must NOT be called — badge stays lit.
+            coVerify(exactly = 0) { repository.setNeedsReauth("gdrive", false) }
+            // reauthInProgress must be cleared so the guard unblocks future re-auth.
+            assertThat(vm.uiState.value.reauthInProgress).doesNotContain("gdrive")
+            collector.cancel()
+        }
 }

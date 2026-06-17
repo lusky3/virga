@@ -39,12 +39,24 @@ internal class SystemOAuthFlow(
     private val onLaunchUrl: (String) -> Unit,
     /** Called when a re-auth flow completes. [success] is true on token exchange OK. */
     private val onReauthComplete: (remoteName: String, success: Boolean) -> Unit = { _, _ -> },
+    /**
+     * Called when a BYO-Google-with-secret flow is detected; hands off to the
+     * daemon OAuth path instead of Custom Tabs. See [ByoGoogleDaemonCallback].
+     */
+    private val onDaemonOAuth: ByoGoogleDaemonCallback = { _, _, _, _, _ -> },
 ) {
 
     /**
      * Starts the OAuth flow for [provider]; the authorize URL surfaces via [onLaunchUrl].
      * Set [isReauth] = true when re-authenticating an existing remote so the result
      * handler clears needsReauth on success instead of reporting it as a new addition.
+     *
+     * When the user has set BOTH a BYO Google client ID and a BYO client secret, the flow
+     * is routed through [onDaemonOAuth] instead of the PKCE Custom-Tabs path, because a
+     * BYO Google client's reverse-domain redirect can't be registered in the manifest at
+     * runtime (UI-M1). With a secret, the rclone daemon flow can complete the authorization
+     * without the app redirect scheme. The unsupported-BYO message fires only when the
+     * override client ID is present but NO secret is provided (PKCE BYO-Google can't work).
      */
     suspend fun start(provider: OAuthProvider, remoteName: String, isReauth: Boolean = false) {
         // UI-M2 belt-and-suspenders: a blank remote name would make this round-trip
@@ -63,6 +75,12 @@ internal class SystemOAuthFlow(
             transient.value = transient.value.copy(
                 message = context.getString(R.string.remotes_msg_oauth_not_configured, provider.displayName),
             )
+            return
+        }
+        // BYO-Google-with-secret: route to daemon flow so the app redirect scheme is not needed.
+        val byoSecret = if (override != null) oauthKeyStore.clientSecret(provider.id) else null
+        if (shouldUseDaemonForByoGoogle(provider.id, override, byoSecret)) {
+            onDaemonOAuth(provider.type, remoteName, override, byoSecret, isReauth)
             return
         }
         // Resolve the redirect URI (recomputed for a BYO Google client) and reject the
@@ -93,7 +111,8 @@ internal class SystemOAuthFlow(
      * BUILT-IN client ID — so the OS routes the redirect to no activity and the flow
      * dead-ends after sign-in. The manifest scheme cannot be registered at runtime, so
      * returns null (and sets the user-facing message) when the BYO Google redirect differs
-     * from the built-in one.
+     * from the built-in one. This branch is only reached when NO BYO secret is set (i.e.
+     * the daemon-routing guard in [start] has already returned for the with-secret case).
      */
     private fun resolveRedirectUri(provider: OAuthProvider, clientId: String, override: String?): String? {
         val isByoGoogle = provider.id == OAuthProviders.GoogleDrive.id && override != null
@@ -230,3 +249,36 @@ internal class SystemOAuthFlow(
         }
     }
 }
+
+/**
+ * Callback invoked when a BYO-Google-with-secret flow must be handed off to the
+ * rclone daemon path instead of Custom Tabs.
+ *
+ * Parameters: `(type, name, clientId, clientSecret, isReauth)`.
+ * [isReauth] mirrors [SystemOAuthFlow.start]'s own flag so the daemon path can
+ * treat the flow as a token-refresh rather than a new-remote creation.
+ */
+internal typealias ByoGoogleDaemonCallback =
+    (type: String, name: String, clientId: String?, clientSecret: String?, isReauth: Boolean) -> Unit
+
+/**
+ * True when the OAuth flow for a Google Drive provider should be routed through the
+ * rclone daemon instead of the Custom-Tabs PKCE path.
+ *
+ * Routing condition: the provider is Google Drive, the user has set a BYO client ID
+ * ([override] is non-null), AND a BYO client secret ([secret] is non-null/blank).
+ * With both credentials present the daemon flow can complete without the app-registered
+ * redirect scheme, making BYO-Google viable. Without a secret the PKCE path would be
+ * attempted — but its redirect scheme can't be registered at runtime (UI-M1), so the
+ * caller keeps the existing unsupported message for that sub-case.
+ *
+ * Extracted as a pure top-level function so it can be unit-tested without instantiating
+ * the full flow.
+ */
+internal fun shouldUseDaemonForByoGoogle(
+    providerId: String,
+    override: String?,
+    secret: String?,
+): Boolean = providerId == OAuthProviders.GoogleDrive.id &&
+    !override.isNullOrBlank() &&
+    !secret.isNullOrBlank()

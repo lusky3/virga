@@ -107,6 +107,7 @@ fun AddRemoteScreen(
             onCancelDaemonOAuth = viewModel::cancelDaemonOAuth,
             onSaveClientId = viewModel::saveClientId,
             onClearClientId = viewModel::clearClientId,
+            onSaveClientSecret = viewModel::saveClientSecret,
         )
     }
 }

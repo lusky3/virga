@@ -105,6 +105,7 @@ internal fun AddRemoteDialog(
     onCancelDaemonOAuth: () -> Unit = {},
     onSaveClientId: (providerId: String, clientId: String) -> Unit,
     onClearClientId: (providerId: String) -> Unit,
+    onSaveClientSecret: (providerId: String, secret: String) -> Unit = { _, _ -> },
 ) {
     LaunchedEffect(Unit) { onEnsureProviders() }
 
@@ -462,6 +463,7 @@ internal fun AddRemoteDialog(
                         onCancelDaemonOAuth = onCancelDaemonOAuth,
                         onSaveClientId = onSaveClientId,
                         onClearClientId = onClearClientId,
+                        onSaveClientSecret = onSaveClientSecret,
                     )
                 }
             }

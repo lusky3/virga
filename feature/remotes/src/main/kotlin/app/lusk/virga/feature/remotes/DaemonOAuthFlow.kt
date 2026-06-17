@@ -31,6 +31,12 @@ internal class DaemonOAuthFlow(
     private val transient: MutableStateFlow<RemotesTransientState>,
     private val strings: Strings,
     private val onLaunchUrl: (String) -> Unit,
+    /**
+     * Called when a daemon OAuth flow that was started with [isReauth]=true
+     * completes (success or failure). Mirrors [SystemOAuthFlow]'s onReauthComplete
+     * so [RemotesViewModel.clearReauthInProgress] is invoked on both paths.
+     */
+    private val onReauthComplete: (remoteName: String, success: Boolean) -> Unit = { _, _ -> },
 ) {
 
     /** String resolution stays with the VM, which owns the Android Context. */
@@ -38,6 +44,7 @@ internal class DaemonOAuthFlow(
         fun connectivityWarning(remoteName: String): String
         fun oauthTimedOut(): String
         fun addedRemote(remoteName: String): String
+        fun reauthSuccess(remoteName: String): String
         fun enterNameFirst(): String
     }
 
@@ -56,12 +63,20 @@ internal class DaemonOAuthFlow(
         DaemonOAuthOrchestrator(apiClient, dispatchers, timeoutMs = DAEMON_OAUTH_TIMEOUT_MS)
     }
 
-    /** Starts daemon-mediated OAuth for a non-bundled provider. The auth URL surfaces via [onLaunchUrl]. */
+    /**
+     * Starts daemon-mediated OAuth for [type]. The auth URL surfaces via [onLaunchUrl].
+     *
+     * Set [isReauth] = true when re-authenticating an existing remote so the terminal
+     * handlers clear needsReauth and signal [onReauthComplete] instead of treating the
+     * flow as a new-remote creation. On non-Complete terminals with [isReauth]=true the
+     * pre-existing remote is NOT deleted (it already existed before this flow ran).
+     */
     fun start(
         type: String,
         name: String,
         clientId: String? = null,
         clientSecret: String? = null,
+        isReauth: Boolean = false,
     ) {
         // UI-M2 belt-and-suspenders: a blank name would have the daemon write a
         // nameless remote and the flow dead-end. Bail with a clear message before
@@ -128,15 +143,22 @@ internal class DaemonOAuthFlow(
                 // now tests the PERSISTED config, not the daemon's working copy.
                 when (terminal) {
                     is DaemonOAuthOrchestrator.State.Complete -> {
-                        pendingRemoteResult.created(terminal.remoteName)
                         val connResult = repository.testConnectivity(terminal.remoteName)
                         runCatching { repository.refresh() }
+                        if (isReauth) {
+                            runCatching { repository.setNeedsReauth(terminal.remoteName, false) }
+                            onReauthComplete(terminal.remoteName, true)
+                        } else {
+                            pendingRemoteResult.created(terminal.remoteName)
+                        }
                         transient.update {
                             it.copy(
                                 oauthInProgress = false,
                                 daemonOAuthTokenPrompt = null,
                                 daemonOAuthFieldPrompt = null,
-                                message = if (connResult.isFailure) {
+                                message = if (isReauth) {
+                                    strings.reauthSuccess(terminal.remoteName)
+                                } else if (connResult.isFailure) {
                                     strings.connectivityWarning(terminal.remoteName)
                                 } else {
                                     strings.addedRemote(terminal.remoteName)
@@ -145,7 +167,10 @@ internal class DaemonOAuthFlow(
                         }
                     }
                     is DaemonOAuthOrchestrator.State.Failed -> {
-                        deletePhantomRemote(name)
+                        // Only delete a phantom for new-remote flows; re-auth targets a
+                        // pre-existing remote that must not be removed on failure.
+                        if (!isReauth) deletePhantomRemote(name)
+                        if (isReauth) onReauthComplete(name.trim(), false)
                         transient.update {
                             it.copy(
                                 oauthInProgress = false,
@@ -156,7 +181,8 @@ internal class DaemonOAuthFlow(
                         }
                     }
                     DaemonOAuthOrchestrator.State.TimedOut -> {
-                        deletePhantomRemote(name)
+                        if (!isReauth) deletePhantomRemote(name)
+                        if (isReauth) onReauthComplete(name.trim(), false)
                         transient.update {
                             it.copy(
                                 oauthInProgress = false,
@@ -167,7 +193,8 @@ internal class DaemonOAuthFlow(
                         }
                     }
                     DaemonOAuthOrchestrator.State.Cancelled -> {
-                        deletePhantomRemote(name)
+                        if (!isReauth) deletePhantomRemote(name)
+                        if (isReauth) onReauthComplete(name.trim(), false)
                         transient.update {
                             it.copy(
                                 oauthInProgress = false,

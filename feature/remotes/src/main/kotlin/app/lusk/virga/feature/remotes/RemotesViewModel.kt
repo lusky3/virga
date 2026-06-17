@@ -716,6 +716,15 @@ class RemotesViewModel @Inject constructor(
         viewModelScope.launch { oauthKeyStore.clearClientId(providerId) }
     }
 
+    /** Saves (or clears, when blank) the user's own client secret for [providerId]. */
+    fun saveClientSecret(providerId: String, secret: String) {
+        viewModelScope.launch { oauthKeyStore.setClientSecret(providerId, secret) }
+    }
+
+    fun clearClientSecret(providerId: String) {
+        viewModelScope.launch { oauthKeyStore.clearClientSecret(providerId) }
+    }
+
     // --- OAuth ----------------------------------------------------------
 
     /** Daemon-mediated OAuth flow for non-bundled providers — see [DaemonOAuthFlow]. */
@@ -733,10 +742,13 @@ class RemotesViewModel @Inject constructor(
                 context.getString(R.string.remotes_msg_oauth_timed_out)
             override fun addedRemote(remoteName: String): String =
                 context.getString(R.string.remotes_msg_added_remote_named, remoteName)
+            override fun reauthSuccess(remoteName: String): String =
+                context.getString(R.string.remotes_msg_reauth_success, remoteName)
             override fun enterNameFirst(): String =
                 context.getString(R.string.remotes_msg_enter_name_first)
         },
         onLaunchUrl = { _launchUrl.value = it },
+        onReauthComplete = { name, _ -> clearReauthInProgress(name) },
     )
 
     /** Bundled (Custom Tabs + PKCE) OAuth flow — see [SystemOAuthFlow]. */
@@ -751,6 +763,11 @@ class RemotesViewModel @Inject constructor(
         transient = transient,
         onLaunchUrl = { _launchUrl.value = it },
         onReauthComplete = { name, _ -> clearReauthInProgress(name) },
+        // BYO-Google-with-secret: hand off to the daemon flow so the app redirect isn't needed.
+        // isReauth is threaded through so re-auth flows don't delete pre-existing remotes.
+        onDaemonOAuth = { type, name, clientId, clientSecret, isReauth ->
+            daemonOAuth.start(type, name, clientId, clientSecret, isReauth)
+        },
     )
 
     /** Test seam — see [DaemonOAuthFlow.orchestratorFactory]. */

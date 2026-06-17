@@ -30,10 +30,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.common.model.RemoteOption
 import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import app.lusk.virga.core.rclone.oauth.OAuthProvider
+import app.lusk.virga.core.rclone.oauth.OAuthProviders
 
 /**
  * The credential-form step of [AddRemoteDialog]: typed schema fields (or the
@@ -89,6 +91,7 @@ internal fun CredentialFormSection(
     onCancelDaemonOAuth: () -> Unit,
     onSaveClientId: (providerId: String, clientId: String) -> Unit,
     onClearClientId: (providerId: String) -> Unit,
+    onSaveClientSecret: (providerId: String, secret: String) -> Unit = { _, _ -> },
 ) {
     var typeMenuExpanded by remember { mutableStateOf(false) }
 
@@ -131,6 +134,7 @@ internal fun CredentialFormSection(
                 customClientIds = customClientIds,
                 onSaveClientId = onSaveClientId,
                 onClearClientId = onClearClientId,
+                onSaveClientSecret = onSaveClientSecret,
             )
 
             HorizontalDivider()
@@ -305,7 +309,9 @@ internal fun CredentialFormSection(
 /**
  * Expandable "bring your own OAuth keys" section. The built-in client IDs are
  * shared across all installs and share one app's rate limits; power users paste
- * their own client ID here (Virga uses PKCE, so no client secret is needed).
+ * their own client ID here (Virga uses PKCE for most providers, so no client
+ * secret is needed for those). For Google Drive, a client secret enables the
+ * rclone daemon flow, bypassing the manifest redirect constraint (UI-M1).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -314,11 +320,15 @@ private fun ByoKeysSection(
     customClientIds: Map<String, String>,
     onSaveClientId: (providerId: String, clientId: String) -> Unit,
     onClearClientId: (providerId: String) -> Unit,
+    onSaveClientSecret: (providerId: String, secret: String) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     var selectedId by remember { mutableStateOf(providers.firstOrNull()?.id.orEmpty()) }
     // Field text tracks the selected provider's stored value; editing overrides it.
     var clientIdText by remember(selectedId) { mutableStateOf(customClientIds[selectedId].orEmpty()) }
+    // Secret is sensitive: kept in plain remember (never saved to state Bundle).
+    var clientSecretText by remember(selectedId) { mutableStateOf("") }
+    val showSecretField = selectedId == OAuthProviders.GoogleDrive.id
 
     TextButton(onClick = { expanded = !expanded }) {
         Text(stringResource(R.string.remotes_byo_toggle))
@@ -350,9 +360,26 @@ private fun ByoKeysSection(
                 ),
                 modifier = Modifier.fillMaxWidth(),
             )
+            if (showSecretField) {
+                OutlinedTextField(
+                    value = clientSecretText,
+                    onValueChange = { clientSecretText = it },
+                    label = { Text(stringResource(R.string.remotes_byo_client_secret)) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.None,
+                        autoCorrectEnabled = false,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
                 TextButton(
-                    onClick = { onSaveClientId(selectedId, clientIdText) },
+                    onClick = {
+                        onSaveClientId(selectedId, clientIdText)
+                        if (showSecretField) onSaveClientSecret(selectedId, clientSecretText)
+                    },
                     enabled = selectedId.isNotBlank(),
                 ) { Text(stringResource(R.string.remotes_byo_save)) }
                 if (selectedId in customClientIds) {
