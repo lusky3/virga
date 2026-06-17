@@ -5,10 +5,10 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
 import androidx.core.content.IntentCompat
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.lusk.virga.core.designsystem.theme.VirgaTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -21,6 +21,8 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class ShareReceiverActivity : AppCompatActivity() {
 
+    private val viewModel: ShareReceiverViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -31,12 +33,13 @@ class ShareReceiverActivity : AppCompatActivity() {
             return
         }
 
+        // Seed URIs before setContent so name resolution is dispatched to IO
+        // exactly once and never runs as a composition side effect.
+        viewModel.setUris(uris)
+
         setContent {
             VirgaTheme {
-                val viewModel: ShareReceiverViewModel = hiltViewModel()
-                viewModel.setUris(uris)
                 val state by viewModel.uiState.collectAsStateWithLifecycle()
-
                 ShareReceiverScreen(
                     state = state,
                     callbacks = ShareReceiverCallbacks(

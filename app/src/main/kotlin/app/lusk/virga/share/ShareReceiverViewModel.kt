@@ -46,21 +46,23 @@ class ShareReceiverViewModel @Inject constructor(
     private val dispatchers: DispatcherProvider,
 ) : ViewModel() {
 
-    private val _extra = MutableStateFlow<List<Uri>>(emptyList())
+    // Resolved once off-main in setUris(); never re-derived from URIs in combine.
+    private val _fileNames = MutableStateFlow<List<String>>(emptyList())
+
+    // Raw URIs kept separately for the upload path.
+    private val _uris = MutableStateFlow<List<Uri>>(emptyList())
+
     private val _selectedRemote = MutableStateFlow<Remote?>(null)
     private val _destPath = MutableStateFlow("")
     private val _uploadStatus = MutableStateFlow<UploadStatus>(UploadStatus.Idle)
 
     val uiState: StateFlow<ShareReceiverUiState> = combine(
-        _extra,
+        _fileNames,
         remoteRepository.remotes,
         _selectedRemote,
         _destPath,
         _uploadStatus,
-    ) { uris, remotes, selected, dest, status ->
-        val names = uris.map { uri ->
-            sanitizeSafName(safDisplayName(context, uri))
-        }
+    ) { names, remotes, selected, dest, status ->
         ShareReceiverUiState(
             fileNames = names,
             remotes = remotes,
@@ -70,8 +72,19 @@ class ShareReceiverViewModel @Inject constructor(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ShareReceiverUiState())
 
+    /**
+     * Seeds the URIs to upload. Resolves display names off-main (once) and pushes
+     * them into [_fileNames] so the combine never runs ContentResolver queries.
+     * Safe to call multiple times — subsequent calls replace the previous batch.
+     */
     fun setUris(uris: List<Uri>) {
-        _extra.value = uris
+        _uris.value = uris
+        viewModelScope.launch(dispatchers.io) {
+            val names = uris.map { uri ->
+                sanitizeSafName(safDisplayName(context, uri))
+            }
+            _fileNames.value = names
+        }
     }
 
     fun selectRemote(remote: Remote) {
@@ -83,7 +96,7 @@ class ShareReceiverViewModel @Inject constructor(
     }
 
     fun upload() {
-        val uris = _extra.value
+        val uris = _uris.value
         val remoteName = uiState.value.selectedRemote?.name ?: return
         val destPath = _destPath.value.trim()
         _uploadStatus.value = UploadStatus.Uploading
@@ -101,11 +114,14 @@ class ShareReceiverViewModel @Inject constructor(
         val stagingDir = File(context.cacheDir, "shared").also { it.mkdirs() }
         var succeeded = 0
         var failed = 0
+        val usedNames = mutableSetOf<String>()
         for (uri in uris) {
             try {
                 val staged = withContext(dispatchers.io) { stageUri(context, uri, stagingDir) }
                 if (staged == null) { failed++; continue }
-                val remotePath = buildRemotePath(destPath, staged.name)
+                val uniqueName = disambiguate(staged.name, usedNames)
+                usedNames += uniqueName
+                val remotePath = buildRemotePath(destPath, uniqueName)
                 withContext(dispatchers.io) {
                     fileBrowserRepository.uploadFromLocal(staged, remoteName, remotePath)
                 }
@@ -123,5 +139,22 @@ class ShareReceiverViewModel @Inject constructor(
     private fun buildRemotePath(destPath: String, fileName: String): String {
         val base = destPath.trim().trimEnd('/')
         return if (base.isEmpty()) fileName else "$base/$fileName"
+    }
+}
+
+/**
+ * Returns [name] if it is not in [used], otherwise appends " (N)" before the
+ * extension (e.g. `photo (2).jpg`, `photo (3).jpg`, …) until a free slot is found.
+ */
+internal fun disambiguate(name: String, used: Set<String>): String {
+    if (name !in used) return name
+    val dot = name.lastIndexOf('.')
+    val base = if (dot >= 0) name.substring(0, dot) else name
+    val ext = if (dot >= 0) name.substring(dot) else ""
+    var n = 2
+    while (true) {
+        val candidate = "$base ($n)$ext"
+        if (candidate !in used) return candidate
+        n++
     }
 }
