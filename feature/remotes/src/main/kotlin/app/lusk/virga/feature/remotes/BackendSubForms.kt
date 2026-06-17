@@ -18,11 +18,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import app.lusk.virga.core.designsystem.theme.VirgaSpacing
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // ── rclone option keys ──────────────────────────────────────────────────────
 private const val KEY_PROVIDER = "provider"
@@ -163,7 +167,18 @@ private data class SftpSubFormState(
 @Composable
 private fun SftpSubForm(values: MutableMap<String, String>) {
     val context = LocalContext.current
-    var keyStatus by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    // Reflect a pre-existing key (edit mode) so the user isn't misled into thinking
+    // the stored key was cleared. Derived once from the initial values map.
+    var keyStatus by remember {
+        mutableStateOf(
+            if (values[KEY_PEM]?.isNotEmpty() == true) {
+                context.getString(R.string.remotes_sftp_key_already_configured)
+            } else {
+                ""
+            },
+        )
+    }
     var keyError by remember { mutableStateOf<String?>(null) }
 
     val keyLauncher = rememberLauncherForActivityResult(
@@ -172,24 +187,31 @@ private fun SftpSubForm(values: MutableMap<String, String>) {
         // Guard with a positive `if` (not a labeled early-return) — detekt's
         // LabeledExpression rule flags `return@rememberLauncherForActivityResult`.
         if (uri != null) {
-            val result = runCatching {
-                context.contentResolver.openInputStream(uri)
-                    ?.bufferedReader(Charsets.UTF_8)
-                    ?.use { it.readText() }
-                    ?.trim()
-                    ?: error("null stream")
+            // Read off the main thread — a large accidental pick must not ANR the UI.
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching {
+                        context.contentResolver.openInputStream(uri)
+                            ?.bufferedReader(Charsets.UTF_8)
+                            ?.use { it.readText() }
+                            ?.trim()
+                            ?: error("null stream")
+                    }
+                }
+                result.fold(
+                    onSuccess = { pem ->
+                        values[KEY_PEM] = pem
+                        keyError = null
+                        keyStatus = context.getString(R.string.remotes_sftp_key_loaded, pem.length)
+                    },
+                    onFailure = {
+                        // Drop any prior key so a failed (re-)import never submits a stale one.
+                        values.remove(KEY_PEM)
+                        keyError = context.getString(R.string.remotes_sftp_key_error)
+                        keyStatus = ""
+                    },
+                )
             }
-            result.fold(
-                onSuccess = { pem ->
-                    values[KEY_PEM] = pem
-                    keyError = null
-                    keyStatus = context.getString(R.string.remotes_sftp_key_loaded, pem.length)
-                },
-                onFailure = {
-                    keyError = context.getString(R.string.remotes_sftp_key_error)
-                    keyStatus = ""
-                },
-            )
         }
     }
 

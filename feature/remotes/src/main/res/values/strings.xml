@@ -214,6 +214,7 @@
     <string name="remotes_sftp_import_key">Import private key from file</string>
     <string name="remotes_sftp_key_loaded">Key loaded (%1$d characters)</string>
     <string name="remotes_sftp_key_error">Couldn\'t read key file. Check the file and try again.</string>
+    <string name="remotes_sftp_key_already_configured">A private key is already configured. Import a file to replace it.</string>
     <!-- WebDAV sub-form -->
     <string name="remotes_webdav_vendor_label">WebDAV vendor</string>
     <string name="remotes_webdav_vendor_prompt">Choose a vendor…</string>
