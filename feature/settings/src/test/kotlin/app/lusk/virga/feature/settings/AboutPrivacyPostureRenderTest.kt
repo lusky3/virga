@@ -100,4 +100,34 @@ class AboutPrivacyPostureRenderTest {
             .assertIsDisplayed()
         composeRule.onRoot().captureRoboImage()
     }
+
+    @Test
+    fun aboutScreen_privacySection_showsNoAdsLine() {
+        setAboutScreen()
+        composeRule
+            .onNodeWithText("— No ads or trackers.")
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun aboutScreen_privacySection_showsCrashOptInLine() {
+        setAboutScreen()
+        composeRule
+            .onNodeWithText(
+                "— Crash reporting is opt-in and off by default. The FOSS build ships" +
+                    " without any crash-reporting backend.",
+            )
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun aboutScreen_privacySection_showsOpenSourceLine() {
+        setAboutScreen()
+        composeRule
+            .onNodeWithText("— Source is public and auditable at github.com/lusky3/virga.")
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
 }
