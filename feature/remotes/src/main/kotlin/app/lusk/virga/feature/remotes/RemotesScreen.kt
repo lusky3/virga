@@ -444,6 +444,7 @@ fun RemotesScreen(
             onSaveClientId = viewModel::saveClientId,
             onClearClientId = viewModel::clearClientId,
             onSaveClientSecret = viewModel::saveClientSecret,
+            onClearClientSecret = viewModel::clearClientSecret,
         )
     }
 }

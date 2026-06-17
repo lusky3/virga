@@ -92,6 +92,7 @@ internal fun CredentialFormSection(
     onSaveClientId: (providerId: String, clientId: String) -> Unit,
     onClearClientId: (providerId: String) -> Unit,
     onSaveClientSecret: (providerId: String, secret: String) -> Unit = { _, _ -> },
+    onClearClientSecret: (providerId: String) -> Unit = { _ -> },
 ) {
     var typeMenuExpanded by remember { mutableStateOf(false) }
 
@@ -135,6 +136,7 @@ internal fun CredentialFormSection(
                 onSaveClientId = onSaveClientId,
                 onClearClientId = onClearClientId,
                 onSaveClientSecret = onSaveClientSecret,
+                onClearClientSecret = onClearClientSecret,
             )
 
             HorizontalDivider()
@@ -321,6 +323,7 @@ private fun ByoKeysSection(
     onSaveClientId: (providerId: String, clientId: String) -> Unit,
     onClearClientId: (providerId: String) -> Unit,
     onSaveClientSecret: (providerId: String, secret: String) -> Unit,
+    onClearClientSecret: (providerId: String) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     var selectedId by remember { mutableStateOf(providers.firstOrNull()?.id.orEmpty()) }
@@ -378,14 +381,26 @@ private fun ByoKeysSection(
                 TextButton(
                     onClick = {
                         onSaveClientId(selectedId, clientIdText)
-                        if (showSecretField) onSaveClientSecret(selectedId, clientSecretText)
+                        // Only forward a non-blank secret: a blank field means "leave the stored
+                        // secret alone" (setClientSecret treats blank as removal), so saving after
+                        // editing only the client ID must not silently wipe the secret.
+                        if (showSecretField && clientSecretText.isNotBlank()) {
+                            onSaveClientSecret(selectedId, clientSecretText)
+                        }
                     },
                     enabled = selectedId.isNotBlank(),
                 ) { Text(stringResource(R.string.remotes_byo_save)) }
                 if (selectedId in customClientIds) {
-                    TextButton(onClick = { onClearClientId(selectedId); clientIdText = "" }) {
-                        Text(stringResource(R.string.remotes_byo_clear))
-                    }
+                    TextButton(
+                        onClick = {
+                            onClearClientId(selectedId)
+                            clientIdText = ""
+                            // Clear the paired secret too — a stale secret left behind would
+                            // wrongly pair with a later different client ID for this provider.
+                            if (showSecretField) onClearClientSecret(selectedId)
+                            clientSecretText = ""
+                        },
+                    ) { Text(stringResource(R.string.remotes_byo_clear)) }
                 }
             }
         }
