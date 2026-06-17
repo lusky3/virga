@@ -104,7 +104,7 @@ open class SyncWorker @AssistedInject constructor(
         if (task.sourcePath.startsWith("content://") && task.direction == SyncDirection.BISYNC) {
             val msg = "Two-way sync isn't supported for this folder on this device."
             val earlyStartMs = System.currentTimeMillis()
-            finishFailed(historyRepository.startRun(taskId), null, msg, direction = task.direction, runStartMs = earlyStartMs, remoteName = task.remoteName, metered = false)
+            finishFailed(historyRepository.startRun(taskId), null, msg, direction = task.direction, runStartMs = earlyStartMs, remoteName = task.remoteName, metered = metered)
             runCatching {
                 NotificationManagerCompat.from(applicationContext)
                     .notify(SyncNotifications.resultId(taskId), notifications.error(task.name, msg, taskId))

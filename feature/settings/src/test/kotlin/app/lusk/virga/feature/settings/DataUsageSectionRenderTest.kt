@@ -152,7 +152,7 @@ class DataUsageSectionRenderTest {
     }
 
     @Test
-    fun dataUsageSection_tapCapToggle_whenEnabled_passeFalseToCallback() {
+    fun dataUsageSection_tapCapToggle_whenEnabled_passesFalseToCallback() {
         var capturedValue: Boolean? = null
         composeRule.setContent {
             VirgaTheme {

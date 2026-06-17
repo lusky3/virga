@@ -70,16 +70,18 @@ class SettingsViewModel @Inject constructor(
     fun setMeteredCapMb(mb: Long) =
         viewModelScope.launch { preferences.setMeteredCapMb(mb) }
 
-    fun clearCache(context: Context) = viewModelScope.launch(Dispatchers.IO) {
-        runCatching { context.cacheDir.listFiles()?.forEach { it.deleteRecursively() } }
+    fun clearCache(context: Context, onComplete: (Boolean) -> Unit) = viewModelScope.launch(Dispatchers.IO) {
+        val ok = runCatching { context.cacheDir.listFiles()?.forEach { it.deleteRecursively() } }.isSuccess
+        withContext(Dispatchers.Main) { onComplete(ok) }
     }
 
-    fun clearLogs(context: Context) = viewModelScope.launch(Dispatchers.IO) {
-        runCatching {
+    fun clearLogs(context: Context, onComplete: (Boolean) -> Unit) = viewModelScope.launch(Dispatchers.IO) {
+        val ok = runCatching {
             context.filesDir.resolve("run_logs").listFiles()
                 ?.filter { it.extension == "log" }
                 ?.forEach { it.delete() }
-        }
+        }.isSuccess
+        withContext(Dispatchers.Main) { onComplete(ok) }
     }
 
     fun clearAppData(context: Context, onComplete: (Boolean) -> Unit) = viewModelScope.launch {

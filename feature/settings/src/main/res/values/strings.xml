@@ -101,6 +101,7 @@
     <string name="settings_dialog_cancel">Cancel</string>
     <string name="settings_snack_cache_cleared">Cache cleared</string>
     <string name="settings_snack_logs_cleared">Logs cleared</string>
+    <string name="settings_snack_clear_failed">Couldn\'t clear — please try again</string>
     <string name="settings_snack_reset_failed">Reset failed — please uninstall and reinstall Virga</string>
 
     <!-- Language picker (SettingsLanguageSection) -->

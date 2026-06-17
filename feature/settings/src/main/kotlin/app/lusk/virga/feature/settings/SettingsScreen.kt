@@ -80,6 +80,7 @@ fun SettingsScreen(
     val noBatterySettingsMsg = stringResource(R.string.settings_snack_no_battery_settings)
     val cacheClearedMsg = stringResource(R.string.settings_snack_cache_cleared)
     val logsClearedMsg = stringResource(R.string.settings_snack_logs_cleared)
+    val clearFailedMsg = stringResource(R.string.settings_snack_clear_failed)
     val resetFailedMsg = stringResource(R.string.settings_snack_reset_failed)
 
     // Draft state for bandwidth fields — committed on focus-loss rather than
@@ -277,12 +278,14 @@ fun SettingsScreen(
             // Data & reset — cache/log clearing and full app reset.
             DataSection(
                 onCacheClear = {
-                    viewModel.clearCache(context)
-                    scope.launch { snackbarHostState.showSnackbar(cacheClearedMsg) }
+                    viewModel.clearCache(context) { ok ->
+                        scope.launch { snackbarHostState.showSnackbar(if (ok) cacheClearedMsg else clearFailedMsg) }
+                    }
                 },
                 onLogsClear = {
-                    viewModel.clearLogs(context)
-                    scope.launch { snackbarHostState.showSnackbar(logsClearedMsg) }
+                    viewModel.clearLogs(context) { ok ->
+                        scope.launch { snackbarHostState.showSnackbar(if (ok) logsClearedMsg else clearFailedMsg) }
+                    }
                 },
                 onReset = {
                     viewModel.clearAppData(context) { success ->
