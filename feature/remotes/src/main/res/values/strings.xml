@@ -200,6 +200,28 @@
     <string name="remotes_single_export_raw_label">Raw — include credentials</string>
     <string name="remotes_single_export_redacted_label">Redacted — structure only, secrets hidden</string>
     <string name="remotes_single_export_redacted_info">Passwords, tokens, and secrets will be replaced with a placeholder. Safer to share — review before sending.</string>
+    <!-- Backend sub-forms (BackendSubForms.kt) -->
+    <string name="remotes_subform_section_header">Quick setup</string>
+    <!-- S3 sub-form -->
+    <string name="remotes_s3_provider_label">S3 provider</string>
+    <string name="remotes_s3_provider_prompt">Choose a provider…</string>
+    <string name="remotes_s3_provider_aws">Amazon S3 (AWS)</string>
+    <string name="remotes_s3_provider_wasabi">Wasabi</string>
+    <string name="remotes_s3_provider_cloudflare">Cloudflare R2</string>
+    <string name="remotes_s3_provider_minio">MinIO</string>
+    <string name="remotes_s3_provider_other">Other / compatible</string>
+    <!-- SFTP sub-form -->
+    <string name="remotes_sftp_import_key">Import private key from file</string>
+    <string name="remotes_sftp_key_loaded">Key loaded (%1$d characters)</string>
+    <string name="remotes_sftp_key_error">Couldn\'t read key file. Check the file and try again.</string>
+    <!-- WebDAV sub-form -->
+    <string name="remotes_webdav_vendor_label">WebDAV vendor</string>
+    <string name="remotes_webdav_vendor_prompt">Choose a vendor…</string>
+    <string name="remotes_webdav_vendor_nextcloud">Nextcloud</string>
+    <string name="remotes_webdav_vendor_owncloud">ownCloud</string>
+    <string name="remotes_webdav_vendor_sharepoint">SharePoint</string>
+    <string name="remotes_webdav_vendor_other">Other</string>
+
     <!-- Per-remote export menu item -->
     <string name="remotes_card_menu_export">Export this remote</string>
     <!-- Messages -->

@@ -308,22 +308,20 @@ class RemotesViewModel @Inject constructor(
     }
 
     /**
-     * Creates a remote from a manual config. [paramsText] is "key=value" per line.
+     * Creates a remote from a typed params map. Used by the manual-add path when the
+     * provider schema is available — the map is forwarded directly without any
+     * newline-serialisation round-trip, so multi-line values (e.g. an SFTP PEM in
+     * [key_pem]) are preserved intact.
+     *
      * Reports the outcome via [onResult] so the dialog can show the error inline —
      * a screen-level snackbar would be hidden behind the still-open Add dialog.
      */
     fun addRemote(
         name: String,
         type: String,
-        paramsText: String,
+        params: Map<String, String>,
         onResult: (success: Boolean, error: String?) -> Unit,
     ) {
-        val params = paramsText.lines()
-            .mapNotNull { line ->
-                val idx = line.indexOf('=')
-                if (idx <= 0) null else line.substring(0, idx).trim() to line.substring(idx + 1).trim()
-            }
-            .toMap()
         viewModelScope.launch {
             // rclone backend types are always lowercase ("drive", "s3", …).
             // Lowercase here so a remote still creates even if the keyboard
@@ -349,6 +347,29 @@ class RemotesViewModel @Inject constructor(
             }
             onResult(result.isSuccess, result.exceptionOrNull()?.toUserMessage())
         }
+    }
+
+    /**
+     * Creates a remote from a freeform "key=value per line" string. Used by the
+     * wrapper-confirm path (which builds its own param string via [buildWrapperParams])
+     * and by the freeform-textarea fallback when no schema is available.
+     *
+     * Multi-line values are NOT safe through this path — callers that may include
+     * structured multi-line content (e.g. PEM keys) must use the [Map] overload.
+     */
+    fun addRemote(
+        name: String,
+        type: String,
+        paramsText: String,
+        onResult: (success: Boolean, error: String?) -> Unit,
+    ) {
+        val params = paramsText.lines()
+            .mapNotNull { line ->
+                val idx = line.indexOf('=')
+                if (idx <= 0) null else line.substring(0, idx).trim() to line.substring(idx + 1).trim()
+            }
+            .toMap()
+        addRemote(name, type, params, onResult)
     }
 
     /** Moves rclone.conf in/out via the storage picker — see [ConfigTransferFlow]. */

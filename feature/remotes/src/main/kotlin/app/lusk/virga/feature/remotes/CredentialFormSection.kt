@@ -83,7 +83,7 @@ internal fun CredentialFormSection(
     onBack: () -> Unit,
     onDismiss: () -> Unit,
     onOAuth: (provider: OAuthProvider, name: String) -> Unit,
-    onManualConfirm: (name: String, type: String, params: String) -> Unit,
+    onManualConfirm: (name: String, type: String, params: Map<String, String>) -> Unit,
     onCryptConfirm: (name: String, baseRemote: String, basePath: String, password: String, salt: String) -> Unit,
     onDaemonOAuth: (type: String, name: String, clientId: String?, clientSecret: String?) -> Unit,
     onSubmitDaemonOAuthToken: (String) -> Unit,
@@ -241,6 +241,7 @@ internal fun CredentialFormSection(
                 values = typedValues,
                 showAdvanced = showAdvanced,
                 onToggleAdvanced = onToggleAdvanced,
+                backendType = type.trim().ifEmpty { null },
             )
         } else {
             OutlinedTextField(
@@ -282,14 +283,21 @@ internal fun CredentialFormSection(
                     if (isCrypt) {
                         onCryptConfirm(name.trim(), cryptBaseRemote, cryptBasePath, cryptPassword, cryptSalt)
                     } else {
-                        val paramsText = if (schemaOptions != null) {
+                        val paramsMap: Map<String, String> = if (schemaOptions != null) {
+                            // Pass the typed-values map directly — no newline serialisation so
+                            // multi-line values (e.g. SFTP key_pem) are preserved intact.
                             typedValues.entries
                                 .filter { (_, v) -> v.isNotBlank() }
-                                .joinToString("\n") { (k, v) -> "$k=$v" }
+                                .associate { (k, v) -> k to v }
                         } else {
-                            params
+                            // Freeform textarea: parse "key=value" lines into a map.
+                            params.lines().mapNotNull { line ->
+                                val idx = line.indexOf('=')
+                                if (idx <= 0) null
+                                else line.substring(0, idx).trim() to line.substring(idx + 1).trim()
+                            }.toMap()
                         }
-                        onManualConfirm(name, type, paramsText)
+                        onManualConfirm(name, type, paramsMap)
                     }
                 },
                 enabled = if (isCrypt) {
