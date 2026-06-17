@@ -101,14 +101,23 @@
              only enqueues the same work as tapping "Back up now" in the app.
              excludeFromRecents keeps it out of the task switcher. The
              Theme.NoDisplay system theme suppresses the window entirely so there
-             is no UI flash. -->
+             is no UI flash.
+             The SHORTCUT_SYNC_ALL intent-filter is the resolution target for the
+             static shortcut: using only android:action (no targetPackage/Class)
+             makes the shortcut work on any build variant including debug
+             (applicationId = app.lusk.virga.debug). -->
         <activity
             android:name=".widget.SyncAllShortcutActivity"
             android:exported="true"
             android:excludeFromRecents="true"
             android:theme="@android:style/Theme.NoDisplay"
             android:taskAffinity=""
-            tools:ignore="ExportedActivity" />
+            tools:ignore="ExportedActivity">
+            <intent-filter>
+                <action android:name="app.lusk.virga.action.SHORTCUT_SYNC_ALL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
 
         <!-- On-demand WorkManager initialisation (we supply the config via
              Configuration.Provider with the Hilt worker factory). -->

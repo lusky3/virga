@@ -12,6 +12,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Quick Settings tile that backs up all enabled sync tasks immediately.
@@ -51,13 +52,14 @@ class SyncTileService : TileService() {
             // no Hilt binding exists for WorkManager so we call it directly here.
             val infos = runCatching {
                 // getWorkInfosByTag returns a ListenableFuture; .get() is a blocking
-                // call, safe here because this coroutine runs on Dispatchers.IO.
+                // call, safe here because this coroutine already runs on Dispatchers.IO.
                 WorkManager.getInstance(appContext)
                     .getWorkInfosByTag(TAG_SYNC_ALL)
                     .get()
             }.getOrDefault(emptyList())
-            val syncing = infos.any { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED }
-            updateTileState(syncing)
+            val syncing = isSyncActive(infos)
+            // qsTile is a UI object owned by the main thread; switch back before touching it.
+            withContext(Dispatchers.Main) { updateTileState(syncing) }
         }
     }
 
@@ -76,5 +78,12 @@ class SyncTileService : TileService() {
 
     private companion object {
         const val TAG_SYNC_ALL = "syncall"
+
+        /**
+         * Returns true when any of [infos] represents in-progress or queued sync work.
+         * Pure function — extracted so it can be unit-tested without a live WorkManager.
+         */
+        fun isSyncActive(infos: List<WorkInfo>): Boolean =
+            infos.any { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED }
     }
 }

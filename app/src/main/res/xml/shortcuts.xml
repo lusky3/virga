@@ -2,14 +2,16 @@
 <!--
   Static launcher shortcuts (D7b, 0.3.0).
 
-  "Add remote" routing note: static shortcut <intent> elements technically
-  support <extra> child elements (API 25+), but Android's shortcut manifest
-  parser does not guarantee that string extras in static shortcuts survive
-  across activity re-uses / singleTask re-launches reliably on all OEM
-  launchers. Using a dedicated intent action
-  (app.lusk.virga.action.SHORTCUT_ADD_REMOTE) is robust — MainActivity.onCreate
-  maps this action to pendingRoute = ROUTE_ADD_REMOTE, mirroring how it already
-  reads EXTRA_OPEN_ROUTE from notification intents.
+  Package-agnostic routing: both intents use only android:action with no
+  targetPackage or targetClass. This means the shortcuts resolve correctly
+  regardless of applicationIdSuffix (debug = app.lusk.virga.debug, release =
+  app.lusk.virga). Each action is unique to this app, so there is no ambiguity.
+
+  "Add remote": fires app.lusk.virga.action.SHORTCUT_ADD_REMOTE; MainActivity
+  has a matching intent-filter and maps it to pendingRoute = ROUTE_ADD_REMOTE.
+
+  "Sync all": fires app.lusk.virga.action.SHORTCUT_SYNC_ALL; SyncAllShortcut-
+  Activity has a matching intent-filter and enqueues syncAllEnabled().
 -->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -20,10 +22,7 @@
         android:icon="@drawable/ic_shortcut_sync"
         android:shortcutShortLabel="@string/shortcut_sync_all_short"
         android:shortcutLongLabel="@string/shortcut_sync_all_long">
-        <intent
-            android:action="android.intent.action.VIEW"
-            android:targetPackage="app.lusk.virga"
-            android:targetClass="app.lusk.virga.widget.SyncAllShortcutActivity" />
+        <intent android:action="app.lusk.virga.action.SHORTCUT_SYNC_ALL" />
     </shortcut>
 
     <!-- Shortcut 2: Add remote — opens MainActivity and deep-links to Add-Remote. -->
@@ -33,10 +32,7 @@
         android:icon="@drawable/ic_shortcut_add_remote"
         android:shortcutShortLabel="@string/shortcut_add_remote_short"
         android:shortcutLongLabel="@string/shortcut_add_remote_long">
-        <intent
-            android:action="app.lusk.virga.action.SHORTCUT_ADD_REMOTE"
-            android:targetPackage="app.lusk.virga"
-            android:targetClass="app.lusk.virga.MainActivity" />
+        <intent android:action="app.lusk.virga.action.SHORTCUT_ADD_REMOTE" />
     </shortcut>
 
 </shortcuts>
