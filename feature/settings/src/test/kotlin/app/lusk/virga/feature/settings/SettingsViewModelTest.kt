@@ -330,46 +330,46 @@ class SettingsViewModelTest {
         job.cancel()
     }
 
-    // --- B3: event-driven trigger setters ---
+    // --- B3: event-driven trigger setter (consolidated setTrigger) ---
 
     @Test
-    fun setTriggerOnFolderChange_true_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
-        viewModel().setTriggerOnFolderChange(true)
+    fun setTrigger_folderChange_true_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setTrigger(EventTriggerKind.FOLDER_CHANGE, true)
         advanceUntilIdle()
         coVerify(exactly = 1) { repository.setTriggerOnFolderChange(true) }
     }
 
     @Test
-    fun setTriggerOnFolderChange_false_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
-        viewModel().setTriggerOnFolderChange(false)
+    fun setTrigger_folderChange_false_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setTrigger(EventTriggerKind.FOLDER_CHANGE, false)
         advanceUntilIdle()
         coVerify(exactly = 1) { repository.setTriggerOnFolderChange(false) }
     }
 
     @Test
-    fun setTriggerOnWifiConnect_true_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
-        viewModel().setTriggerOnWifiConnect(true)
+    fun setTrigger_wifiConnect_true_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setTrigger(EventTriggerKind.WIFI_CONNECT, true)
         advanceUntilIdle()
         coVerify(exactly = 1) { repository.setTriggerOnWifiConnect(true) }
     }
 
     @Test
-    fun setTriggerOnWifiConnect_false_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
-        viewModel().setTriggerOnWifiConnect(false)
+    fun setTrigger_wifiConnect_false_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setTrigger(EventTriggerKind.WIFI_CONNECT, false)
         advanceUntilIdle()
         coVerify(exactly = 1) { repository.setTriggerOnWifiConnect(false) }
     }
 
     @Test
-    fun setTriggerOnCharge_true_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
-        viewModel().setTriggerOnCharge(true)
+    fun setTrigger_charge_true_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setTrigger(EventTriggerKind.CHARGE, true)
         advanceUntilIdle()
         coVerify(exactly = 1) { repository.setTriggerOnCharge(true) }
     }
 
     @Test
-    fun setTriggerOnCharge_false_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
-        viewModel().setTriggerOnCharge(false)
+    fun setTrigger_charge_false_delegatesToRepository() = runTest(mainDispatcher.dispatcher) {
+        viewModel().setTrigger(EventTriggerKind.CHARGE, false)
         advanceUntilIdle()
         coVerify(exactly = 1) { repository.setTriggerOnCharge(false) }
     }

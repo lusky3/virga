@@ -221,13 +221,7 @@ fun SettingsScreen(
                     wifiConnect = prefs.triggerOnWifiConnect,
                     charge = prefs.triggerOnCharge,
                 ),
-                onToggle = { kind, enabled ->
-                    when (kind) {
-                        EventTriggerKind.FOLDER_CHANGE -> viewModel.setTriggerOnFolderChange(enabled)
-                        EventTriggerKind.WIFI_CONNECT -> viewModel.setTriggerOnWifiConnect(enabled)
-                        EventTriggerKind.CHARGE -> viewModel.setTriggerOnCharge(enabled)
-                    }
-                },
+                onToggle = viewModel::setTrigger,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
                 TextButton(onClick = {

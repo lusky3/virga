@@ -50,6 +50,16 @@ import javax.inject.Singleton
  * `start()` and `stop()` are `@Synchronized` so scope creation and cancellation
  * are each atomic; a concurrent `stop()` cannot cancel a half-constructed scope.
  *
+ * [scope] is `@Volatile` so the OS-callback threads that read it via the
+ * dispatch* lambdas see the most recent write without requiring the class monitor.
+ *
+ * ## Teardown guarantee (P1 fix)
+ *
+ * Each watcher coroutine registers its resource on entry and unregisters it in a
+ * `finally` block. When [stop] cancels the scope the CancellationException unwind
+ * triggers every `finally`, so FileObservers, NetworkCallback, and BroadcastReceiver
+ * are always unregistered regardless of cancellation timing.
+ *
  * ## Selective rebuild (H2 fix)
  *
  * Each subsystem collects its own projected, `distinctUntilChanged` sub-flow so
@@ -75,6 +85,8 @@ class EventTriggerCoordinator @Inject constructor(
 ) {
 
     // @GuardedBy("this") — only touched inside @Synchronized start()/stop().
+    // @Volatile so OS-callback threads reading it via dispatch lambdas see fresh value.
+    @Volatile
     private var scope: CoroutineScope? = null
 
     // Folder-watching subsystem; all state confined to [confinement].
@@ -83,12 +95,6 @@ class EventTriggerCoordinator @Inject constructor(
         scopeProvider = { scope },
         confinement = confinement,
     )
-
-    // Wi-Fi and charge refs: confined to [confinement] after first write.
-    private var networkCallback: ConnectivityManager.NetworkCallback? = null
-    private var wifiDebounceJob: Job? = null
-    private var chargeReceiver: BroadcastReceiver? = null
-    private var chargeDebounceJob: Job? = null
 
     /** Starts all trigger machinery. Idempotent — repeated calls while running are no-ops. */
     @Synchronized
@@ -101,16 +107,15 @@ class EventTriggerCoordinator @Inject constructor(
         newScope.launch { watchChargeTrigger() }
     }
 
-    /** Tears down all trigger machinery and cancels the internal scope. Idempotent. */
+    /**
+     * Cancels the internal scope. Each watcher's `finally` block unregisters its
+     * resource as CancellationException unwinds — no teardown race with launch.
+     * Idempotent.
+     */
     @Synchronized
     fun stop() {
         val s = scope ?: return
         scope = null
-        s.launch(confinement) {
-            folderWatchSet.tearDown()
-            unregisterNetworkCallback()
-            unregisterChargeReceiver()
-        }
         s.cancel()
     }
 
@@ -127,13 +132,17 @@ class EventTriggerCoordinator @Inject constructor(
             .map { list -> list.filter(::shouldObserveTask).map { it.id to it.sourcePath } }
             .distinctUntilChanged()
 
-        kotlinx.coroutines.flow.combine(flagFlow, tasksFlow) { flag, tasks -> flag to tasks }
-            .collect { (flag, tasks) ->
-                folderWatchSet.tearDown()
-                if (flag) {
-                    tasks.forEach { (id, path) -> folderWatchSet.watch(id, path) }
+        try {
+            kotlinx.coroutines.flow.combine(flagFlow, tasksFlow) { flag, tasks -> flag to tasks }
+                .collect { (flag, tasks) ->
+                    folderWatchSet.tearDown()
+                    if (flag) {
+                        tasks.forEach { (id, path) -> folderWatchSet.watch(id, path) }
+                    }
                 }
-            }
+        } finally {
+            folderWatchSet.tearDown()
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -141,43 +150,50 @@ class EventTriggerCoordinator @Inject constructor(
     // -------------------------------------------------------------------------
 
     private suspend fun watchWifiTrigger() {
-        preferencesRepository.preferences
-            .map { it.triggerOnWifiConnect }
-            .distinctUntilChanged()
-            .collect { enabled ->
-                unregisterNetworkCallback()
-                if (enabled) {
-                    networkCallback = registerWifiCallback(context) { dispatchWifiAvailable() }
+        var networkCallback: ConnectivityManager.NetworkCallback? = null
+        var debounceJob: Job? = null
+        try {
+            preferencesRepository.preferences
+                .map { it.triggerOnWifiConnect }
+                .distinctUntilChanged()
+                .collect { enabled ->
+                    networkCallback?.let { cb ->
+                        runCatching {
+                            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE)
+                                as ConnectivityManager
+                            cm.unregisterNetworkCallback(cb)
+                        }
+                        networkCallback = null
+                        debounceJob?.cancel()
+                        debounceJob = null
+                    }
+                    if (enabled) {
+                        networkCallback = registerWifiCallback(context) {
+                            val s = scope ?: return@registerWifiCallback
+                            s.launch(confinement) {
+                                debounceJob?.cancel()
+                                debounceJob = requireNotNull(scope).launch(confinement) {
+                                    runCatching {
+                                        delay(WIFI_DEBOUNCE_MS)
+                                        scheduler.syncAllEnabled()
+                                    }.onFailure { e ->
+                                        if (e is CancellationException) throw e
+                                        Log.w(TAG, "wifi-connect trigger failed", e)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+        } finally {
+            networkCallback?.let { cb ->
+                runCatching {
+                    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE)
+                        as ConnectivityManager
+                    cm.unregisterNetworkCallback(cb)
                 }
             }
-    }
-
-    private fun dispatchWifiAvailable() {
-        val s = scope ?: return
-        s.launch(confinement) { onWifiAvailable() }
-    }
-
-    private fun onWifiAvailable() {
-        wifiDebounceJob?.cancel()
-        wifiDebounceJob = requireNotNull(scope).launch(confinement) {
-            runCatching {
-                delay(WIFI_DEBOUNCE_MS)
-                scheduler.syncAllEnabled()
-            }.onFailure { e ->
-                if (e is CancellationException) throw e
-                Log.w(TAG, "wifi-connect trigger failed", e)
-            }
-        }
-    }
-
-    private fun unregisterNetworkCallback() {
-        val cb = networkCallback ?: return
-        networkCallback = null
-        wifiDebounceJob?.cancel()
-        wifiDebounceJob = null
-        runCatching {
-            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            cm.unregisterNetworkCallback(cb)
+            debounceJob?.cancel()
         }
     }
 
@@ -186,41 +202,41 @@ class EventTriggerCoordinator @Inject constructor(
     // -------------------------------------------------------------------------
 
     private suspend fun watchChargeTrigger() {
-        preferencesRepository.preferences
-            .map { it.triggerOnCharge }
-            .distinctUntilChanged()
-            .collect { enabled ->
-                unregisterChargeReceiver()
-                if (enabled) {
-                    chargeReceiver = registerChargeReceiver(context) { dispatchChargeConnected() }
+        var chargeReceiver: BroadcastReceiver? = null
+        var debounceJob: Job? = null
+        try {
+            preferencesRepository.preferences
+                .map { it.triggerOnCharge }
+                .distinctUntilChanged()
+                .collect { enabled ->
+                    chargeReceiver?.let { r ->
+                        runCatching { context.unregisterReceiver(r) }
+                        chargeReceiver = null
+                        debounceJob?.cancel()
+                        debounceJob = null
+                    }
+                    if (enabled) {
+                        chargeReceiver = registerChargeReceiver(context) {
+                            val s = scope ?: return@registerChargeReceiver
+                            s.launch(confinement) {
+                                debounceJob?.cancel()
+                                debounceJob = requireNotNull(scope).launch(confinement) {
+                                    runCatching {
+                                        delay(CHARGE_DEBOUNCE_MS)
+                                        scheduler.syncAllEnabled()
+                                    }.onFailure { e ->
+                                        if (e is CancellationException) throw e
+                                        Log.w(TAG, "charge-connect trigger failed", e)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-            }
-    }
-
-    private fun dispatchChargeConnected() {
-        val s = scope ?: return
-        s.launch(confinement) { onChargeConnected() }
-    }
-
-    private fun onChargeConnected() {
-        chargeDebounceJob?.cancel()
-        chargeDebounceJob = requireNotNull(scope).launch(confinement) {
-            runCatching {
-                delay(CHARGE_DEBOUNCE_MS)
-                scheduler.syncAllEnabled()
-            }.onFailure { e ->
-                if (e is CancellationException) throw e
-                Log.w(TAG, "charge-connect trigger failed", e)
-            }
+        } finally {
+            chargeReceiver?.let { r -> runCatching { context.unregisterReceiver(r) } }
+            debounceJob?.cancel()
         }
-    }
-
-    private fun unregisterChargeReceiver() {
-        val r = chargeReceiver ?: return
-        chargeReceiver = null
-        chargeDebounceJob?.cancel()
-        chargeDebounceJob = null
-        runCatching { context.unregisterReceiver(r) }
     }
 
     companion object {

@@ -10,7 +10,9 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -208,6 +210,60 @@ class EventTriggerCoordinatorTest {
         val observerIdsAfter = coordinator.folderObserversSnapshot()
 
         assertThat(observerIdsAfter).isEqualTo(observerIdsBefore)
+
+        coordinator.stop()
+    }
+
+    /**
+     * P1 regression guard: verify that folder observers are cleared after [stop].
+     *
+     * Uses [StandardTestDispatcher] (not [UnconfinedTestDispatcher]) so that
+     * cancellation and the watcher `finally` blocks are exercised in a way that
+     * mirrors production. [advanceUntilIdle] drains all pending coroutines.
+     */
+    @Test
+    fun stop_teardownRunsViaFinally_foldersObserversEmptyAfterStop() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val coordinator = makeCoordinator(dispatcher)
+
+        prefsFlow.value = AppPreferences(triggerOnFolderChange = true)
+        tasksFlow.value = listOf(minimalTask(enabled = true, sourcePath = "/sdcard/A"))
+
+        coordinator.start()
+        advanceUntilIdle() // drain collect + watch registration
+
+        assertThat(coordinator.folderObserversSnapshot()).isNotEmpty()
+
+        coordinator.stop()
+        advanceUntilIdle() // let finally blocks run
+
+        assertThat(coordinator.folderObserversSnapshot()).isEmpty()
+    }
+
+    /**
+     * P1 regression guard: a stop → start cycle must NOT double-register watchers.
+     * Observer count after restart must equal the number of tasks, not 2×.
+     */
+    @Test
+    fun stopStart_doesNotDoubleRegisterFolderObservers() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val coordinator = makeCoordinator(dispatcher)
+
+        prefsFlow.value = AppPreferences(triggerOnFolderChange = true)
+        tasksFlow.value = listOf(
+            minimalTask(enabled = true, sourcePath = "/sdcard/A"),
+            minimalTask(enabled = true, sourcePath = "/sdcard/B").copy(id = 2L),
+        )
+
+        coordinator.start()
+        advanceUntilIdle()
+        coordinator.stop()
+        advanceUntilIdle()
+
+        coordinator.start()
+        advanceUntilIdle()
+
+        assertThat(coordinator.folderObserversSnapshot()).hasSize(2)
 
         coordinator.stop()
     }
