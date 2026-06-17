@@ -216,12 +216,18 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             EventTriggersSection(
-                triggerOnFolderChange = prefs.triggerOnFolderChange,
-                triggerOnWifiConnect = prefs.triggerOnWifiConnect,
-                triggerOnCharge = prefs.triggerOnCharge,
-                onFolderChangeToggle = viewModel::setTriggerOnFolderChange,
-                onWifiConnectToggle = viewModel::setTriggerOnWifiConnect,
-                onChargeToggle = viewModel::setTriggerOnCharge,
+                state = EventTriggerState(
+                    folderChange = prefs.triggerOnFolderChange,
+                    wifiConnect = prefs.triggerOnWifiConnect,
+                    charge = prefs.triggerOnCharge,
+                ),
+                onToggle = { kind, enabled ->
+                    when (kind) {
+                        EventTriggerKind.FOLDER_CHANGE -> viewModel.setTriggerOnFolderChange(enabled)
+                        EventTriggerKind.WIFI_CONNECT -> viewModel.setTriggerOnWifiConnect(enabled)
+                        EventTriggerKind.CHARGE -> viewModel.setTriggerOnCharge(enabled)
+                    }
+                },
             )
             Row(horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
                 TextButton(onClick = {

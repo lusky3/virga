@@ -241,10 +241,9 @@ internal val EventTriggerCoordinator.scope: kotlinx.coroutines.CoroutineScope?
         return f.get(this) as? kotlinx.coroutines.CoroutineScope
     }
 
-/** Exposes the private [EventTriggerCoordinator.folderObservers] key-set for H2 assertions. */
+/** Exposes [FolderWatchSet]'s observer key-set via the coordinator for H2 assertions. */
 internal fun EventTriggerCoordinator.folderObserversSnapshot(): Set<Long> {
-    val f = EventTriggerCoordinator::class.java.getDeclaredField("folderObservers")
+    val f = EventTriggerCoordinator::class.java.getDeclaredField("folderWatchSet")
     f.isAccessible = true
-    @Suppress("UNCHECKED_CAST")
-    return (f.get(this) as Map<Long, *>).keys.toSet()
+    return (f.get(this) as FolderWatchSet).observerIds()
 }

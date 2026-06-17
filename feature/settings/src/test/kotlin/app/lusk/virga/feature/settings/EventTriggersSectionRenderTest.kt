@@ -50,24 +50,13 @@ class EventTriggersSectionRenderTest {
     )
 
     private fun setContent(
-        folderChange: Boolean = false,
-        wifiConnect: Boolean = false,
-        charge: Boolean = false,
-        onFolder: (Boolean) -> Unit = {},
-        onWifi: (Boolean) -> Unit = {},
-        onCharge: (Boolean) -> Unit = {},
+        state: EventTriggerState = EventTriggerState(),
+        onToggle: (EventTriggerKind, Boolean) -> Unit = { _, _ -> },
     ) {
         composeRule.setContent {
             VirgaTheme {
                 Surface {
-                    EventTriggersSection(
-                        triggerOnFolderChange = folderChange,
-                        triggerOnWifiConnect = wifiConnect,
-                        triggerOnCharge = charge,
-                        onFolderChangeToggle = onFolder,
-                        onWifiConnectToggle = onWifi,
-                        onChargeToggle = onCharge,
-                    )
+                    EventTriggersSection(state = state, onToggle = onToggle)
                 }
             }
         }
@@ -115,12 +104,14 @@ class EventTriggersSectionRenderTest {
 
     @Test
     fun eventTriggersSection_tapFirstToggle_invokesFolderCallback() {
-        var result: Boolean? = null
-        setContent(onFolder = { result = it })
+        var receivedKind: EventTriggerKind? = null
+        var receivedValue: Boolean? = null
+        setContent(onToggle = { kind, value -> receivedKind = kind; receivedValue = value })
         composeRule.waitForIdle()
         composeRule.onAllNodes(isToggleable()).onFirst()
             .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
-        assertThat(result).isTrue()
+        assertThat(receivedKind).isEqualTo(EventTriggerKind.FOLDER_CHANGE)
+        assertThat(receivedValue).isTrue()
     }
 }
