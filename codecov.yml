@@ -11,6 +11,14 @@
 # the documented rationale. They are covered by manual/instrumentation paths, not
 # unit tests, so counting them only penalises the patch with unreachable lines.
 ignore:
+  # The Compose navigation host: NavDisplay + NavigationSuiteScaffold wiring,
+  # transition specs, and the LocalNavigationEventDispatcherOwner bridge that
+  # keeps predictive back wired to the activity. Rendering it requires the full
+  # Hilt graph (every tab's hiltViewModel) plus a live ComponentActivity, so it
+  # can't be exercised by Robolectric unit tests — same limitation as the entry
+  # points below. Its pure inputs (navigation state/entry building) are modelled
+  # and tested in the :navigation layer.
+  - "app/src/main/kotlin/app/lusk/virga/navigation/VirgaNavHost.kt"
   - "app/src/main/kotlin/app/lusk/virga/widget/SyncAllShortcutActivity.kt"
   - "app/src/main/kotlin/app/lusk/virga/widget/SyncTileService.kt"
   # D7c per-task widget: Glance GlanceAppWidget + AppWidget config activity.
