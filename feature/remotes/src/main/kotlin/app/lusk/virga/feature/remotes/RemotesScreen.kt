@@ -45,9 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -172,20 +170,26 @@ fun RemotesScreen(
         val loadingCd = stringResource(R.string.remotes_cd_loading)
 
         if (state.oauthInProgress) {
-            Column(Modifier.padding(padding)) {
-                LinearProgressIndicator(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .semantics { contentDescription = oauthProgressCd },
-                )
-                Text(
-                    stringResource(R.string.remotes_oauth_in_progress),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier
-                        .padding(horizontal = VirgaSpacing.md, vertical = VirgaSpacing.sm)
-                        .semantics { liveRegion = LiveRegionMode.Polite },
-                )
-            }
+            // Modal so it can't be hidden behind the remote list, and so the Cancel
+            // escape hatch is always reachable: a dismissed Custom Tab delivers no
+            // redirect, so without a way out the flow would hang forever (no onResult
+            // arrives to clear oauthInProgress). Dismiss == cancel.
+            AlertDialog(
+                onDismissRequest = { viewModel.cancelOAuth() },
+                title = { Text(stringResource(R.string.remotes_oauth_in_progress)) },
+                text = {
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics { contentDescription = oauthProgressCd },
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.cancelOAuth() }) {
+                        Text(stringResource(R.string.remotes_oauth_cancel))
+                    }
+                },
+            )
         }
 
         PullToRefreshBox(

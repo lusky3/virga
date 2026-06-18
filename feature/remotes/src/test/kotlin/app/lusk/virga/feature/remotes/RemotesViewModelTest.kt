@@ -175,6 +175,31 @@ class RemotesViewModelTest {
     }
 
     @Test
+    fun cancelOAuth_clearsInProgressAndPendingAndSetsMessage() = runTest(mainDispatcher.dispatcher) {
+        // A dismissed Custom Tab delivers no redirect, so cancel() is the only way out
+        // of the in-progress state. It must drop the pending auth and clear the spinner.
+        every { tokenExchanger.authorizeUrl(any()) } returns "https://accounts.google.example/auth?state=abc"
+        val vm = viewModel()
+        val collector = backgroundScope.launch { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        vm.startOAuth(OAuthProviders.GoogleDrive, "my-google")
+        advanceUntilIdle()
+        assertThat(vm.uiState.value.oauthInProgress).isTrue()
+        val pendingSlot = slot<OAuthTokenExchanger.PendingAuth>()
+        coVerify { tokenExchanger.authorizeUrl(capture(pendingSlot)) }
+
+        vm.cancelOAuth()
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.oauthInProgress).isFalse()
+        // Pending dropped: the stored auth can no longer be consumed.
+        assertThat(store.consume(pendingSlot.captured.state)).isNull()
+        assertThat(vm.uiState.value.message).isNotNull()
+        collector.cancel()
+    }
+
+    @Test
     fun `startOAuth with blank remote name does not launch`() = runTest(mainDispatcher.dispatcher) {
         // UI-M2: a blank name would dead-end after sign-in at the state-mismatch
         // check. Bail before launching.

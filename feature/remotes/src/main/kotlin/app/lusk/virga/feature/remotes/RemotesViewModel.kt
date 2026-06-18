@@ -37,14 +37,15 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * Returns the set of option names where [RemoteOption.isPassword] is true AND the
- * option is present with a non-blank value in [values].
+ * Returns the set of option names where [RemoteOption.isPassword] or
+ * [RemoteOption.sensitive] is true AND the option is present with a non-blank
+ * value in [values].
  */
 internal fun sensitiveKeysFrom(
     options: List<RemoteOption>,
     values: Map<String, String>,
 ): Set<String> = options
-    .filter { it.isPassword && values[it.name]?.isNotBlank() == true }
+    .filter { (it.isPassword || it.sensitive) && values[it.name]?.isNotBlank() == true }
     .map { it.name }
     .toSet()
 
@@ -239,7 +240,9 @@ class RemotesViewModel @Inject constructor(
                 if (options.isEmpty()) {
                     error(context.getString(R.string.remotes_edit_schema_unavailable))
                 }
-                val passwordKeys = options.filter { it.isPassword }.map { it.name }.toSet()
+                // Blank password AND Sensitive fields (S3 secret_access_key, tokens, …)
+                // so secrets are never pre-filled into the edit dialog.
+                val passwordKeys = options.filter { it.isPassword || it.sensitive }.map { it.name }.toSet()
                 EditModeState(
                     remoteName = name,
                     remoteType = type,
@@ -825,6 +828,12 @@ class RemotesViewModel @Inject constructor(
     fun startOAuth(provider: OAuthProvider, remoteName: String) {
         viewModelScope.launch { systemOAuth.start(provider, remoteName) }
     }
+
+    /**
+     * Aborts an in-flight Custom-Tabs OAuth flow the user backed out of, clearing the
+     * stuck "Completing sign-in…" spinner. See [SystemOAuthFlow.cancel].
+     */
+    fun cancelOAuth() = systemOAuth.cancel()
 
     /** Called by the screen once it has handed [launchUrl] to Custom Tabs. */
     fun onLaunchUrlConsumed() {

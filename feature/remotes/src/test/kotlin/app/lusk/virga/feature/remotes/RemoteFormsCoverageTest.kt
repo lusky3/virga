@@ -36,15 +36,16 @@ class RemoteFormsCoverageTest {
 
     private val remotes = listOf(Remote("gdrive", "drive"), Remote("box", "box"))
 
-    private fun option(name: String) = RemoteOption(
+    private fun option(name: String, isPassword: Boolean = false, sensitive: Boolean = false) = RemoteOption(
         name = name,
         help = "Help text for $name",
         type = "string",
         required = false,
-        isPassword = false,
+        isPassword = isPassword,
         default = null,
         examples = emptyList(),
         advanced = false,
+        sensitive = sensitive,
     )
 
     private fun render(content: @androidx.compose.runtime.Composable () -> Unit) {
@@ -194,6 +195,21 @@ class RemoteFormsCoverageTest {
                 onCryptSaltChange = {},
             )
         }
+    }
+
+    @Test
+    fun typedOptionFields_sensitiveOption_rendersViaMaskedBranch() {
+        // rclone marks S3 secret_access_key Sensitive (not IsPassword); the field must
+        // route through the masked branch (`opt.isPassword || opt.sensitive`).
+        render {
+            TypedOptionFields(
+                options = listOf(option("secret_access_key", sensitive = true)),
+                values = mutableMapOf("secret_access_key" to "shh"),
+                showAdvanced = false,
+                onToggleAdvanced = {},
+            )
+        }
+        composeRule.onNodeWithText("secret_access_key").assertIsDisplayed()
     }
 
     // --- ReauthBadgeRow render (A4) -----------------------------------------------

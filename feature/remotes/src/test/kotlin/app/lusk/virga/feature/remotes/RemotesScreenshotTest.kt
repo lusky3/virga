@@ -5,8 +5,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.common.model.RemoteOption
 import app.lusk.virga.core.rclone.PickerEntry
@@ -16,6 +19,7 @@ import com.github.takahirom.roborazzi.RoborazziRule
 import com.github.takahirom.roborazzi.captureRoboImage
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Rule
 import org.junit.Test
@@ -104,6 +108,26 @@ class RemotesScreenshotTest {
             }
         }
         composeRule.onRoot().captureRoboImage()
+    }
+
+    @Test
+    fun remotesScreen_oauthInProgress_showsCancelDialog_andInvokesCancel() {
+        // A dismissed Custom Tab leaves oauthInProgress=true with no redirect; the
+        // modal must render with a reachable Cancel that routes to cancelOAuth().
+        val vm = fakeViewModel(RemotesUiState(oauthInProgress = true))
+        composeRule.setContent {
+            MaterialTheme {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        RemotesScreen(onOpenBrowser = {}, viewModel = vm)
+                    }
+                }
+            }
+        }
+        composeRule.onNodeWithText("Completing sign-in…").assertIsDisplayed()
+        composeRule.onNodeWithText("Cancel sign-in").assertIsDisplayed()
+        composeRule.onNodeWithText("Cancel sign-in").performClick()
+        verify { vm.cancelOAuth() }
     }
 
     @Test
