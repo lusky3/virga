@@ -14,11 +14,12 @@ Hard-won notes — these gate every PR and are expensive to rediscover. (The gen
 `npm run build && npm test` in "Build & Test" below is boilerplate; this is the real
 build.)
 
-- **`:app` is flavored (`foss` / `play`).** Use `:app:compileFossDebugKotlin` /
-  `:app:assembleFossDebug` (and `…Play…`), never the ambiguous `compileDebug`.
-- **DI changes must be verified with `:app:hiltJavaCompileFossDebug` +
-  `:app:hiltJavaCompilePlayDebug`.** `compile*Kotlin` does NOT run Hilt/Dagger graph
-  aggregation, so a `MissingBinding` passes local Kotlin compile and only fails ~7min
+- **`:app` is flavored (`foss` / `play`).** Reach for the flavor-qualified tasks —
+  `:app:compileFossDebugKotlin` / `:app:assembleFossDebug` (and `…Play…`); the bare
+  `compileDebug` is ambiguous across the two flavors and lets flavor-specific breakage slip through.
+- **DI changes surface under a Hilt/Dagger graph build** (`:app:hiltJavaCompileFossDebug` +
+  `:app:hiltJavaCompilePlayDebug`), not under `compile*Kotlin`, which skips graph
+  aggregation — so a `MissingBinding` passes local Kotlin compile and only fails ~7min
   into CI's `build`. A **default value on an `@Inject` constructor param does not
   exempt it from Hilt** — it still needs a binding (use a `@Qualifier` + `@Provides`,
   e.g. for an injected `CoroutineDispatcher` test seam).
