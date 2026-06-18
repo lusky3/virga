@@ -282,6 +282,10 @@ dependencies {
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.navigation3.runtime)
     implementation(libs.androidx.navigation3.ui)
+    // navigationevent-compose: bridges the activity's view-tree NavigationEventDispatcher
+    // into the LocalNavigationEventDispatcherOwner composition local that nav3 1.1.x's
+    // NavDisplay reads (activity-compose 1.13 sets the view-tree owner but not the local).
+    implementation(libs.androidx.navigationevent.compose)
     implementation(libs.androidx.lifecycle.viewmodel.navigation3)
     implementation(libs.compose.material3.adaptive.navigation.suite)
     implementation(libs.serialization.json)
