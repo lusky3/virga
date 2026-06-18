@@ -33,6 +33,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.dropUnlessResumed
+import androidx.navigationevent.NavigationEventDispatcherOwner
+import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
+import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
@@ -368,7 +371,17 @@ fun VirgaNavHost(
         val reduceMotion = rememberReduceMotion()
         @OptIn(ExperimentalSharedTransitionApi::class)
         SharedTransitionLayout {
-        CompositionLocalProvider(LocalSharedTransitionScope provides this) {
+        // nav3 1.1.x NavDisplay reads LocalNavigationEventDispatcherOwner for predictive
+        // back. ComponentActivity (activity 1.13) IS a NavigationEventDispatcherOwner wired
+        // to the platform back dispatcher, but activity-compose's setContent doesn't expose
+        // it as this composition local. Parent NavDisplay's dispatcher to the activity so
+        // system/predictive back still reaches it (root fallback if the activity is absent).
+        val parentOwner = LocalActivity.current as? NavigationEventDispatcherOwner
+        val navEventOwner = rememberNavigationEventDispatcherOwner(parent = parentOwner)
+        CompositionLocalProvider(
+            LocalSharedTransitionScope provides this,
+            LocalNavigationEventDispatcherOwner provides navEventOwner,
+        ) {
         NavDisplay(
             entries = navigationState.toEntries(entryProvider),
             onBack = { navigator.goBack() },
