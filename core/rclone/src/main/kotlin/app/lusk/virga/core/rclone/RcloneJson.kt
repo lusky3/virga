@@ -53,6 +53,7 @@ internal fun parseProviders(root: JsonObject): List<RemoteProvider> {
                     ?: o["Default"]?.jsonPrimitive?.contentOrNull,
                 examples = examples,
                 advanced = o["Advanced"]?.jsonPrimitive?.booleanOrNull ?: false,
+                sensitive = o["Sensitive"]?.jsonPrimitive?.booleanOrNull ?: false,
             )
         } ?: emptyList()
         RemoteProvider(

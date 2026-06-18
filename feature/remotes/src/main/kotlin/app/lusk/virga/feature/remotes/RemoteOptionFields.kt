@@ -34,7 +34,7 @@ import app.lusk.virga.core.common.model.RemoteOption
  * Field type mapping (rclone type → Compose widget):
  *  - "bool"                       → Switch in a labelled Row
  *  - "int" | "SizeSuffix" | "Duration" → OutlinedTextField with number keyboard
- *  - isPassword == true           → OutlinedTextField with PasswordVisualTransformation
+ *  - isPassword || sensitive     → OutlinedTextField with PasswordVisualTransformation
  *  - options with Examples list   → ExposedDropdownMenu (free-text + suggestions)
  *  - everything else              → plain OutlinedTextField
  */
@@ -125,7 +125,7 @@ private fun OptionField(
             )
         }
 
-        opt.isPassword -> {
+        opt.isPassword || opt.sensitive -> {
             OutlinedTextField(
                 value = current,
                 onValueChange = { values[opt.name] = it },

@@ -209,6 +209,13 @@ data class RemoteOption(
     val default: String?,
     val examples: List<Pair<String, String>>,
     val advanced: Boolean,
+    /**
+     * rclone's `Sensitive` flag: a credential that must not be shown in cleartext
+     * or logged, but (unlike [isPassword]) is not obscured by rclone. Covers cloud
+     * secrets such as S3 `secret_access_key`, `client_secret`, and tokens. The UI
+     * masks fields where `isPassword || sensitive`.
+     */
+    val sensitive: Boolean = false,
 )
 
 /** Metadata for one rclone backend provider, as returned by `config/providers`. */

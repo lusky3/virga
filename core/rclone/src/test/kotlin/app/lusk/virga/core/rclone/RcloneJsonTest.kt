@@ -3,6 +3,7 @@ package app.lusk.virga.core.rclone
 import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.common.model.SyncDirection
 import com.google.common.truth.Truth.assertThat
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -234,6 +235,25 @@ class RcloneJsonTest {
         assertThat(filter.containsKey("MaxSize")).isFalse()
         assertThat(filter.containsKey("MinAge")).isFalse()
         assertThat(filter.containsKey("MaxAge")).isFalse()
+    }
+
+    // --- parseProviders: Sensitive flag -------------------------------------
+
+    @Test
+    fun `parseProviders reads Sensitive flag - S3 secret_access_key is Sensitive not IsPassword`() {
+        val root = Json.parseToJsonElement(
+            """
+            {"providers":[{"Name":"s3","Description":"S3","Options":[
+              {"Name":"access_key_id","Type":"string"},
+              {"Name":"secret_access_key","Type":"string","Sensitive":true}
+            ]}]}
+            """.trimIndent(),
+        ).jsonObject
+        val opts = parseProviders(root).single().options
+        val secret = opts.first { it.name == "secret_access_key" }
+        assertThat(secret.sensitive).isTrue()
+        assertThat(secret.isPassword).isFalse()
+        assertThat(opts.first { it.name == "access_key_id" }.sensitive).isFalse()
     }
 
     // --- B7: putConfig ConflictResolve (bisync only) -----------------------

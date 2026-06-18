@@ -22,6 +22,8 @@
     <string name="remotes_import_dialog_confirm">Import</string>
     <string name="remotes_fab_label">Add cloud account</string>
     <string name="remotes_oauth_in_progress">Completing sign-in…</string>
+    <string name="remotes_oauth_cancel">Cancel sign-in</string>
+    <string name="remotes_msg_sign_in_canceled">Sign-in canceled</string>
     <string name="remotes_cd_oauth_progress">Signing in</string>
     <string name="remotes_cd_loading">Loading remotes</string>
 

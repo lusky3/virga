@@ -102,6 +102,24 @@ internal class SystemOAuthFlow(
     }
 
     /**
+     * Aborts an in-flight Custom-Tabs OAuth flow when the user dismisses the browser
+     * without completing sign-in. No redirect is delivered in that case, so [onResult]
+     * never fires and the progress spinner would otherwise hang indefinitely. Drops the
+     * pending authorization and clears the in-progress flags, leaving any [Remote.needsReauth]
+     * badge intact so a re-auth can be retried.
+     */
+    fun cancel() {
+        oauthStore.clear()
+        transient.update {
+            it.copy(
+                oauthInProgress = false,
+                reauthInProgress = emptySet(),
+                message = context.getString(R.string.remotes_msg_sign_in_canceled),
+            )
+        }
+    }
+
+    /**
      * Resolves the redirect URI for [provider] given the resolved [clientId] and whether
      * a BYO [override] client is in use. Google derives its redirect from the client ID,
      * so a BYO Google client needs its redirect recomputed from the user's ID.
