@@ -8,6 +8,46 @@
   between edits is acceptable). Write a real `Migration` only when convenient, not
   out of necessity.
 
+## Build, CI & code style (virga-specific)
+
+Hard-won notes — these gate every PR and are expensive to rediscover. (The generic
+`npm run build && npm test` in "Build & Test" below is boilerplate; this is the real
+build.)
+
+- **`:app` is flavored (`foss` / `play`).** Reach for the flavor-qualified tasks —
+  `:app:compileFossDebugKotlin` / `:app:assembleFossDebug` (and `…Play…`); the bare
+  `compileDebug` is ambiguous across the two flavors and lets flavor-specific breakage slip through.
+- **DI changes surface under a Hilt/Dagger graph build** (`:app:hiltJavaCompileFossDebug` +
+  `:app:hiltJavaCompilePlayDebug`), not under `compile*Kotlin`, which skips graph
+  aggregation — so a `MissingBinding` passes local Kotlin compile and only fails ~7min
+  into CI's `build`. A **default value on an `@Inject` constructor param does not
+  exempt it from Hilt** — it still needs a binding (use a `@Qualifier` + `@Provides`,
+  e.g. for an injected `CoroutineDispatcher` test seam).
+- **After changing a shared interface** (e.g. `RcloneEngine`, `WatchdogPlatform`),
+  also build the dependent modules' test sources (`:sync-worker:compileDebugUnitTestKotlin`)
+  and update hand-rolled test doubles.
+- **Codacy = server-side detekt + Lizard, delta-scanned on changed lines** (no in-repo
+  config; a line untouched for years is fine until you edit it). Limits: Lizard nloc 50
+  / params >8 / CCN 8; detekt LongMethod 60, LongParameterList >6 (data-class ctors are
+  exempt — bundle a composable's params into a state/callbacks holder), `LabeledExpression`
+  (no `return@label` on new/edited lines — use a positive `if`/`?.let`), TooManyFunctions
+  >11 per class (extract to file-scope funcs or a helper class; don't `@Suppress`),
+  StringLiteralDuplication ≥3. detekt `@Suppress` is honored by detekt but **not** by Lizard.
+  Decompose large Compose screens/dialogs into sub-composables to stay under nloc 50.
+- **`codecov/patch` is a blocking gate.** Framework-bound Android entry points that unit
+  tests can't reach without the runtime (Service / Activity / Glance widget / FileObserver
+  / NetworkCallback / BroadcastReceiver hosts) are listed in `codecov.yml` `ignore:`.
+  The rule: extract the pure logic (predicates, ViewModels, `resolve*`/format helpers) and
+  unit-test *that*; ignore only the framework wiring. Validate edits via
+  `curl --data-binary @codecov.yml https://codecov.io/validate`.
+- **secret-scan (ggshield) + GitGuardian scan every commit in the PR range**, not just the
+  head — fixing a flagged item in a later commit doesn't clear it; squash the branch first.
+  No `passphrase`/`password`/`secret`-named identifiers (false positives) and no realistic
+  token/key fixtures in tests (use `EXAMPLE_*` / obviously-fake values).
+- The semgrep CWE-926 "exported activity/receiver" finding is a known false positive for
+  the launcher/AppWidget/QS-tile/share entry points — justify with a SEC comment +
+  `tools:ignore` (it has shipped this way before).
+
 ## Rules
 
 - Do what has been asked; nothing more, nothing less
