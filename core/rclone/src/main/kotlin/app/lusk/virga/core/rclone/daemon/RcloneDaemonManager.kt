@@ -8,7 +8,10 @@ import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.rclone.RcloneDaemon
 import dagger.hilt.android.qualifiers.ApplicationContext
 import at.favre.lib.crypto.bcrypt.BCrypt
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.File
@@ -75,6 +78,15 @@ class RcloneDaemonManager @Inject constructor(
         // continuously; if nobody reads them, the OS pipe buffer (~64 KiB)
         // fills and the daemon blocks on its next write. The drainer runs on a
         // daemon thread so it does not keep the process alive after shutdown.
+        //
+        // stderrFlow lets other components (e.g. DaemonOAuthOrchestrator) scrape
+        // lines without a separate pipe. tryEmit is non-blocking and won't throw;
+        // DROP_OLDEST overflow policy ensures the drainer never stalls.
+        val stderrFlow = MutableSharedFlow<String>(
+            replay = 0,
+            extraBufferCapacity = 128,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
         val stderr = BufferedReader(InputStreamReader(process.errorStream))
         val boundPort = java.util.concurrent.atomic.AtomicReference<Int?>(null)
         Thread({
@@ -88,6 +100,7 @@ class RcloneDaemonManager @Inject constructor(
                             boundPort.set(it)
                         }
                     }
+                    stderrFlow.tryEmit(line)
                     // SEC-M1: Gate daemon stderr logging behind DEBUG flag so
                     // rclone's verbose INFO stream never lands in a release logcat.
                     if (BuildConfig.DEBUG) {
@@ -115,7 +128,14 @@ class RcloneDaemonManager @Inject constructor(
                 ?: throw VirgaError.Rclone(
                     message = "rclone daemon did not start within ${STARTUP_TIMEOUT_MS}ms",
                 )
-            RcloneDaemon(process = process, port = port, user = user, pass = pass, htpasswdFile = htpasswdFile)
+            RcloneDaemon(
+                process = process,
+                port = port,
+                user = user,
+                pass = pass,
+                htpasswdFile = htpasswdFile,
+                stderrLines = stderrFlow.asSharedFlow(),
+            )
         } catch (t: Throwable) {
             // Timeout, cancellation, or any other failure after launch: don't leak
             // the child process or its credential file.

@@ -57,9 +57,10 @@ internal class DaemonOAuthFlow(
      * always uses this default factory.
      */
     internal var orchestratorFactory: () -> DaemonOAuthOrchestrator = {
-        // 600s rather than the orchestrator's 120s default: the paste-token
-        // flow has the user run `rclone authorize` on ANOTHER machine and
-        // paste the result back, which routinely takes several minutes.
+        // 600s overrides the orchestrator's 180s default: the paste-token fallback
+        // has the user run `rclone authorize` on ANOTHER machine and paste the
+        // result back, which routinely takes several minutes. The on-device path
+        // is faster (browser redirect) but the same cap applies as a safety net.
         DaemonOAuthOrchestrator(apiClient, dispatchers, timeoutMs = DAEMON_OAUTH_TIMEOUT_MS)
     }
 
@@ -70,6 +71,9 @@ internal class DaemonOAuthFlow(
      * handlers clear needsReauth and signal [onReauthComplete] instead of treating the
      * flow as a new-remote creation. On non-Complete terminals with [isReauth]=true the
      * pre-existing remote is NOT deleted (it already existed before this flow ran).
+     *
+     * Set [forcePasteToken] = true to skip on-device OAuth and use the legacy
+     * paste-token path (user runs `rclone authorize` on another machine).
      */
     fun start(
         type: String,
@@ -77,6 +81,7 @@ internal class DaemonOAuthFlow(
         clientId: String? = null,
         clientSecret: String? = null,
         isReauth: Boolean = false,
+        forcePasteToken: Boolean = false,
     ) {
         // UI-M2 belt-and-suspenders: a blank name would have the daemon write a
         // nameless remote and the flow dead-end. Bail with a clear message before
@@ -101,7 +106,7 @@ internal class DaemonOAuthFlow(
                 val terminal = repository.withDaemonForOAuth { daemon ->
                     val orchestrator = orchestratorFactory()
                     this@DaemonOAuthFlow.orchestrator = orchestrator
-                    orchestrator.start(name.trim(), type, clientId, clientSecret, daemon, this)
+                    orchestrator.start(name.trim(), type, clientId, clientSecret, daemon, this, forcePasteToken)
                     // Observe orchestrator state until terminal.
                     orchestrator.state.first { s ->
                         when (s) {
