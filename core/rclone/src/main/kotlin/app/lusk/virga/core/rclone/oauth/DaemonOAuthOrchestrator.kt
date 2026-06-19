@@ -15,9 +15,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.coroutines.yield
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -256,13 +256,11 @@ class DaemonOAuthOrchestrator(
     /**
      * Handles the `config_is_local = true` branch for on-device OAuth.
      *
-     * Race mitigation: the stderr collector ([urlDeferred]) is started and given
-     * a scheduling opportunity via [yield] BEFORE the blocking continuation RC
-     * call is dispatched. Because both run on the same coroutine dispatcher in
-     * tests (StandardTestDispatcher) and on IO threads in production, `yield`
-     * ensures the async block has entered its `collect` before any bytes from
-     * the continuation can arrive. This prevents the URL line from being missed
-     * on a SharedFlow with replay=0.
+     * Race mitigation: [onSubscription] emits a Unit the moment the collector
+     * has actually subscribed to [RcloneDaemon.stderrLines]. The RC continuation
+     * is only dispatched AFTER that signal ([subscribed.await()]), so the URL line
+     * rclone logs in response to the continuation cannot arrive before the collector
+     * is active — no lines can be missed on the replay=0 SharedFlow.
      *
      * Returns the RC response that follows the redirect (to continue the state
      * machine), or null when the URL couldn't be found (failure state already set).
@@ -274,19 +272,19 @@ class DaemonOAuthOrchestrator(
         parameters: JsonObject,
         stateToken: String,
     ): JsonObject? = coroutineScope {
-        // Start scraping stderr for the auth URL BEFORE sending the continue so
-        // we don't miss the URL line on a replay=0 SharedFlow.
+        // onSubscription guarantees the collector is active before subscribed completes,
+        // so the RC continuation (which triggers the URL to be logged) is sent only
+        // after we are already listening — no missed lines on a replay=0 SharedFlow.
+        val subscribed = CompletableDeferred<Unit>()
         val urlDeferred = async {
             withTimeoutOrNull(AUTH_URL_TIMEOUT_MS) {
-                // mapNotNull transforms String lines to non-null URL strings; first()
-                // suspends until the first non-null value arrives.
                 daemon.stderrLines
+                    .onSubscription { subscribed.complete(Unit) }
                     .mapNotNull { line: String -> extractAuthUrl(line) }
                     .first()
             }
         }
-        // Yield so the async block above enters its collect before we block on rc().
-        yield()
+        subscribed.await() // guaranteed subscribed before we trigger rclone to log the URL
 
         val rcDeferred = async {
             sendContinue(daemon, name, type, parameters, stateToken, "true")

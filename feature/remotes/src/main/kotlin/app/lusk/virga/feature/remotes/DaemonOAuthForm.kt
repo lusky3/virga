@@ -46,8 +46,8 @@ import app.lusk.virga.core.designsystem.theme.VirgaSpacing
  * is non-null: the form shows a labelled input field and resumes via [onSubmitFieldAnswer].
  *
  * [onUseDesktopAuth] starts a fresh paste-token flow (forcePasteToken=true), offered as a
- * secondary action in both the connect stage and the in-progress/AwaitingAuth stage so
- * the user can fall back when the on-device browser doesn't complete the redirect.
+ * secondary action in the connect stage. If the browser stall occurs mid-flow, the user
+ * cancels first (returns to connect stage) then taps this button — a safe 2-tap path.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -160,14 +160,6 @@ internal fun DaemonOAuthForm(
                     Text(stringResource(R.string.remotes_daemon_oauth_waiting), style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = onCancel) { Text(stringResource(R.string.remotes_daemon_oauth_cancel)) }
-                }
-                // Fallback: let the user switch to paste-token if the browser redirect
-                // doesn't complete (e.g. deep-link not configured for the provider).
-                TextButton(
-                    onClick = { onUseDesktopAuth(clientId, clientSecret) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.remotes_daemon_oauth_use_desktop))
                 }
             }
             else -> {

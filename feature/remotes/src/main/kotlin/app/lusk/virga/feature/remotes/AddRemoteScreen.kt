@@ -103,6 +103,9 @@ fun AddRemoteScreen(
             onDaemonOAuth = { type, name, clientId, clientSecret ->
                 viewModel.startDaemonOAuth(type, name, clientId, clientSecret)
             },
+            onDaemonOAuthDesktop = { type, name, clientId, clientSecret ->
+                viewModel.startDaemonOAuth(type, name, clientId, clientSecret, forcePasteToken = true)
+            },
             onSubmitDaemonOAuthToken = viewModel::submitDaemonOAuthToken,
             onCancelDaemonOAuth = viewModel::cancelDaemonOAuth,
             onSaveClientId = viewModel::saveClientId,

@@ -110,7 +110,9 @@ internal class DaemonOAuthFlow(
                     // Observe orchestrator state until terminal.
                     orchestrator.state.first { s ->
                         when (s) {
-                            // Legacy compat: the current orchestrator never emits this.
+                            // On-device OAuth: open the loopback auth URL in a Custom Tab.
+                            // rclone's redirect server catches the provider callback and
+                            // unblocks the state machine; this is the normal on-device path.
                             is DaemonOAuthOrchestrator.State.AwaitingAuth -> {
                                 onLaunchUrl(s.url)
                                 false // keep collecting
