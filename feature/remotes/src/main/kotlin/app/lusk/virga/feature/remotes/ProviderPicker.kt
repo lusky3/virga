@@ -41,10 +41,12 @@ internal fun ProviderPicker(
     onSelect: (PickerEntry) -> Unit,
     modifier: Modifier = Modifier,
     /**
-     * UI-M2: when false, bundled-OAuth providers (which launch the browser flow
-     * the instant they're picked) are disabled — they can't be started without a
-     * usable remote name. Credential / wrapper / BYO-OAuth picks stay enabled
-     * because they advance to a form where the name is still editable.
+     * UI-M2: gates selection on a usable remote name. When false, every entry is
+     * disabled and a hint points at the name field — a remote can't be created
+     * without a name regardless of the path, and a bundled-OAuth pick would
+     * otherwise launch the browser flow with a blank name and dead-end. Applied
+     * uniformly so the picker doesn't grey out only some providers (which read as
+     * a glitch); see [name field hint] below.
      */
     selectionEnabled: Boolean = true,
 ) {
@@ -72,17 +74,25 @@ internal fun ProviderPicker(
             modifier = Modifier.fillMaxWidth(),
         )
 
+        // A name is required for every remote, so gate the whole list on it uniformly
+        // rather than disabling only the bundled-OAuth rows (which looked like a glitch).
+        if (!selectionEnabled) {
+            Text(
+                stringResource(R.string.remotes_picker_name_required),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = VirgaSpacing.xs, bottom = VirgaSpacing.xs),
+            )
+        }
+
         LazyColumn(
             modifier = Modifier.heightIn(max = 400.dp),
             verticalArrangement = Arrangement.spacedBy(VirgaSpacing.xs),
         ) {
             items(providers, key = { it.type }) { entry ->
-                // A bundled-OAuth pick launches immediately, so disable it until a
-                // usable name is entered; everything else routes to an editable form.
-                val bundledOAuth = (setupKindFor(entry.type) as? SetupKind.OAuth)?.bundled == true
                 ProviderRow(
                     entry = entry,
-                    enabled = selectionEnabled || !bundledOAuth,
+                    enabled = selectionEnabled,
                     onClick = { onSelect(entry) },
                 )
             }
@@ -99,7 +109,7 @@ internal fun ProviderPicker(
                     }
                 }
                 items(wrappers, key = { it.type }) { entry ->
-                    ProviderRow(entry = entry, onClick = { onSelect(entry) })
+                    ProviderRow(entry = entry, enabled = selectionEnabled, onClick = { onSelect(entry) })
                 }
             }
         }

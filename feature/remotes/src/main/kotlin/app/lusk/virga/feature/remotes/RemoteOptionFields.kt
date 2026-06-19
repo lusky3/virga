@@ -22,10 +22,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import app.lusk.virga.core.common.model.RemoteOption
 /**
  * Renders a column of typed input fields for [options]. Non-advanced options are
@@ -125,63 +127,66 @@ private fun OptionField(
             )
         }
 
-        opt.isPassword || opt.sensitive -> {
-            OutlinedTextField(
-                value = current,
-                onValueChange = { values[opt.name] = it },
-                label = { Text(labelText) },
-                isError = opt.required && current.isBlank(),
-                supportingText = if (opt.help.isNotBlank()) {
-                    { Text(opt.help, style = MaterialTheme.typography.bodySmall) }
-                } else null,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.None,
-                    autoCorrectEnabled = false,
-                    keyboardType = KeyboardType.Password,
-                ),
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-
-        opt.type in NUMERIC_TYPES -> {
-            OutlinedTextField(
-                value = current,
-                onValueChange = { values[opt.name] = it },
-                label = { Text(labelText) },
-                isError = opt.required && current.isBlank(),
-                supportingText = if (opt.help.isNotBlank()) {
-                    { Text(opt.help, style = MaterialTheme.typography.bodySmall) }
-                } else null,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Number,
-                    capitalization = KeyboardCapitalization.None,
-                    autoCorrectEnabled = false,
-                ),
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-
         else -> {
-            OutlinedTextField(
-                value = current,
+            // Password / sensitive, numeric, and plain text all render the same widget,
+            // differing only in keyboard + masking — unified so the "required" error
+            // gating lives in one place (see [OptionTextField]).
+            OptionTextField(
+                opt = opt,
+                current = current,
+                labelText = labelText,
                 onValueChange = { values[opt.name] = it },
-                label = { Text(labelText) },
-                isError = opt.required && current.isBlank(),
-                supportingText = if (opt.help.isNotBlank()) {
-                    { Text(opt.help, style = MaterialTheme.typography.bodySmall) }
-                } else null,
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.None,
-                    autoCorrectEnabled = false,
-                ),
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
             )
         }
     }
+}
+
+/**
+ * The text-field variant of [OptionField] (password/sensitive, numeric, or plain).
+ *
+ * The required-but-empty error is shown only AFTER the field has been touched —
+ * focused and then left — never on first render. Greeting the user with red boxes
+ * on a freshly opened form (before they've had any chance to type) is the bug this
+ * fixes; the Create button stays disabled until required fields are filled, so the
+ * inline error is purely a "you left this blank" cue, not the gate.
+ */
+@Composable
+private fun OptionTextField(
+    opt: RemoteOption,
+    current: String,
+    labelText: String,
+    onValueChange: (String) -> Unit,
+) {
+    var touched by remember { mutableStateOf(false) }
+    var wasFocused by remember { mutableStateOf(false) }
+    val masked = opt.isPassword || opt.sensitive
+    OutlinedTextField(
+        value = current,
+        onValueChange = onValueChange,
+        label = { Text(labelText) },
+        isError = touched && opt.required && current.isBlank(),
+        supportingText = if (opt.help.isNotBlank()) {
+            { Text(opt.help, style = MaterialTheme.typography.bodySmall) }
+        } else null,
+        visualTransformation =
+            if (masked) PasswordVisualTransformation() else VisualTransformation.None,
+        keyboardOptions = KeyboardOptions(
+            capitalization = KeyboardCapitalization.None,
+            autoCorrectEnabled = false,
+            keyboardType = when {
+                masked -> KeyboardType.Password
+                opt.type in NUMERIC_TYPES -> KeyboardType.Number
+                else -> KeyboardType.Unspecified
+            },
+        ),
+        singleLine = true,
+        modifier = Modifier
+            .fillMaxWidth()
+            .onFocusChanged { focus ->
+                if (focus.isFocused) wasFocused = true
+                else if (wasFocused) touched = true
+            },
+    )
 }
 
 /**
@@ -198,6 +203,10 @@ private fun ExamplesDropdownField(
     onValueChange: (String) -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    // Same deferred-error rule as OptionTextField: don't flag a required example field
+    // as empty until the user has touched it.
+    var touched by remember { mutableStateOf(false) }
+    var wasFocused by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(
         expanded = menuExpanded,
         onExpandedChange = { menuExpanded = it },
@@ -206,7 +215,7 @@ private fun ExamplesDropdownField(
             value = current,
             onValueChange = { onValueChange(it); menuExpanded = true },
             label = { Text(labelText) },
-            isError = opt.required && current.isBlank(),
+            isError = touched && opt.required && current.isBlank(),
             supportingText = if (opt.help.isNotBlank()) {
                 { Text(opt.help, style = MaterialTheme.typography.bodySmall) }
             } else null,
@@ -218,7 +227,11 @@ private fun ExamplesDropdownField(
             singleLine = true,
             modifier = Modifier
                 .fillMaxWidth()
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable)
+                .onFocusChanged { focus ->
+                    if (focus.isFocused) wasFocused = true
+                    else if (wasFocused) touched = true
+                },
         )
         ExposedDropdownMenu(
             expanded = menuExpanded,

@@ -16,6 +16,7 @@ import app.lusk.virga.core.designsystem.component.VirgaCard
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -199,7 +200,11 @@ private fun RemoteQuotaRow(quota: RemoteQuota?, loading: Boolean) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                LinearWavyProgressIndicator(
+                // Static determinate bar once the size is known — the wavy indicator
+                // animates its wave perpetually, which reads as a "still thinking" spinner
+                // long after the quota has been resolved. Reserve the wavy one for the
+                // genuinely-indeterminate loading branch below.
+                LinearProgressIndicator(
                     progress = { fraction },
                     modifier = Modifier.fillMaxWidth().padding(top = VirgaSpacing.xs),
                 )

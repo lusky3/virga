@@ -68,6 +68,7 @@
     <string name="remotes_picker_search">Search providers…</string>
     <string name="remotes_picker_wrappers_header">Advanced · wrap a remote</string>
     <string name="remotes_picker_no_results">No providers match your search.</string>
+    <string name="remotes_picker_name_required">Enter a name above to choose a provider.</string>
     <!-- Daemon OAuth form -->
     <string name="remotes_daemon_oauth_title">Connect to %1$s</string>
     <string name="remotes_daemon_oauth_subtitle">Optionally enter your own API credentials. Leave blank to use the defaults.</string>

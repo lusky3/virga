@@ -3,15 +3,21 @@ package app.lusk.virga.feature.remotes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.google.common.truth.Truth.assertThat
 import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.common.model.RemoteOption
+import app.lusk.virga.core.rclone.PickerEntry
+import app.lusk.virga.core.rclone.SetupKind
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -195,6 +201,87 @@ class RemoteFormsCoverageTest {
                 onCryptSaltChange = {},
             )
         }
+    }
+
+    // --- Provider picker name gating (uniform) -----------------------------------
+
+    private val pickerEntries = listOf(
+        PickerEntry(type = "s3", description = "Amazon S3"),
+        PickerEntry(type = "drive", description = "Google Drive"),
+    )
+    private val pickerSetupKind: (String) -> SetupKind = { type ->
+        if (type == "drive") SetupKind.OAuth(bundled = true) else SetupKind.Credential
+    }
+
+    @Test
+    fun providerPicker_nameNotUsable_disablesEveryRow_andShowsHint() {
+        render {
+            ProviderPicker(
+                entries = pickerEntries,
+                setupKindFor = pickerSetupKind,
+                onSelect = {},
+                selectionEnabled = false,
+            )
+        }
+        // The hint points the user at the name field above.
+        composeRule.onNodeWithText("Enter a name above to choose a provider.").assertIsDisplayed()
+        // Both a credential row AND a bundled-OAuth row are disabled — uniform, not just OAuth.
+        composeRule.onNodeWithText("Amazon S3").assertIsNotEnabled()
+        composeRule.onNodeWithText("Google Drive").assertIsNotEnabled()
+    }
+
+    @Test
+    fun providerPicker_nameUsable_rowsClickable_noHint() {
+        var picked: String? = null
+        render {
+            ProviderPicker(
+                entries = pickerEntries,
+                setupKindFor = pickerSetupKind,
+                onSelect = { picked = it.type },
+                selectionEnabled = true,
+            )
+        }
+        composeRule.onNodeWithText("Enter a name above to choose a provider.").assertDoesNotExist()
+        composeRule.onNodeWithText("Amazon S3").performClick()
+        assertThat(picked).isEqualTo("s3")
+    }
+
+    // --- Deferred required-field error (no red until touched) ---------------------
+
+    // help = "" → no supporting text, so the name appears in exactly one (label) node.
+    private fun requiredField(name: String) = option(name).copy(required = true, help = "")
+
+    @Test
+    fun optionField_requiredField_pristine_showsNoError() {
+        render {
+            TypedOptionFields(
+                options = listOf(requiredField("access_key")),
+                values = mutableMapOf(),
+                showAdvanced = false,
+                onToggleAdvanced = {},
+            )
+        }
+        // Freshly opened: the required-but-blank field must NOT be flagged in error.
+        composeRule.onNode(hasText("access_key", substring = true))
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Error))
+    }
+
+    @Test
+    fun optionField_requiredField_showsError_afterTouchAndBlur() {
+        render {
+            TypedOptionFields(
+                options = listOf(requiredField("access_key"), requiredField("secret_key")),
+                values = mutableMapOf(),
+                showAdvanced = false,
+                onToggleAdvanced = {},
+            )
+        }
+        // Focus the first field, then move focus to the second — field 1 is now touched
+        // and still blank, so it flags an error (the "you left this blank" cue).
+        composeRule.onNode(hasText("access_key", substring = true)).performClick()
+        composeRule.onNode(hasText("secret_key", substring = true)).performClick()
+        composeRule.onNode(hasText("access_key", substring = true))
+            .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Error))
     }
 
     @Test
