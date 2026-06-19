@@ -12,14 +12,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,6 +31,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.common.validation.isValidRemoteName
+import app.lusk.virga.core.designsystem.back.DismissOnBack
+import app.lusk.virga.core.designsystem.component.VirgaBottomSheet
 import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import app.lusk.virga.core.common.model.RemoteOption
 import app.lusk.virga.core.common.model.RemoteProvider
@@ -56,7 +55,6 @@ private sealed interface AddStep {
  * masked password fields. The OAuth chips and BYO keys section are hidden for crypt
  * because they are irrelevant.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun AddRemoteDialog(
     oauthProviders: List<OAuthProvider>,
@@ -179,8 +177,6 @@ internal fun AddRemoteDialog(
         showAdvanced = false
     }
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
     // Edit mode typed values — pre-filled from loadedParams minus password keys and "type".
     val editTypedValues = remember { mutableStateMapOf<String, String>() }
     var editShowAdvanced by remember { mutableStateOf(false) }
@@ -208,10 +204,13 @@ internal fun AddRemoteDialog(
         }
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-    ) {
+    VirgaBottomSheet(onDismiss = onDismiss, scrimDescription = stringResource(R.string.remotes_sheet_dismiss)) {
+        // Within-panel back: on a sub-step, Back returns to the picker rather than closing
+        // the sheet. Registered after the sheet's own handler so it wins (LIFO); absent at
+        // the Picker step, where Back falls through to the sheet's close.
+        if (editMode == null && step != AddStep.Picker) {
+            DismissOnBack { step = AddStep.Picker }
+        }
         // Edit mode: bypass the normal step machine, show a focused edit form.
         if (editMode != null) {
             Column(

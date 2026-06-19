@@ -47,6 +47,7 @@
     <string name="settings_how_virga_works_body">Virga schedules sync tasks that run rclone in the background. Each task has a source and destination remote (a cloud drive, local folder, or SD card). Tasks run automatically when their conditions are met — Wi-Fi, charging state, or on a schedule.\n\nRemotes are configured using rclone\'s standard config. Virga stores the rclone config securely on-device. All sync operations run locally; no data passes through Virga\'s servers.</string>
     <string name="settings_licenses_title">Open-source licenses</string>
     <string name="settings_licenses_intro">Virga is built with these open-source projects. Tap any item to view it. Thank you to their authors.</string>
+    <string name="settings_sheet_dismiss">Dismiss</string>
     <string name="settings_dialog_ok">OK</string>
     <string name="settings_snack_no_browser">No browser app found</string>
     <string name="settings_section_storage">Storage access</string>

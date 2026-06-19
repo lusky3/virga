@@ -9,13 +9,10 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Upload
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -23,6 +20,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import app.lusk.virga.core.common.model.FileItem
+import app.lusk.virga.core.designsystem.component.VirgaBottomSheet
 import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 
 /** Action callbacks for the per-file action sheet. */
@@ -40,15 +38,13 @@ data class FileActionCallbacks(
  * Preview (ACTION_VIEW) is covered by [FileActionCallbacks.onOpen]; no dedicated
  * in-app viewer this release.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun FileBrowserActionSheet(
     item: FileItem,
     onDismiss: () -> Unit,
     actions: FileActionCallbacks,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    VirgaBottomSheet(onDismiss = onDismiss, scrimDescription = stringResource(R.string.explorer_sheet_dismiss)) {
         ActionSheetContent(item = item, onDismiss = onDismiss, actions = actions)
     }
 }

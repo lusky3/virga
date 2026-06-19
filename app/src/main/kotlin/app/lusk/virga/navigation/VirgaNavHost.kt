@@ -36,6 +36,8 @@ import androidx.lifecycle.compose.dropUnlessResumed
 import androidx.navigationevent.NavigationEventDispatcherOwner
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
+import app.lusk.virga.core.designsystem.back.LocalOverlayBackRegistry
+import app.lusk.virga.core.designsystem.back.OverlayBackRegistry
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
@@ -212,7 +214,11 @@ fun VirgaNavHost(
                 onOpenRemotes = dropUnlessResumed { navigator.navigate(RemotesRoute) },
                 changelog = bannersState.changelog,
                 onDismissChangelog = banners::dismissChangelog,
-                onViewChangelog = dropUnlessResumed { navigator.navigate(WhatsNewRoute) },
+                // Land on the canonical Settings ▸ About ▸ What's-new rather than
+                // pushing a second copy onto the Home tab's own back stack.
+                onViewChangelog = dropUnlessResumed {
+                    navigator.navigateInto(SettingsRoute, AboutRoute, WhatsNewRoute)
+                },
                 updateAvailable = bannersState.update,
                 onDismissUpdate = banners::dismissUpdate,
                 onUpdate = { (activity as? Activity)?.let(banners::startUpdate) },
@@ -378,13 +384,17 @@ fun VirgaNavHost(
         // system/predictive back still reaches it (root fallback if the activity is absent).
         val parentOwner = LocalActivity.current as? NavigationEventDispatcherOwner
         val navEventOwner = rememberNavigationEventDispatcherOwner(parent = parentOwner)
+        // In-window overlays (VirgaBottomSheet) register here so Back closes an open
+        // sheet before popping the nav stack.
+        val overlayBack = remember { OverlayBackRegistry() }
         CompositionLocalProvider(
             LocalSharedTransitionScope provides this,
             LocalNavigationEventDispatcherOwner provides navEventOwner,
+            LocalOverlayBackRegistry provides overlayBack,
         ) {
         NavDisplay(
             entries = navigationState.toEntries(entryProvider),
-            onBack = { navigator.goBack() },
+            onBack = { if (!overlayBack.dismissTop()) navigator.goBack() },
             transitionSpec = {
                 if (reduceMotion) {
                     fadeIn(VirgaMotion.navTween()) togetherWith fadeOut(VirgaMotion.navTween())
