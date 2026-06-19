@@ -3,17 +3,15 @@ package app.lusk.virga.feature.explorer
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import app.lusk.virga.core.common.model.FileItem
 import app.lusk.virga.core.common.util.formatFileSize
+import app.lusk.virga.core.designsystem.component.VirgaBottomSheet
 import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import java.text.DateFormat
 
@@ -25,17 +23,12 @@ private fun formatModTime(epochMs: Long): String =
  * Modal bottom sheet showing metadata for [item].
  * Invoke [onDismiss] to close it; the caller controls [FileBrowserUiState.propertiesItem].
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun FileBrowserPropertiesSheet(
     item: FileItem,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-    ) {
+    VirgaBottomSheet(onDismiss = onDismiss, scrimDescription = stringResource(R.string.explorer_sheet_dismiss)) {
         PropertiesContent(item = item)
     }
 }

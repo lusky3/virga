@@ -2,6 +2,7 @@
 <resources>
     <!-- FileBrowserScreen -->
     <string name="explorer_title_browse">Browse</string>
+    <string name="explorer_sheet_dismiss">Dismiss</string>
     <string name="explorer_cd_back">Back</string>
     <string name="explorer_truncated_notice">Showing first 2,000 entries — directory is very large.</string>
     <string name="explorer_empty_folder">Empty folder</string>

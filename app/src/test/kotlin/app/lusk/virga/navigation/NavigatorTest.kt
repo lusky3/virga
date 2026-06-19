@@ -131,6 +131,57 @@ class NavigatorTest {
         }
     }
 
+    // ── navigateInto() — cross-tab deep navigation ──────────────────────────
+
+    @Nested
+    inner class NavigateInto {
+
+        @Test
+        fun `should switch to the target tab`() {
+            val nav = buildNavigator()
+            nav.navigateInto(TabB, ChildRoute(1))
+            assertThat(nav.state.topLevelRoute).isEqualTo(TabB)
+        }
+
+        @Test
+        fun `should append children in order onto the target tab stack`() {
+            val nav = buildNavigator()
+            nav.navigateInto(TabB, ChildRoute(1), ChildRoute(2))
+            assertThat(nav.state.backStacks[TabB]?.toList())
+                .containsExactly(TabB, ChildRoute(1), ChildRoute(2)).inOrder()
+        }
+
+        @Test
+        fun `should not duplicate children already present on the target stack`() {
+            val nav = buildNavigator()
+            nav.navigateInto(TabB, ChildRoute(1))
+            // Second call from elsewhere must not stack a second copy of ChildRoute(1).
+            nav.navigate(TabA)
+            nav.navigateInto(TabB, ChildRoute(1), ChildRoute(2))
+            assertThat(nav.state.backStacks[TabB]?.toList())
+                .containsExactly(TabB, ChildRoute(1), ChildRoute(2)).inOrder()
+        }
+
+        @Test
+        fun `should not touch the tab the user navigated from`() {
+            val nav = buildNavigator()
+            nav.navigate(ChildRoute(99)) // child on the start tab (TabA)
+            nav.navigateInto(TabB, ChildRoute(1))
+            assertThat(nav.state.backStacks[TabA]?.toList()).containsExactly(TabA, ChildRoute(99)).inOrder()
+        }
+
+        @Test
+        fun `back from a deep-linked target pops children then returns to home`() {
+            val nav = buildNavigator()
+            nav.navigateInto(TabB, ChildRoute(1), ChildRoute(2))
+            assertThat(nav.goBack()).isTrue() // pop ChildRoute(2)
+            assertThat(nav.goBack()).isTrue() // pop ChildRoute(1)
+            assertThat(nav.state.topLevelRoute).isEqualTo(TabB)
+            assertThat(nav.goBack()).isTrue() // TabB root → home
+            assertThat(nav.state.topLevelRoute).isEqualTo(TabA)
+        }
+    }
+
     // ── navigate() — tab reselect (ia-06) ────────────────────────────────────
 
     @Nested

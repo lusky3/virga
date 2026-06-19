@@ -21,6 +21,7 @@
     <string name="remotes_import_dialog_body">Importing replaces all of your current remotes with the ones in this file. Remotes that aren\'t in the file will be removed. This can\'t be undone.</string>
     <string name="remotes_import_dialog_confirm">Import</string>
     <string name="remotes_fab_label">Add cloud account</string>
+    <string name="remotes_sheet_dismiss">Dismiss</string>
     <string name="remotes_oauth_in_progress">Completing sign-in…</string>
     <string name="remotes_oauth_cancel">Cancel sign-in</string>
     <string name="remotes_msg_sign_in_canceled">Sign-in canceled</string>

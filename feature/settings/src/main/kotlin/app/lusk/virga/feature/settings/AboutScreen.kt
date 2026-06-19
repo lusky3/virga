@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -35,7 +34,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -61,6 +59,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import app.lusk.virga.core.designsystem.component.SettingsLinkRow
+import app.lusk.virga.core.designsystem.component.VirgaBottomSheet
 import app.lusk.virga.core.designsystem.theme.VirgaSpacing
 import kotlinx.coroutines.launch
 
@@ -356,21 +355,19 @@ private val AcknowledgedLibraries: List<OssLibrary> = listOf(
 )
 
 /**
- * Open-source acknowledgements. A [ModalBottomSheet] (not an AlertDialog) because
+ * Open-source acknowledgements. A [VirgaBottomSheet] (not an AlertDialog) because
  * BRAND §11 reserves dialogs for short blocking confirms and routes longer,
  * scrolling content to a sheet. Each library row is a 48dp tappable link that
  * opens its homepage, with an explicit accessibility description and an
  * external-link glyph (BRAND §6, §14).
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AcknowledgementsSheet(onOpenUrl: (String) -> Unit, onDismiss: () -> Unit) {
     val opensExternally = stringResource(R.string.settings_opens_externally)
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    VirgaBottomSheet(onDismiss = onDismiss, scrimDescription = stringResource(R.string.settings_sheet_dismiss)) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .navigationBarsPadding()
                 .padding(horizontal = VirgaSpacing.lg)
                 .padding(bottom = VirgaSpacing.lg)
                 .verticalScroll(rememberScrollState()),

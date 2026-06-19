@@ -27,6 +27,19 @@ class Navigator(val state: NavigationState) {
     }
 
     /**
+     * Cross-tab deep navigation: switch to [tab] and ensure [children] sit on its
+     * back stack (appended in order, skipping any already present). Used so a
+     * destination that conceptually lives under one tab — e.g. What's-new under
+     * Settings ▸ About — is reached in that single canonical place instead of being
+     * duplicated onto whichever tab the user launched it from.
+     */
+    fun navigateInto(tab: NavKey, vararg children: NavKey) {
+        val stack = state.backStacks[tab] ?: return
+        children.forEach { child -> if (child !in stack) stack.add(child) }
+        state.topLevelRoute = tab
+    }
+
+    /**
      * Handle a back event.
      *
      * - If the active tab has a child on its stack, pop it.
