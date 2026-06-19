@@ -442,6 +442,9 @@ fun RemotesScreen(
             onDaemonOAuth = { type, name, clientId, clientSecret ->
                 viewModel.startDaemonOAuth(type, name, clientId, clientSecret)
             },
+            onDaemonOAuthDesktop = { type, name, clientId, clientSecret ->
+                viewModel.startDaemonOAuth(type, name, clientId, clientSecret, forcePasteToken = true)
+            },
             onSubmitDaemonOAuthToken = viewModel::submitDaemonOAuthToken,
             onSubmitDaemonOAuthFieldAnswer = viewModel::submitDaemonOAuthFieldAnswer,
             onCancelDaemonOAuth = viewModel::cancelDaemonOAuth,

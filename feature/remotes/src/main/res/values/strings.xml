@@ -79,6 +79,7 @@
     <string name="remotes_daemon_oauth_paste_label">Authorization token</string>
     <string name="remotes_daemon_oauth_paste_submit">Submit</string>
     <string name="remotes_daemon_oauth_field_submit">Submit</string>
+    <string name="remotes_daemon_oauth_use_desktop">Authorize on another device</string>
     <!-- Bring-your-own OAuth keys -->
     <string name="remotes_byo_chip_custom">%1$s (your key)</string>
     <string name="remotes_byo_toggle">Use your own keys (recommended for regular use)</string>

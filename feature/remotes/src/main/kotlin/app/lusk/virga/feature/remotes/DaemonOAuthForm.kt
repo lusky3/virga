@@ -44,6 +44,10 @@ import app.lusk.virga.core.designsystem.theme.VirgaSpacing
  *
  * When rclone asks for a required field with no usable default, [fieldPrompt]
  * is non-null: the form shows a labelled input field and resumes via [onSubmitFieldAnswer].
+ *
+ * [onUseDesktopAuth] starts a fresh paste-token flow (forcePasteToken=true), offered as a
+ * secondary action in both the connect stage and the in-progress/AwaitingAuth stage so
+ * the user can fall back when the on-device browser doesn't complete the redirect.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -58,6 +62,8 @@ internal fun DaemonOAuthForm(
     onSubmitToken: (token: String) -> Unit,
     onSubmitFieldAnswer: (answer: String) -> Unit = {},
     onCancel: () -> Unit,
+    /** Secondary action: restart with paste-token (forcePasteToken=true) as a fallback. */
+    onUseDesktopAuth: (clientId: String, clientSecret: String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     // L1: clientId is benign, but the client SECRET and the pasted token are
@@ -155,6 +161,14 @@ internal fun DaemonOAuthForm(
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = onCancel) { Text(stringResource(R.string.remotes_daemon_oauth_cancel)) }
                 }
+                // Fallback: let the user switch to paste-token if the browser redirect
+                // doesn't complete (e.g. deep-link not configured for the provider).
+                TextButton(
+                    onClick = { onUseDesktopAuth(clientId, clientSecret) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.remotes_daemon_oauth_use_desktop))
+                }
             }
             else -> {
                 Button(
@@ -163,6 +177,15 @@ internal fun DaemonOAuthForm(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(stringResource(R.string.remotes_daemon_oauth_connect))
+                }
+                // Secondary action: paste-token fallback for users who prefer the
+                // desktop-authorize path or whose provider doesn't redirect back on-device.
+                TextButton(
+                    onClick = { onUseDesktopAuth(clientId, clientSecret) },
+                    enabled = nameUsable,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.remotes_daemon_oauth_use_desktop))
                 }
             }
         }

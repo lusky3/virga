@@ -98,6 +98,8 @@ internal fun AddRemoteDialog(
     onWrapperConfirm: (name: String, type: String, params: String) -> Unit = { _, _, _ -> },
     onOAuth: (provider: OAuthProvider, name: String) -> Unit,
     onDaemonOAuth: (type: String, name: String, clientId: String?, clientSecret: String?) -> Unit = { _, _, _, _ -> },
+    /** Secondary action passed to [DaemonOAuthForm]: restart with paste-token fallback. */
+    onDaemonOAuthDesktop: (type: String, name: String, clientId: String?, clientSecret: String?) -> Unit = { _, _, _, _ -> },
     onSubmitDaemonOAuthToken: (String) -> Unit = {},
     onSubmitDaemonOAuthFieldAnswer: (String) -> Unit = {},
     onCancelDaemonOAuth: () -> Unit = {},
@@ -459,6 +461,7 @@ internal fun AddRemoteDialog(
                         onManualConfirm = onManualConfirm,
                         onCryptConfirm = onCryptConfirm,
                         onDaemonOAuth = onDaemonOAuth,
+                        onDaemonOAuthDesktop = onDaemonOAuthDesktop,
                         onSubmitDaemonOAuthToken = onSubmitDaemonOAuthToken,
                         onSubmitDaemonOAuthFieldAnswer = onSubmitDaemonOAuthFieldAnswer,
                         onCancelDaemonOAuth = onCancelDaemonOAuth,

@@ -86,6 +86,8 @@ internal fun CredentialFormSection(
     onManualConfirm: (name: String, type: String, params: Map<String, String>) -> Unit,
     onCryptConfirm: (name: String, baseRemote: String, basePath: String, password: String, salt: String) -> Unit,
     onDaemonOAuth: (type: String, name: String, clientId: String?, clientSecret: String?) -> Unit,
+    /** Secondary action: restart the flow with paste-token fallback (forcePasteToken=true). */
+    onDaemonOAuthDesktop: (type: String, name: String, clientId: String?, clientSecret: String?) -> Unit = { _, _, _, _ -> },
     onSubmitDaemonOAuthToken: (String) -> Unit,
     onSubmitDaemonOAuthFieldAnswer: (String) -> Unit,
     onCancelDaemonOAuth: () -> Unit,
@@ -217,6 +219,14 @@ internal fun CredentialFormSection(
                 onSubmitToken = onSubmitDaemonOAuthToken,
                 onSubmitFieldAnswer = onSubmitDaemonOAuthFieldAnswer,
                 onCancel = onCancelDaemonOAuth,
+                onUseDesktopAuth = { clientId, clientSecret ->
+                    onDaemonOAuthDesktop(
+                        type.trim(),
+                        name.trim(),
+                        clientId.ifBlank { null },
+                        clientSecret.ifBlank { null },
+                    )
+                },
                 modifier = Modifier.fillMaxWidth(),
             )
             return@Column
