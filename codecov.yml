@@ -37,3 +37,9 @@ ignore:
   - "sync-worker/src/main/kotlin/app/lusk/virga/sync/WatchdogService.kt"
   - "sync-worker/src/main/kotlin/app/lusk/virga/sync/EventTriggerCoordinator.kt"
   - "sync-worker/src/main/kotlin/app/lusk/virga/sync/FolderWatchSet.kt"
+  # The rclone RC daemon manager: spawns the `rclone rcd` child process and drains
+  # its stderr on a background thread (which feeds stderrLines for on-device OAuth
+  # URL scraping). start()'s success path has no process-injection seam, so it can
+  # only run with a real subprocess — its binary-missing guard and stop()/teardown
+  # ARE unit-tested; the launch + drainer thread need the Android runtime.
+  - "core/rclone/src/main/kotlin/app/lusk/virga/core/rclone/daemon/RcloneDaemonManager.kt"

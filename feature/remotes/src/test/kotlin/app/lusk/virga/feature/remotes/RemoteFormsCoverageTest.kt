@@ -272,4 +272,26 @@ class RemoteFormsCoverageTest {
         composeRule.onNodeWithText("Submit").performClick()
         assertThat(submitted).isEqualTo("AKIAIOSFODNN7EXAMPLE")
     }
+
+    @Test
+    fun daemonOAuthForm_connectStage_showsPasteTokenFallback_andInvokesIt() {
+        var fellBack = false
+        render {
+            DaemonOAuthForm(
+                providerName = "Box",
+                nameUsable = true,
+                oauthInProgress = false,
+                tokenPrompt = null,
+                fieldPrompt = null,
+                onConnect = { _, _ -> },
+                onSubmitToken = {},
+                onCancel = {},
+                onUseDesktopAuth = { _, _ -> fellBack = true },
+            )
+        }
+        // On-device browser is the default (Connect); the paste-token fallback is offered.
+        composeRule.onNodeWithText("Authorize on another device").assertIsDisplayed()
+        composeRule.onNodeWithText("Authorize on another device").performClick()
+        assertThat(fellBack).isTrue()
+    }
 }
