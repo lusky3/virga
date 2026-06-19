@@ -37,7 +37,11 @@ class OverlayBackRegistry {
      * dismissed; false when none are open so the caller falls through to nav back.
      */
     fun dismissTop(): Boolean {
-        val top = dismissers.lastOrNull() ?: return false
+        // Remove before invoking: the dismiss kicks off an exit animation during which
+        // the overlay is still composed. Removing now means a second Back in that window
+        // falls through to nav back instead of being absorbed by the closing overlay.
+        // DismissOnBack's onDispose re-issues unregister harmlessly (no-op if already gone).
+        val top = dismissers.removeLastOrNull() ?: return false
         top()
         return true
     }

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -24,7 +25,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -94,7 +94,10 @@ fun VirgaBottomSheet(
                 tonalElevation = 1.dp,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Column(Modifier.fillMaxWidth().navigationBarsPadding()) {
+                // imePadding lifts the sheet above the keyboard (the activity uses
+                // enableEdgeToEdge, so IME insets aren't auto-consumed); navigationBarsPadding
+                // keeps content clear of the gesture bar.
+                Column(Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
                     DragHandle()
                     content()
                 }

@@ -163,6 +163,18 @@ class NavigatorTest {
         }
 
         @Test
+        fun `rebuilds the canonical order even when a later child is already present`() {
+            val nav = buildNavigator()
+            // Seed the target tab with only the LATER child already on the stack.
+            nav.navigateInto(TabB, ChildRoute(2))
+            nav.navigate(TabA)
+            // Requesting the full chain must yield child1 BEFORE child2, not append child1 last.
+            nav.navigateInto(TabB, ChildRoute(1), ChildRoute(2))
+            assertThat(nav.state.backStacks[TabB]?.toList())
+                .containsExactly(TabB, ChildRoute(1), ChildRoute(2)).inOrder()
+        }
+
+        @Test
         fun `should not touch the tab the user navigated from`() {
             val nav = buildNavigator()
             nav.navigate(ChildRoute(99)) // child on the start tab (TabA)
