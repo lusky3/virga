@@ -4,6 +4,8 @@ import android.text.format.DateUtils
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -284,6 +286,7 @@ private fun TaskSummaryDetails(task: SyncTask) {
  * The Run/Cancel + Preview + Verify action row. Extracted from [SummaryContent]'s
  * LazyColumn item so that item lambda stays under the complexity/length limits.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SummaryActionsRow(
     isActive: Boolean,
@@ -292,7 +295,13 @@ private fun SummaryActionsRow(
     preview: PreviewActionState,
     verify: VerifyActionState,
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    // FlowRow (not Row): on narrow screens three buttons can't fit on one line, and a
+    // plain Row squeezes the last one until its label wraps to vertical. FlowRow wraps
+    // the overflowing button onto the next line instead.
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
+        verticalArrangement = Arrangement.spacedBy(VirgaSpacing.sm),
+    ) {
         if (isActive) {
             OutlinedButton(onClick = onCancelSync) {
                 Icon(Icons.Filled.Cancel, contentDescription = null)
@@ -306,7 +315,6 @@ private fun SummaryActionsRow(
                 Text(stringResource(R.string.sync_task_cd_sync_now))
             }
             if (preview.available) {
-                Spacer(Modifier.width(VirgaSpacing.sm))
                 OutlinedButton(onClick = preview.onPreview, enabled = !preview.running) {
                     Icon(Icons.Filled.Preview, contentDescription = null)
                     Spacer(Modifier.width(VirgaSpacing.sm))
@@ -319,7 +327,6 @@ private fun SummaryActionsRow(
                 }
             }
             if (verify.available) {
-                Spacer(Modifier.width(VirgaSpacing.sm))
                 OutlinedButton(onClick = verify.onVerify, enabled = !verify.running) {
                     Icon(Icons.Filled.Verified, contentDescription = null)
                     Spacer(Modifier.width(VirgaSpacing.sm))
