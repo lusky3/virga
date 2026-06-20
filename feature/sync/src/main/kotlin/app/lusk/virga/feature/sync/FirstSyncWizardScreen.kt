@@ -67,6 +67,9 @@ fun FirstSyncWizardScreen(
     // dedicated add-remote destination on this stack), rather than switching tabs.
     onAddRemote: () -> Unit,
     onFinished: (taskId: Long) -> Unit,
+    // Opens the remote file browser (in pick mode) for [remoteName] so the user can
+    // browse to a destination folder; the chosen path returns via RemoteFolderPickStore.
+    onBrowseDestination: (remoteName: String) -> Unit = {},
     viewModel: FirstSyncWizardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -166,6 +169,8 @@ fun FirstSyncWizardScreen(
                     WizardStep.DESTINATION -> DestinationStep(
                         remotePath = state.remotePath,
                         onRemotePathChange = viewModel::setRemotePath,
+                        remoteName = state.remoteName,
+                        onBrowse = { onBrowseDestination(state.remoteName) },
                     )
                     WizardStep.DIRECTION_NAME -> DirectionNameStep(
                         direction = state.direction,
@@ -359,6 +364,8 @@ private fun SourceStep(
 private fun DestinationStep(
     remotePath: String,
     onRemotePathChange: (String) -> Unit,
+    remoteName: String,
+    onBrowse: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(VirgaSpacing.md)) {
         Text(
@@ -379,6 +386,21 @@ private fun DestinationStep(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
             modifier = Modifier.fillMaxWidth(),
         )
+        // Browse the selected remote to pick a destination folder instead of typing it.
+        // Same affordance as the task editor; needs a remote (chosen in the Account step).
+        TextButton(onClick = onBrowse, enabled = remoteName.isNotBlank()) {
+            Icon(
+                Icons.Filled.FolderOpen,
+                contentDescription = null,
+                modifier = Modifier.padding(end = VirgaSpacing.sm),
+            )
+            Text(
+                stringResource(
+                    if (remoteName.isBlank()) R.string.sync_edit_browse_dest_needs_remote
+                    else R.string.sync_edit_browse_dest,
+                ),
+            )
+        }
     }
 }
 

@@ -2,6 +2,9 @@ package app.lusk.virga.core.rclone
 
 import app.lusk.virga.core.common.model.SyncDirection
 import java.io.File
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 
 /** A running rclone RC daemon: child process + the localhost endpoint + creds. */
 data class RcloneDaemon(
@@ -15,6 +18,18 @@ data class RcloneDaemon(
      * deleted when the daemon stops. Null only for daemons created in tests.
      */
     val htpasswdFile: File? = null,
+    /**
+     * Live stream of lines the daemon writes to stderr. The manager drains
+     * daemon stderr on a background thread and emits each line here so
+     * consumers (e.g. [DaemonOAuthOrchestrator]) can scrape auth URLs without
+     * a separate pipe. Tests supply a [MutableSharedFlow] they control directly.
+     * Production code receives the flow from [RcloneDaemonManager].
+     */
+    val stderrLines: SharedFlow<String> = MutableSharedFlow(
+        replay = 0,
+        extraBufferCapacity = 128,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    ),
 ) {
     val baseUrl: String get() = "http://127.0.0.1:$port"
 }

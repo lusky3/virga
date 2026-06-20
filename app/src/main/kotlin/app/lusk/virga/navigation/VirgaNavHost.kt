@@ -254,6 +254,11 @@ fun VirgaNavHost(
                     navigator.goBack()
                     navigator.navigate(TaskSummaryRoute(taskId))
                 },
+                // Browse the selected remote in pick mode; the chosen folder returns to
+                // the wizard via RemoteFolderPickStore (same hand-off as the task editor).
+                onBrowseDestination = { remoteName ->
+                    navigator.navigate(BrowseRoute(remoteName = remoteName, pick = true))
+                },
             )
         }
         entry<AddRemoteRoute> {

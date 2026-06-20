@@ -261,5 +261,45 @@
             </intent-filter>
         </service>
 
+        <!-- Receives the OAuth redirect from Custom Tabs. Declared HERE rather than in
+             the :feature:remotes library that owns the class: the Google reverse-domain
+             filter uses the ${googleOAuthScheme} placeholder derived from the app's own
+             client ID, and a library resolves its own placeholders BEFORE the app merges
+             — so a library-declared filter baked the wrong scheme (…unset) and the
+             post-consent redirect never routed back, dead-ending Google sign-in. Two
+             filters: a VERIFIED https App Link (lusk.app, autoVerify + hosted
+             assetlinks.json) for providers that accept https redirects (Microsoft,
+             Dropbox); and the reverse-domain scheme Google's Android OAuth client
+             mandates, resolved from this module's googleOAuthScheme placeholder.
+             SEC: exported is required so the browser can deliver the redirect;
+             classifyOAuthRedirect validates scheme/path and the flow only proceeds for a
+             redirect whose state matches a pending in-app auth. -->
+        <activity
+            android:name="app.lusk.virga.feature.remotes.oauth.OAuthRedirectActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay"
+            tools:ignore="ExportedActivity">
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="lusk.app" android:path="/virga/oauth/callback" />
+            </intent-filter>
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <!-- Scheme-only (no host/path): the reversed-client-id scheme is unique
+                     to this OAuth client, so it routes unambiguously, and
+                     classifyOAuthRedirect validates the /oauth2redirect path + state in
+                     code. A path without a host trips lint's AppLinkUrlError (it reads
+                     as a malformed App Link) and is ignored at match time anyway. -->
+                <data android:scheme="${googleOAuthScheme}" />
+            </intent-filter>
+        </activity>
+
     </application>
 </manifest>

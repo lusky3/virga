@@ -801,13 +801,19 @@ class RemotesViewModel @Inject constructor(
             daemonOAuth.orchestratorFactory = value
         }
 
-    /** Starts daemon-mediated OAuth for a non-bundled provider. Observe [launchUrl] for the auth URL. */
+    /**
+     * Starts daemon-mediated OAuth for a non-bundled provider. Observe [launchUrl] for the
+     * auth URL (on-device path) or [transient.daemonOAuthTokenPrompt] for paste-token.
+     * Pass [forcePasteToken]=true to skip the on-device browser flow and use the legacy
+     * paste-token path (user runs `rclone authorize` on another machine).
+     */
     fun startDaemonOAuth(
         type: String,
         name: String,
         clientId: String? = null,
         clientSecret: String? = null,
-    ) = daemonOAuth.start(type, name, clientId, clientSecret)
+        forcePasteToken: Boolean = false,
+    ) = daemonOAuth.start(type, name, clientId, clientSecret, forcePasteToken = forcePasteToken)
 
     /**
      * Forwards the token the user pasted (output of `rclone authorize` run on

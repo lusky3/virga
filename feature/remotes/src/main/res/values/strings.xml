@@ -68,6 +68,7 @@
     <string name="remotes_picker_search">Search providers…</string>
     <string name="remotes_picker_wrappers_header">Advanced · wrap a remote</string>
     <string name="remotes_picker_no_results">No providers match your search.</string>
+    <string name="remotes_picker_name_required">Enter a name above to choose a provider.</string>
     <!-- Daemon OAuth form -->
     <string name="remotes_daemon_oauth_title">Connect to %1$s</string>
     <string name="remotes_daemon_oauth_subtitle">Optionally enter your own API credentials. Leave blank to use the defaults.</string>
@@ -79,6 +80,7 @@
     <string name="remotes_daemon_oauth_paste_label">Authorization token</string>
     <string name="remotes_daemon_oauth_paste_submit">Submit</string>
     <string name="remotes_daemon_oauth_field_submit">Submit</string>
+    <string name="remotes_daemon_oauth_use_desktop">Authorize on another device</string>
     <!-- Bring-your-own OAuth keys -->
     <string name="remotes_byo_chip_custom">%1$s (your key)</string>
     <string name="remotes_byo_toggle">Use your own keys (recommended for regular use)</string>

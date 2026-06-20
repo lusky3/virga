@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.data.PendingRemoteResult
+import app.lusk.virga.core.data.RemoteFolderPickStore
 import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.data.SyncTaskRepository
 import app.lusk.virga.sync.SyncScheduler
@@ -45,6 +46,7 @@ class FirstSyncWizardViewModel @Inject constructor(
     private val remoteRepository: RemoteRepository,
     private val scheduler: SyncScheduler,
     private val pendingRemoteResult: PendingRemoteResult,
+    private val folderPickStore: RemoteFolderPickStore,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(WizardState())
@@ -61,6 +63,16 @@ class FirstSyncWizardViewModel @Inject constructor(
             pendingRemoteResult.created.filterNotNull().collect { name ->
                 _state.update { s -> if (s.remoteName.isBlank()) s.copy(remoteName = name) else s }
                 pendingRemoteResult.consume()
+            }
+        }
+        // When the destination "Browse" button opens the remote file browser and the
+        // user picks a folder, fill in the chosen remote + path on return. Mirrors
+        // SyncTaskEditViewModel — the browser is launched with the already-selected
+        // remote, so picked.remoteName matches the wizard's selection.
+        viewModelScope.launch {
+            folderPickStore.picked.filterNotNull().collect { picked ->
+                _state.update { it.copy(remoteName = picked.remoteName, remotePath = picked.path) }
+                folderPickStore.consume()
             }
         }
     }

@@ -44,6 +44,10 @@ import app.lusk.virga.core.designsystem.theme.VirgaSpacing
  *
  * When rclone asks for a required field with no usable default, [fieldPrompt]
  * is non-null: the form shows a labelled input field and resumes via [onSubmitFieldAnswer].
+ *
+ * [onUseDesktopAuth] starts a fresh paste-token flow (forcePasteToken=true), offered as a
+ * secondary action in the connect stage. If the browser stall occurs mid-flow, the user
+ * cancels first (returns to connect stage) then taps this button — a safe 2-tap path.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -58,6 +62,8 @@ internal fun DaemonOAuthForm(
     onSubmitToken: (token: String) -> Unit,
     onSubmitFieldAnswer: (answer: String) -> Unit = {},
     onCancel: () -> Unit,
+    /** Secondary action: restart with paste-token (forcePasteToken=true) as a fallback. */
+    onUseDesktopAuth: (clientId: String, clientSecret: String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     // L1: clientId is benign, but the client SECRET and the pasted token are
@@ -163,6 +169,15 @@ internal fun DaemonOAuthForm(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(stringResource(R.string.remotes_daemon_oauth_connect))
+                }
+                // Secondary action: paste-token fallback for users who prefer the
+                // desktop-authorize path or whose provider doesn't redirect back on-device.
+                TextButton(
+                    onClick = { onUseDesktopAuth(clientId, clientSecret) },
+                    enabled = nameUsable,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.remotes_daemon_oauth_use_desktop))
                 }
             }
         }

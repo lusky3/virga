@@ -8,10 +8,17 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -20,6 +27,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
@@ -41,20 +49,22 @@ import kotlinx.serialization.json.putJsonObject
  *   empty string (NOT the remote name), so [State.Complete] carries the name
  *   the caller asked for.
  *
- * Auth-URL discovery: we deliberately answer `config_is_local = false` and use
- * the spec-blessed paste-token fallback ([State.AwaitingTokenPaste] +
- * [submitToken]). A spike against a live rclone 1.74 `rcd` daemon proved the
- * automatic branch (`config_is_local = true`) surfaces its
- * `http://127.0.0.1:53682/auth?state=...` URL ONLY as a NOTICE line on the
- * daemon's stderr: no RC endpoint exposes it (`rc/list` has no log or oauth
- * commands — `config/oauthstatus`/`config/oauthstop` do not exist), and issuing
- * the blocking continuation with `_async=true` leaves `job/status.output` null
- * until the redirect lands. Worse, the 53682 redirect handler is one-shot: a
- * single stray HTTP probe consumes it and aborts the whole flow with "No code
- * returned by remote server". With no reliable in-protocol URL discovery, the
- * paste-token path is the only protocol-clean option: rclone replies with a
- * `config_token` question whose `Help` text carries the user instructions
- * (`rclone authorize "<type>" ... then paste the result`).
+ * On-device OAuth (default): we answer `config_is_local = true`, which starts
+ * rclone's loopback redirect server on `127.0.0.1:<port>`. rclone then logs the
+ * auth URL as a NOTICE line on its stderr (no RC endpoint exposes it). The manager
+ * drains that stderr into [RcloneDaemon.stderrLines]; [runStateMachine] subscribes
+ * to that flow BEFORE sending the blocking continuation (to avoid missing the URL),
+ * extracts the URL via [extractAuthUrl], and emits [State.AwaitingAuth] so the
+ * feature layer can open it in a Custom Tab. rclone's loopback server catches the
+ * provider redirect and completes the flow; the blocking continuation then returns.
+ *
+ * The loopback handler is one-shot — a stray HTTP probe would consume it. The
+ * orchestrator never probes it; only the Custom Tab the user opens does.
+ *
+ * Paste-token fallback: pass [forcePasteToken]=true to [start] to answer
+ * `config_is_local = false` instead, which routes to the `config_token` question
+ * ([State.AwaitingTokenPaste] + [submitToken]). Used for providers whose loopback
+ * redirect doesn't work on-device, or when the user explicitly requests it.
  */
 class DaemonOAuthOrchestrator(
     private val apiClient: RcApiClient,
@@ -66,9 +76,9 @@ class DaemonOAuthOrchestrator(
         data object Starting : State
 
         /**
-         * Retained for API compatibility. The current flow never emits this:
-         * rclone offers no RC-queryable auth URL (see class KDoc), so the
-         * orchestrator always takes the paste-token branch instead.
+         * The on-device OAuth URL is ready. The feature layer should open [url]
+         * in a Custom Tab; rclone's loopback server will catch the provider's
+         * redirect and complete the flow automatically.
          */
         data class AwaitingAuth(val url: String) : State
 
@@ -115,12 +125,13 @@ class DaemonOAuthOrchestrator(
         clientSecret: String?,
         daemon: RcloneDaemon,
         scope: CoroutineScope,
+        forcePasteToken: Boolean = false,
     ) {
         _state.value = State.Starting
         job = scope.launch(dispatchers.io) {
             try {
                 withTimeout(timeoutMs) {
-                    runStateMachine(daemon, name, type, clientId, clientSecret)
+                    runStateMachine(daemon, name, type, clientId, clientSecret, forcePasteToken)
                 }
             } catch (_: TimeoutCancellationException) {
                 _state.value = State.TimedOut
@@ -162,11 +173,16 @@ class DaemonOAuthOrchestrator(
         type: String,
         clientId: String?,
         clientSecret: String?,
+        forcePasteToken: Boolean,
     ) {
         val parameters = buildJsonObject {
             if (!clientId.isNullOrBlank()) put("client_id", clientId)
             if (!clientSecret.isNullOrBlank()) put("client_secret", clientSecret)
         }
+        // The stable per-flow create context (daemon + identity), bundled so the
+        // continuation helpers don't each carry 5 positional params (detekt
+        // LongParameterList); only the per-step stateToken/answer vary.
+        val ctx = CreateContext(daemon, name, type, parameters)
 
         var response = rc(daemon, "config/create", buildJsonObject {
             put("name", name)
@@ -216,29 +232,103 @@ class DaemonOAuthOrchestrator(
             previousStateToken = stateToken
 
             val optionName = option["Name"]?.jsonPrimitive?.contentOrNull.orEmpty()
+
+            // On-device flow: answer "true" so rclone starts its loopback redirect
+            // server and logs the auth URL on stderr. We scrape that URL and open it
+            // in a Custom Tab; rclone's loopback catches the redirect and returns.
+            // forcePasteToken selects the legacy "false" branch instead.
+            if (optionName == "config_is_local") {
+                if (forcePasteToken) {
+                    response = sendContinue(ctx, stateToken, "false")
+                } else {
+                    val continueResult = awaitOnDeviceAuth(ctx, stateToken)
+                    if (continueResult == null) return // state already set to Failed
+                    response = continueResult
+                }
+                continue
+            }
+
             val answer = when (optionName) {
-                // Never answer true: that starts rclone's local 127.0.0.1:53682
-                // redirect server, whose auth URL is not discoverable over RC
-                // (see class KDoc). "false" routes to the paste-token question.
-                "config_is_local" -> "false"
                 "config_token" -> awaitPastedToken(option)
                 else -> if (requiresUserInput(option)) awaitFieldInput(option) else defaultAnswer(option)
             }
 
-            response = rc(daemon, "config/create", buildJsonObject {
-                put("name", name)
-                put("type", type)
-                put("parameters", parameters)
-                putJsonObject("opt") {
-                    put("nonInteractive", true)
-                    put("continue", true)
-                    put("all", true)
-                    put("state", stateToken)
-                    put("result", answer)
-                }
-            })
+            response = sendContinue(ctx, stateToken, answer)
         }
     }
+
+    /**
+     * Handles the `config_is_local = true` branch for on-device OAuth.
+     *
+     * Race mitigation: [onSubscription] emits a Unit the moment the collector
+     * has actually subscribed to [RcloneDaemon.stderrLines]. The RC continuation
+     * is only dispatched AFTER that signal ([subscribed.await()]), so the URL line
+     * rclone logs in response to the continuation cannot arrive before the collector
+     * is active — no lines can be missed on the replay=0 SharedFlow.
+     *
+     * Returns the RC response that follows the redirect (to continue the state
+     * machine), or null when the URL couldn't be found (failure state already set).
+     */
+    private suspend fun awaitOnDeviceAuth(
+        ctx: CreateContext,
+        stateToken: String,
+    ): JsonObject? = coroutineScope {
+        // onSubscription guarantees the collector is active before subscribed completes,
+        // so the RC continuation (which triggers the URL to be logged) is sent only
+        // after we are already listening — no missed lines on a replay=0 SharedFlow.
+        val subscribed = CompletableDeferred<Unit>()
+        val urlDeferred = async {
+            withTimeoutOrNull(AUTH_URL_TIMEOUT_MS) {
+                ctx.daemon.stderrLines
+                    .onSubscription { subscribed.complete(Unit) }
+                    .mapNotNull { line: String -> extractAuthUrl(line) }
+                    .first()
+            }
+        }
+        subscribed.await() // guaranteed subscribed before we trigger rclone to log the URL
+
+        val rcDeferred = async { sendContinue(ctx, stateToken, "true") }
+
+        // if/else is the coroutineScope's last expression (no return@label — detekt
+        // LabeledExpression). On a URL timeout the in-flight continuation is cancelled
+        // and the flow fails over to the desktop/paste path.
+        val url = urlDeferred.await()
+        if (url == null) {
+            rcDeferred.cancel()
+            _state.value = State.Failed(
+                "Couldn't start on-device sign-in. Try authorizing on another device.",
+            )
+            null
+        } else {
+            _state.value = State.AwaitingAuth(url)
+            rcDeferred.await()
+        }
+    }
+
+    private suspend fun sendContinue(
+        ctx: CreateContext,
+        stateToken: String,
+        answer: String,
+    ): JsonObject = rc(ctx.daemon, "config/create", buildJsonObject {
+        put("name", ctx.name)
+        put("type", ctx.type)
+        put("parameters", ctx.parameters)
+        putJsonObject("opt") {
+            put("nonInteractive", true)
+            put("continue", true)
+            put("all", true)
+            put("state", stateToken)
+            put("result", answer)
+        }
+    })
+
+    /** Stable per-flow context for the `config/create` continuation calls. */
+    private data class CreateContext(
+        val daemon: RcloneDaemon,
+        val name: String,
+        val type: String,
+        val parameters: JsonObject,
+    )
 
     /**
      * Surfaces the `config_token` question as [State.AwaitingTokenPaste] and
@@ -323,6 +413,29 @@ class DaemonOAuthOrchestrator(
         }
     }
 
+    /**
+     * Attempts to extract the loopback auth URL from a raw stderr line.
+     *
+     * rclone uses `--use-json-log`, so lines are JSON objects with a `msg` field:
+     * ```json
+     * {"level":"notice","msg":"Go to this URL…\nhttp://127.0.0.1:53682/auth?state=abc","time":"…"}
+     * ```
+     * The function first tries JSON parsing and reads `msg`; if that fails (e.g. a
+     * non-JSON startup line) it falls back to regexing the raw line. Returns null
+     * when no loopback auth URL is found.
+     */
+    internal fun extractAuthUrl(line: String): String? {
+        val searchIn = try {
+            Json.parseToJsonElement(line).jsonObject["msg"]?.jsonPrimitive?.contentOrNull ?: line
+        } catch (_: Throwable) {
+            line
+        }
+        // Trim trailing sentence/wrapping punctuation rclone may print right after
+        // the URL (e.g. "…/auth?state=x."). The loopback redirect's query is base64url
+        // state, so it never legitimately ends in these characters.
+        return AUTH_URL_REGEX.find(searchIn)?.value?.trimEnd('.', ',', ';', ')', ']', '>', '"', '\'')
+    }
+
     private suspend fun rc(
         daemon: RcloneDaemon,
         command: String,
@@ -330,6 +443,26 @@ class DaemonOAuthOrchestrator(
     ): JsonObject = apiClient.call(daemon.baseUrl, daemon.user, daemon.pass, command, params)
 
     companion object {
-        const val TIMEOUT_MS = 120_000L
+        /**
+         * Overall state-machine timeout. The on-device flow requires the user to
+         * complete browser-based OAuth (open URL → sign in → grant → redirect), so
+         * 3 minutes is the minimum useful backstop. The feature layer ([DaemonOAuthFlow])
+         * overrides with 600 s for the paste-token path, which is fine — this is only
+         * the orchestrator's own safety net.
+         */
+        const val TIMEOUT_MS = 180_000L
+
+        /**
+         * How long to wait for rclone to log the loopback auth URL after answering
+         * `config_is_local = true`. rclone starts its redirect server synchronously
+         * before logging the URL, so 20 s is ample; failure here means the daemon
+         * didn't start the server (e.g. port conflict) and we should fall back.
+         */
+        const val AUTH_URL_TIMEOUT_MS = 20_000L
+
+        // Matches the loopback auth URL rclone prints to stderr, e.g.:
+        //   http://127.0.0.1:53682/auth?state=abc123
+        // The URL appears inside a JSON "msg" field (--use-json-log) or as plain text.
+        private val AUTH_URL_REGEX = Regex("""https?://127\.0\.0\.1:\d+/auth\?[^\s"]+""")
     }
 }

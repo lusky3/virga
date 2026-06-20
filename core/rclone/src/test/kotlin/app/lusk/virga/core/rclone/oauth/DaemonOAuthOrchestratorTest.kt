@@ -9,6 +9,8 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -20,7 +22,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -58,17 +59,22 @@ class DaemonOAuthOrchestratorTest {
     private lateinit var apiClient: RcApiClient
     private lateinit var daemon: RcloneDaemon
 
+    /** Controllable stderr feed for on-device OAuth tests. */
+    private lateinit var stderrFlow: MutableSharedFlow<String>
+
     /** Every params object POSTed to config/create, in call order. */
     private val requests = CopyOnWriteArrayList<JsonObject>()
 
     @BeforeEach
     fun setUp() {
         apiClient = mockk()
+        stderrFlow = MutableSharedFlow(replay = 0, extraBufferCapacity = 64)
         daemon = RcloneDaemon(
             process = mockk { every { isAlive } returns true },
             port = 5572,
             user = "u",
             pass = "p",
+            stderrLines = stderrFlow,
         )
         requests.clear()
     }
@@ -153,7 +159,106 @@ class DaemonOAuthOrchestratorTest {
     // ------------------------------------------------------------------ tests
 
     @Test
-    fun `happy path - walks questions, pastes token, completes`() = runTest(testDispatcher) {
+    fun `happy path - on-device OAuth - emits AwaitingAuth then Complete`() = runTest(testDispatcher) {
+        enqueueResponses(
+            question("*all-set,0,false", "client_id"),
+            question("*oauth-islocal,box,,", "config_is_local", type = "bool", defaultStr = "true"),
+            // The continue for config_is_local=true blocks until rclone's loopback catches
+            // the redirect, then returns whatever comes next in the state machine.
+            terminal(),
+        )
+
+        val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
+        orchestrator.start("mybox", "box", null, null, daemon, this)
+        runCurrent()
+
+        // After the config_is_local continue is in flight, we emit the auth URL on stderr.
+        val authUrl = "http://127.0.0.1:53682/auth?state=abc123xyz"
+        val stderrJson = """{"level":"notice","msg":"Go to this URL:\n$authUrl","time":"2024-01-01T00:00:00Z"}"""
+        stderrFlow.emit(stderrJson)
+        advanceUntilIdle()
+
+        assertThat(orchestrator.state.value).isEqualTo(
+            DaemonOAuthOrchestrator.State.Complete("mybox"),
+        )
+
+        // config_is_local must be answered "true" on the default (on-device) path.
+        assertThat(requests[2].optStr("result")).isEqualTo("true")
+        assertNoInventedEndpointsCalled()
+    }
+
+    @Test
+    fun `on-device OAuth - AwaitingAuth is observable while rcDeferred is blocked`() = runTest(testDispatcher) {
+        // Verifies that State.AwaitingAuth is set by awaitOnDeviceAuth BEFORE the RC
+        // continuation returns. We control the RC call timing via a gate deferred so
+        // we can assert the intermediate state before releasing the gate.
+        val rcGate = kotlinx.coroutines.CompletableDeferred<JsonObject>()
+        var rcCallCount = 0
+        coEvery {
+            apiClient.call(any(), any(), any(), "config/create", any())
+        } coAnswers {
+            requests.add(arg(4))
+            rcCallCount++
+            // First call (initial): return immediately with the config_is_local question.
+            // Second call (continue, result="true"): block until we release the gate.
+            if (rcCallCount == 1) {
+                question("*oauth-islocal,box,,", "config_is_local", type = "bool", defaultStr = "true")
+            } else {
+                rcGate.await() // blocks until test releases it
+            }
+        }
+
+        val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
+        orchestrator.start("mybox", "box", null, null, daemon, this)
+        runCurrent() // advance to the point where urlDeferred is collecting + rcDeferred blocked on gate
+
+        val authUrl = "http://127.0.0.1:53682/auth?state=tok"
+        val line = """{"level":"notice","msg":"$authUrl","time":"t"}"""
+        stderrFlow.emit(line)
+        runCurrent() // urlDeferred completes, AwaitingAuth is set; rcDeferred still blocked
+
+        // The RC call is still blocked by rcGate, so AwaitingAuth should be stable now.
+        assertThat(orchestrator.state.value)
+            .isEqualTo(DaemonOAuthOrchestrator.State.AwaitingAuth(authUrl))
+
+        // Release the gate and let the machine complete.
+        rcGate.complete(terminal())
+        advanceUntilIdle()
+
+        assertThat(orchestrator.state.value).isEqualTo(DaemonOAuthOrchestrator.State.Complete("mybox"))
+    }
+
+    @Test
+    fun `on-device OAuth - URL scrape timeout emits Failed`() = runTest(testDispatcher) {
+        enqueueResponses(
+            question("*oauth-islocal,box,,", "config_is_local", type = "bool", defaultStr = "true"),
+            // rc call would block, but we never emit the URL so urlDeferred times out first.
+            terminal(),
+        )
+
+        // Use a short AUTH_URL_TIMEOUT_MS by injecting a very short orchestrator timeout;
+        // in tests, AUTH_URL_TIMEOUT_MS is the constant but withTimeoutOrNull inside
+        // awaitOnDeviceAuth uses it. We'll simulate timeout by not emitting anything.
+        val orchestrator = DaemonOAuthOrchestrator(
+            apiClient,
+            dispatchers,
+            timeoutMs = DaemonOAuthOrchestrator.AUTH_URL_TIMEOUT_MS + 1_000L,
+        )
+        orchestrator.start("mybox", "box", null, null, daemon, this)
+        runCurrent()
+
+        // Advance past AUTH_URL_TIMEOUT_MS (20 s) without emitting the URL.
+        advanceTimeBy(DaemonOAuthOrchestrator.AUTH_URL_TIMEOUT_MS + 100L)
+        advanceUntilIdle()
+
+        val state = orchestrator.state.value
+        assertThat(state).isInstanceOf(DaemonOAuthOrchestrator.State.Failed::class.java)
+        assertThat((state as DaemonOAuthOrchestrator.State.Failed).message)
+            .contains("on-device sign-in")
+    }
+
+    @Test
+    fun `forcePasteToken=true - walks paste-token path, answers config_is_local false`() = runTest(testDispatcher) {
         val pasteHelp = "Execute rclone authorize \"drive\" then paste the result."
         enqueueResponses(
             question("*all-set,0,false", "client_id"),
@@ -164,7 +269,7 @@ class DaemonOAuthOrchestratorTest {
         )
 
         val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
-        orchestrator.start("myremote", "drive", null, null, daemon, this)
+        orchestrator.start("myremote", "drive", null, null, daemon, this, forcePasteToken = true)
         runCurrent()
 
         // Machine paused on config_token, surfacing rclone's Help instructions.
@@ -180,8 +285,7 @@ class DaemonOAuthOrchestratorTest {
         assertThat(orchestrator.state.value)
             .isEqualTo(DaemonOAuthOrchestrator.State.Complete("myremote"))
 
-        // Initial request: opt carries nonInteractive+all; no continuation fields,
-        // and crucially no top-level state/result (rejected by real rclone).
+        // Initial request: opt carries nonInteractive+all; no continuation fields.
         val initial = requests[0]
         assertThat(initial["name"]?.jsonPrimitive?.contentOrNull).isEqualTo("myremote")
         assertThat(initial["type"]?.jsonPrimitive?.contentOrNull).isEqualTo("drive")
@@ -202,7 +306,7 @@ class DaemonOAuthOrchestratorTest {
         }
         assertThat(requests[1].optStr("state")).isEqualTo("*all-set,0,false")
         assertThat(requests[1].optStr("result")).isEqualTo("")
-        // config_is_local is always answered "false" (paste-token branch).
+        // config_is_local is answered "false" on the forcePasteToken path.
         assertThat(requests[2].optStr("state")).isEqualTo("*oauth-islocal,teamdrive,,")
         assertThat(requests[2].optStr("result")).isEqualTo("false")
         assertThat(requests[3].optStr("state")).isEqualTo("*oauth-authorize,teamdrive,,")
@@ -258,7 +362,7 @@ class DaemonOAuthOrchestratorTest {
         )
 
         val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers, timeoutMs = 500)
-        orchestrator.start("x", "drive", null, null, daemon, this)
+        orchestrator.start("x", "drive", null, null, daemon, this, forcePasteToken = true)
         runCurrent()
         assertThat(orchestrator.state.value)
             .isInstanceOf(DaemonOAuthOrchestrator.State.AwaitingTokenPaste::class.java)
@@ -278,7 +382,7 @@ class DaemonOAuthOrchestratorTest {
         )
 
         val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
-        orchestrator.start("x", "drive", null, null, daemon, this)
+        orchestrator.start("x", "drive", null, null, daemon, this, forcePasteToken = true)
         runCurrent()
         assertThat(orchestrator.state.value)
             .isInstanceOf(DaemonOAuthOrchestrator.State.AwaitingTokenPaste::class.java)
@@ -483,5 +587,37 @@ class DaemonOAuthOrchestratorTest {
         assertThat(state).isInstanceOf(DaemonOAuthOrchestrator.State.AwaitingFieldInput::class.java)
         assertThat((state as DaemonOAuthOrchestrator.State.AwaitingFieldInput).examples)
             .containsExactly("AKIA")
+    }
+
+    // -------------------------------------------------------- extractAuthUrl unit tests
+
+    @Test
+    fun `extractAuthUrl - valid JSON msg with URL`() {
+        val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
+        val url = "http://127.0.0.1:53682/auth?state=abc123"
+        val line = """{"level":"notice","msg":"Go to this URL:\n$url","time":"2024-01-01T00:00:00Z"}"""
+        assertThat(orchestrator.extractAuthUrl(line)).isEqualTo(url)
+    }
+
+    @Test
+    fun `extractAuthUrl - URL on raw line without JSON wrapper`() {
+        val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
+        val url = "http://127.0.0.1:53682/auth?state=xyz&foo=bar"
+        assertThat(orchestrator.extractAuthUrl(url)).isEqualTo(url)
+    }
+
+    @Test
+    fun `extractAuthUrl - returns null when no loopback auth URL present`() {
+        val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
+        val line = """{"level":"info","msg":"Serving remote control on 127.0.0.1:5572","time":"t"}"""
+        assertThat(orchestrator.extractAuthUrl(line)).isNull()
+    }
+
+    @Test
+    fun `extractAuthUrl - does not match non-loopback auth URLs`() {
+        val orchestrator = DaemonOAuthOrchestrator(apiClient, dispatchers)
+        // A real Box auth URL goes to box.com, not 127.0.0.1.
+        val line = "https://account.box.com/api/oauth2/authorize?response_type=code&state=abc"
+        assertThat(orchestrator.extractAuthUrl(line)).isNull()
     }
 }

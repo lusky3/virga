@@ -1,33 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <application>
-        <!-- Receives the OAuth redirect from Custom Tabs. Two intent-filters:
-             a VERIFIED HTTPS App Link (lusk.app) for providers that accept https
-             redirects (Microsoft, Dropbox) — autoVerify + the hosted
-             /.well-known/assetlinks.json mean no other app can claim it; and the
-             reverse-domain scheme Google's Android OAuth client mandates (supplied
-             as a manifest placeholder from the app module so it tracks the
-             developer's specific client ID). -->
-        <activity
-            android:name=".oauth.OAuthRedirectActivity"
-            android:exported="true"
-            android:launchMode="singleTask"
-            android:taskAffinity=""
-            android:noHistory="true"
-            android:theme="@android:style/Theme.NoDisplay">
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="lusk.app" android:path="/virga/oauth/callback" />
-            </intent-filter>
-            <intent-filter android:autoVerify="false">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="${googleOAuthScheme}" android:path="/oauth2redirect" />
-            </intent-filter>
-        </activity>
-    </application>
+    <!-- OAuthRedirectActivity (this module's class) is declared in the APP manifest,
+         not here. Its Google intent-filter uses the ${googleOAuthScheme} placeholder
+         derived from the app's client ID; a library resolves its own placeholders
+         before the app merges, so a library-declared filter baked the wrong scheme
+         (…unset) and broke the redirect. The class lives here; the manifest entry
+         lives in :app. Unit tests exercise classifyOAuthRedirect directly and need
+         no manifest declaration. -->
+
 </manifest>
