@@ -179,6 +179,10 @@ class DaemonOAuthOrchestrator(
             if (!clientId.isNullOrBlank()) put("client_id", clientId)
             if (!clientSecret.isNullOrBlank()) put("client_secret", clientSecret)
         }
+        // The stable per-flow create context (daemon + identity), bundled so the
+        // continuation helpers don't each carry 5 positional params (detekt
+        // LongParameterList); only the per-step stateToken/answer vary.
+        val ctx = CreateContext(daemon, name, type, parameters)
 
         var response = rc(daemon, "config/create", buildJsonObject {
             put("name", name)
@@ -235,9 +239,9 @@ class DaemonOAuthOrchestrator(
             // forcePasteToken selects the legacy "false" branch instead.
             if (optionName == "config_is_local") {
                 if (forcePasteToken) {
-                    response = sendContinue(daemon, name, type, parameters, stateToken, "false")
+                    response = sendContinue(ctx, stateToken, "false")
                 } else {
-                    val continueResult = awaitOnDeviceAuth(daemon, name, type, parameters, stateToken)
+                    val continueResult = awaitOnDeviceAuth(ctx, stateToken)
                     if (continueResult == null) return // state already set to Failed
                     response = continueResult
                 }
@@ -249,7 +253,7 @@ class DaemonOAuthOrchestrator(
                 else -> if (requiresUserInput(option)) awaitFieldInput(option) else defaultAnswer(option)
             }
 
-            response = sendContinue(daemon, name, type, parameters, stateToken, answer)
+            response = sendContinue(ctx, stateToken, answer)
         }
     }
 
@@ -266,10 +270,7 @@ class DaemonOAuthOrchestrator(
      * machine), or null when the URL couldn't be found (failure state already set).
      */
     private suspend fun awaitOnDeviceAuth(
-        daemon: RcloneDaemon,
-        name: String,
-        type: String,
-        parameters: JsonObject,
+        ctx: CreateContext,
         stateToken: String,
     ): JsonObject? = coroutineScope {
         // onSubscription guarantees the collector is active before subscribed completes,
@@ -278,7 +279,7 @@ class DaemonOAuthOrchestrator(
         val subscribed = CompletableDeferred<Unit>()
         val urlDeferred = async {
             withTimeoutOrNull(AUTH_URL_TIMEOUT_MS) {
-                daemon.stderrLines
+                ctx.daemon.stderrLines
                     .onSubscription { subscribed.complete(Unit) }
                     .mapNotNull { line: String -> extractAuthUrl(line) }
                     .first()
@@ -286,34 +287,32 @@ class DaemonOAuthOrchestrator(
         }
         subscribed.await() // guaranteed subscribed before we trigger rclone to log the URL
 
-        val rcDeferred = async {
-            sendContinue(daemon, name, type, parameters, stateToken, "true")
-        }
+        val rcDeferred = async { sendContinue(ctx, stateToken, "true") }
 
+        // if/else is the coroutineScope's last expression (no return@label — detekt
+        // LabeledExpression). On a URL timeout the in-flight continuation is cancelled
+        // and the flow fails over to the desktop/paste path.
         val url = urlDeferred.await()
         if (url == null) {
             rcDeferred.cancel()
             _state.value = State.Failed(
                 "Couldn't start on-device sign-in. Try authorizing on another device.",
             )
-            return@coroutineScope null
+            null
+        } else {
+            _state.value = State.AwaitingAuth(url)
+            rcDeferred.await()
         }
-
-        _state.value = State.AwaitingAuth(url)
-        rcDeferred.await()
     }
 
     private suspend fun sendContinue(
-        daemon: RcloneDaemon,
-        name: String,
-        type: String,
-        parameters: JsonObject,
+        ctx: CreateContext,
         stateToken: String,
         answer: String,
-    ): JsonObject = rc(daemon, "config/create", buildJsonObject {
-        put("name", name)
-        put("type", type)
-        put("parameters", parameters)
+    ): JsonObject = rc(ctx.daemon, "config/create", buildJsonObject {
+        put("name", ctx.name)
+        put("type", ctx.type)
+        put("parameters", ctx.parameters)
         putJsonObject("opt") {
             put("nonInteractive", true)
             put("continue", true)
@@ -322,6 +321,14 @@ class DaemonOAuthOrchestrator(
             put("result", answer)
         }
     })
+
+    /** Stable per-flow context for the `config/create` continuation calls. */
+    private data class CreateContext(
+        val daemon: RcloneDaemon,
+        val name: String,
+        val type: String,
+        val parameters: JsonObject,
+    )
 
     /**
      * Surfaces the `config_token` question as [State.AwaitingTokenPaste] and
@@ -423,7 +430,10 @@ class DaemonOAuthOrchestrator(
         } catch (_: Throwable) {
             line
         }
-        return AUTH_URL_REGEX.find(searchIn)?.value
+        // Trim trailing sentence/wrapping punctuation rclone may print right after
+        // the URL (e.g. "…/auth?state=x."). The loopback redirect's query is base64url
+        // state, so it never legitimately ends in these characters.
+        return AUTH_URL_REGEX.find(searchIn)?.value?.trimEnd('.', ',', ';', ')', ']', '>', '"', '\'')
     }
 
     private suspend fun rc(

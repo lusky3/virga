@@ -292,7 +292,12 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="${googleOAuthScheme}" android:path="/oauth2redirect" />
+                <!-- Scheme-only (no host/path): the reversed-client-id scheme is unique
+                     to this OAuth client, so it routes unambiguously, and
+                     classifyOAuthRedirect validates the /oauth2redirect path + state in
+                     code. A path without a host trips lint's AppLinkUrlError (it reads
+                     as a malformed App Link) and is ignored at match time anyway. -->
+                <data android:scheme="${googleOAuthScheme}" />
             </intent-filter>
         </activity>
 
