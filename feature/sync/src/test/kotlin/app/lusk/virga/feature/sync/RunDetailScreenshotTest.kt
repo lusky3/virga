@@ -56,11 +56,10 @@ class RunDetailScreenshotTest {
 
     @Test
     fun runDetailScreen_succeeded() {
-        // Epoch-0-based timestamps keep the formatted dates stable per run. NOTE:
-        // Robolectric inherits the host JVM time zone (it does NOT pin one), so this
-        // golden — like every dated golden in the repo — assumes the verifying host
-        // matches the recording host's zone. A repo-wide fix would pin user.timezone
-        // (e.g. UTC) for unit tests and re-record all goldens; tracked as a follow-up.
+        // Epoch-0-based timestamps render as a fixed date because the test JVM's
+        // timezone is pinned to UTC (and locale to en-US) in JvmTestConventionPlugin,
+        // so dated goldens are reproducible on every machine and in CI regardless of
+        // the recording host's zone.
         val run = SyncRun(
             id = 10L,
             taskId = 1L,

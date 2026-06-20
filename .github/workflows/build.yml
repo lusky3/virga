@@ -121,6 +121,24 @@ jobs:
       - name: Lint
         run: ./gradlew lintFossDebug
 
+      - name: Screenshot tests (Roborazzi)
+        # Verifies every module's Compose screenshot goldens against the committed
+        # baseline. Deterministic across machines because JvmTestConventionPlugin pins
+        # the test JVM to UTC + en-US. The library modules expose verifyRoborazziDebug;
+        # :app is flavored, so its task is verifyRoborazziFossDebug (the screens are
+        # flavor-agnostic, so foss covers it). On a diff, regenerate locally with
+        # `./gradlew recordRoborazziDebug :app:recordRoborazziFossDebug` and commit the PNGs.
+        run: ./gradlew verifyRoborazziDebug :app:verifyRoborazziFossDebug
+
+      - name: Upload screenshot diffs on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: roborazzi-compare
+          path: '**/build/outputs/roborazzi/*_compare.png'
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Upload coverage to Codecov
         if: ${{ env.HAS_CODECOV == 'true' }}
         env:
