@@ -4,6 +4,7 @@ import app.lusk.virga.core.common.model.Remote
 import app.lusk.virga.core.common.model.SyncDirection
 import app.lusk.virga.core.common.model.SyncTask
 import app.lusk.virga.core.data.PendingRemoteResult
+import app.lusk.virga.core.data.RemoteFolderPickStore
 import app.lusk.virga.core.data.RemoteRepository
 import app.lusk.virga.core.data.SyncTaskRepository
 import app.lusk.virga.sync.SyncScheduler
@@ -31,11 +32,14 @@ class FirstSyncWizardViewModelTest {
     }
     private val scheduler: SyncScheduler = mockk(relaxed = true)
 
-    private fun viewModel() = FirstSyncWizardViewModel(
+    private fun viewModel(
+        folderPickStore: RemoteFolderPickStore = RemoteFolderPickStore(),
+    ) = FirstSyncWizardViewModel(
         taskRepository,
         remoteRepository,
         scheduler,
         PendingRemoteResult(),
+        folderPickStore,
     )
 
     @Test
@@ -170,7 +174,7 @@ class FirstSyncWizardViewModelTest {
     @Test
     fun pendingRemoteResult_autoSelectsNewRemote() = runTest(mainDispatcher.dispatcher) {
         val pendingResult = PendingRemoteResult()
-        val vm = FirstSyncWizardViewModel(taskRepository, remoteRepository, scheduler, pendingResult)
+        val vm = FirstSyncWizardViewModel(taskRepository, remoteRepository, scheduler, pendingResult, RemoteFolderPickStore())
 
         pendingResult.created("dropbox")
         advanceUntilIdle()
@@ -179,9 +183,24 @@ class FirstSyncWizardViewModelTest {
     }
 
     @Test
+    fun folderPick_fillsRemoteAndPath_onReturnFromBrowser() = runTest(mainDispatcher.dispatcher) {
+        val store = RemoteFolderPickStore()
+        val vm = viewModel(store)
+        vm.selectRemote("gdrive")
+
+        // Simulate the file browser (pick mode) returning a chosen folder.
+        store.pick("gdrive", "Backups/DCIM")
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.remoteName).isEqualTo("gdrive")
+        assertThat(vm.state.value.remotePath).isEqualTo("Backups/DCIM")
+        assertThat(vm.state.value.canAdvanceDestination).isTrue()
+    }
+
+    @Test
     fun pendingRemoteResult_doesNotClobberAlreadySelectedRemote() = runTest(mainDispatcher.dispatcher) {
         val pendingResult = PendingRemoteResult()
-        val vm = FirstSyncWizardViewModel(taskRepository, remoteRepository, scheduler, pendingResult)
+        val vm = FirstSyncWizardViewModel(taskRepository, remoteRepository, scheduler, pendingResult, RemoteFolderPickStore())
         vm.selectRemote("gdrive")
 
         pendingResult.created("dropbox")
