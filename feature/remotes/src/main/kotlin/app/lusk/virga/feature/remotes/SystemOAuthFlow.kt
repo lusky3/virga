@@ -14,7 +14,6 @@ import app.lusk.virga.core.rclone.oauth.OAuthTokenExchanger
 import app.lusk.virga.core.rclone.oauth.Pkce
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
-import java.util.UUID
 
 /**
  * Drives the bundled (Custom Tabs + PKCE) OAuth flow on behalf of
@@ -89,7 +88,9 @@ internal class SystemOAuthFlow(
         val redirectUri = resolveRedirectUri(provider, clientId, override) ?: return
         val pending = OAuthTokenExchanger.PendingAuth(
             provider = provider,
-            state = UUID.randomUUID().toString(),
+            // Opaque CSRF nonce from the same explicit-SecureRandom generator as the
+            // PKCE verifier (consistency; UUID.randomUUID is also secure but implicit).
+            state = Pkce.newVerifier(),
             verifier = Pkce.newVerifier(),
             clientId = clientId,
             redirectUri = redirectUri,

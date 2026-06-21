@@ -126,6 +126,24 @@ jobs:
         # variant's merged manifest is caught.
         run: ./gradlew lintGithubDebug lintPlayDebug
 
+      - name: Guard — Play manifest has no all-files access
+        # MANAGE_EXTERNAL_STORAGE is declared in src/main and stripped by src/play
+        # (tools:node="remove"). That strip is load-bearing for Play policy, so assert
+        # the merged Play manifest really lacks it — a regression would silently
+        # re-expose a permission Play restricts for general-purpose sync apps.
+        run: |
+          set -euo pipefail
+          ./gradlew :app:processPlayDebugMainManifest
+          manifest=$(find app/build/intermediates -path '*[Pp]layDebug*/AndroidManifest.xml' | head -1)
+          if [ -z "$manifest" ]; then
+            echo "::error::Play merged manifest not found" >&2; exit 1
+          fi
+          if grep -q "MANAGE_EXTERNAL_STORAGE" "$manifest"; then
+            echo "::error::Play manifest declares MANAGE_EXTERNAL_STORAGE — the src/play strip regressed." >&2
+            exit 1
+          fi
+          echo "OK: no MANAGE_EXTERNAL_STORAGE in $manifest"
+
       - name: Screenshot tests (Roborazzi)
         # Verifies every module's Compose screenshot goldens against the committed
         # baseline. Deterministic across machines because JvmTestConventionPlugin pins

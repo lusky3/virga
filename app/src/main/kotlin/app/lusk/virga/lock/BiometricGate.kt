@@ -15,6 +15,14 @@ import app.lusk.virga.R
  * Allows BIOMETRIC_WEAK | DEVICE_CREDENTIAL so devices without enrolled
  * biometrics can still authenticate with their PIN/pattern/password.
  *
+ * SECURITY MODEL: this is a deliberate convenience lock, not a data-protection
+ * boundary. BIOMETRIC_WEAK (Class 2 — e.g. some face unlocks) can be spoofable on
+ * certain devices, so it is intentionally NOT used to gate anything cryptographic:
+ * rclone tokens are encrypted at rest via the Android Keystore independently of this
+ * gate (see RcloneConfigManager). The lock only hides the in-app UI; bypassing it
+ * grants no access to the encrypted config. Upgrade to BIOMETRIC_STRONG only if/when
+ * the lock is ever promoted to a real auth boundary.
+ *
  * IMPORTANT: do NOT set a negative/cancel button when DEVICE_CREDENTIAL is
  * included in the allowed authenticators — the BiometricPrompt API throws
  * [IllegalArgumentException] if both are provided together.
