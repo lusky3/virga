@@ -11,7 +11,12 @@
         <exclude domain="file" path="rclone.conf.enc" />
         <exclude domain="file" path="datastore/" />
         <exclude domain="file" path="run_logs/" />
-        <include domain="database" path="virga.db" />
+        <!-- virga.db is deliberately NOT included, so (per the "only included domains
+             are eligible" rule) it is never backed up or transferred. It holds sync-task
+             topology — remote names, local + remote paths, filter patterns — the same
+             operational metadata excluded as run_logs above. OAuth tokens live only in
+             rclone.conf.enc (excluded); a restored db would point at remotes needing
+             re-auth anyway, so tasks are simply re-created after a restore. -->
         <!-- No SharedPreferences are backed up/transferred: with explicit <include>
              rules present, only included domains are eligible, and sharedpref is
              deliberately never included — so a future dependency that quietly creates
@@ -25,7 +30,12 @@
         <exclude domain="file" path="rclone.conf.enc" />
         <exclude domain="file" path="datastore/" />
         <exclude domain="file" path="run_logs/" />
-        <include domain="database" path="virga.db" />
+        <!-- virga.db is deliberately NOT included, so (per the "only included domains
+             are eligible" rule) it is never backed up or transferred. It holds sync-task
+             topology — remote names, local + remote paths, filter patterns — the same
+             operational metadata excluded as run_logs above. OAuth tokens live only in
+             rclone.conf.enc (excluded); a restored db would point at remotes needing
+             re-auth anyway, so tasks are simply re-created after a restore. -->
         <!-- No SharedPreferences are backed up/transferred: with explicit <include>
              rules present, only included domains are eligible, and sharedpref is
              deliberately never included — so a future dependency that quietly creates

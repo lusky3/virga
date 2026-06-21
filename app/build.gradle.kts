@@ -164,10 +164,22 @@ android {
 
     splits {
         abi {
-            isEnable = true
+            // ABI splits (per-ABI APKs) are incompatible with AAB bundling: AGP errors
+            // ("Multiple shrunk-resources files…") if both are active, and an app bundle
+            // does its own ABI splitting on Play's servers. So enable splits only when
+            // NOT building a bundle — foss ships per-ABI APKs (release.yml assembles),
+            // play ships an AAB (release.yml bundles). Each release.yml build is a
+            // separate Gradle invocation, so task-name detection is reliable.
+            val buildingBundle = gradle.startParameter.taskNames.any {
+                it.contains("bundle", ignoreCase = true)
+            }
+            isEnable = !buildingBundle
             reset()
             include("arm64-v8a", "armeabi-v7a", "x86_64")
-            isUniversalApk = true
+            // No universal APK: librclone.so is ~100 MB per ABI, so an all-ABI
+            // universal APK would be ~300 MB. Ship per-ABI APKs only (each carries
+            // a distinct versionCode — see the androidComponents block below).
+            isUniversalApk = false
         }
     }
 

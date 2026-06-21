@@ -28,9 +28,18 @@ import javax.inject.Singleton
  *
  * **Client secrets** (prefix [SECRET_PREFIX]) are the user's OWN secret for
  * a client they registered with a provider that requires one (e.g. Google when
- * routing through the rclone daemon flow). Stored app-private in the same
- * plain DataStore as the client ID — same plaintext-app-private posture; no
- * additional crypto is introduced here. Never log, toast, or echo secrets.
+ * routing through the rclone daemon flow). Stored app-private in this DataStore.
+ *
+ * SECURITY POSTURE (BYO-secret power users only): the secret is app-private and is
+ * **excluded from all backup/transfer** — `files/datastore/` is excluded in both
+ * data_extraction_rules.xml and backup_rules.xml — so it never leaves the device via
+ * cloud backup, device transfer, or ADB backup. The only exposure path is a rooted
+ * device with filesystem access (outside the standard threat model), and the secret
+ * alone cannot mint tokens (PKCE + redirect are still required). At-rest encryption
+ * (a Keystore-backed value cipher over this DataStore) is tracked post-release
+ * hardening — deferred because androidx.security-crypto is deprecated, so the
+ * replacement should be a deliberate direct-Keystore design, not a rushed swap.
+ * Never log, toast, or echo secrets.
  */
 @Singleton
 class OAuthKeyStore @Inject constructor(

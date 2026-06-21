@@ -8,4 +8,8 @@
     <!-- Per-run sync logs record local folder paths + remote names; no reason to
          ship that operational metadata to cloud backup / device transfer. -->
     <exclude domain="file" path="run_logs/" />
+    <!-- The Room DB holds sync-task topology (remote names, local + remote paths,
+         filters) — same operational metadata. Excluded for parity with the Android
+         12+ rules; OAuth tokens are in rclone.conf.enc (excluded) regardless. -->
+    <exclude domain="database" path="virga.db" />
 </full-backup-content>

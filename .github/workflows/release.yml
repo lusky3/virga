@@ -155,6 +155,31 @@ jobs:
           VIRGA_VERSION_CODE: ${{ steps.version.outputs.code }}
         run: ./gradlew assembleFossRelease
 
+      - name: Build Play release bundle (AAB)
+        # Google Play requires an .aab, not APKs. Built from the `play` flavor (which
+        # carries the Play-only in-app-update dep and strips MANAGE_EXTERNAL_STORAGE /
+        # battery-opt). Signed with the same upload keystore; Play re-signs via Play
+        # App Signing. Not attached to the GitHub Release (an .aab isn't installable) —
+        # uploaded as a workflow artifact for manual Play Console upload.
+        env:
+          VIRGA_OAUTH_CLIENT_ID_GDRIVE: ${{ secrets.OAUTH_CLIENT_ID_GDRIVE }}
+          VIRGA_OAUTH_CLIENT_ID_ONEDRIVE: ${{ secrets.OAUTH_CLIENT_ID_ONEDRIVE }}
+          VIRGA_OAUTH_CLIENT_ID_DROPBOX: ${{ secrets.OAUTH_CLIENT_ID_DROPBOX }}
+          VIRGA_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          VIRGA_KEY_ALIAS: ${{ vars.RELEASE_KEY_ALIAS }}
+          VIRGA_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          VIRGA_VERSION_NAME: ${{ steps.version.outputs.version }}
+          VIRGA_VERSION_CODE: ${{ steps.version.outputs.code }}
+        run: ./gradlew bundlePlayRelease
+
+      - name: Upload Play AAB artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: play-release-aab
+          path: app/build/outputs/bundle/playRelease/*.aab
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Verify release APKs are signed
         # A tag-triggered release must never publish unsigned APKs. If the
         # signingConfig didn't run (missing keystore secrets), AGP emits
