@@ -268,20 +268,26 @@ sentry {
     includeSourceContext.set(hasToken)
 }
 
-// Per-ABI versionCode offsets. ABI splits would otherwise emit several APKs that all
+// Per-ABI versionCode offset. ABI splits would otherwise emit several APKs that all
 // share defaultConfig.versionCode — Play rejects that, and F-Droid/sideload users get
-// indistinguishable artifacts. Give each ABI a distinct, monotonic code
-// (baseVersionCode * 10 + abiOffset); the play AAB has no ABI filter so it keeps the
-// base code. Offsets are stable and < 10 so codes stay ordered across releases.
+// indistinguishable artifacts. Each ABI gets a distinct, monotonic code
+// (baseVersionCode * 10 + offset); the play AAB has no ABI filter so it keeps the base
+// code (offset 0). Offsets are stable and < 10 so codes stay ordered across releases.
+fun abiVersionCodeOffset(output: com.android.build.api.variant.VariantOutput): Int =
+    when (
+        output.filters
+            .find { it.filterType == com.android.build.api.variant.FilterConfiguration.FilterType.ABI }
+            ?.identifier
+    ) {
+        "armeabi-v7a" -> 1
+        "arm64-v8a" -> 2
+        "x86_64" -> 3
+        else -> 0
+    }
+
 androidComponents {
-    val abiOffsets = mapOf("armeabi-v7a" to 1, "arm64-v8a" to 2, "x86_64" to 3)
     onVariants { variant ->
-        variant.outputs.forEach { output ->
-            val abi = output.filters
-                .find { it.filterType == com.android.build.api.variant.FilterConfiguration.FilterType.ABI }
-                ?.identifier
-            output.versionCode.set(baseVersionCode * 10 + (abiOffsets[abi] ?: 0))
-        }
+        variant.outputs.forEach { it.versionCode.set(baseVersionCode * 10 + abiVersionCodeOffset(it)) }
     }
 }
 
