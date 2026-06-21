@@ -32,6 +32,10 @@
     <!-- OnboardingScreen — notifications rationale page (API 33+) -->
     <string name="onboarding_notif_title">Stay informed</string>
     <string name="onboarding_notif_body">Virga shows a small progress notification while a sync is running so you can see it in the status bar and cancel it if needed. Tap Next to allow notifications, or skip — syncs will still run silently.</string>
+    <!-- Crash-reporting consent (github/play builds only; fdroid ships no telemetry). -->
+    <string name="onboarding_crash_title">Help improve Virga</string>
+    <string name="onboarding_crash_body">Virga can send anonymous crash reports so bugs get fixed faster. Reports are scrubbed of file paths, remote and folder names, and tokens before they leave your device — and nothing is sent unless this is on. You can change it anytime in Settings.</string>
+    <string name="onboarding_crash_toggle_label">Send anonymous crash reports</string>
     <string name="onboarding_first_remote_title">Add your first cloud account</string>
     <!-- beg-01: define "remote" and "sync task" in plain language before using them -->
     <string name="onboarding_first_remote_body">A cloud account (called a "remote") connects Virga to Google Drive, Dropbox, OneDrive, and more. A sync task copies files between a folder on your phone and a remote.\n\nOn the Remotes tab, tap Add cloud account to connect a provider, then create a sync task. You can also import an existing rclone.conf file from your desktop.\n\nTap Add your first remote to connect one now, or Get started to head to the dashboard.</string>

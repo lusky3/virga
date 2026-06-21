@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -71,12 +72,23 @@ fun OnboardingScreen(
     onAddFirstRemote: () -> Unit = {},
     viewModel: OnboardingViewModel = hiltViewModel(),
 ) {
-    val pages = buildOnboardingPages()
+    val crashAvailable = app.lusk.virga.BuildConfig.CRASH_REPORTING_AVAILABLE
+    val pages = buildOnboardingPages(crashAvailable)
+    val notifPresent = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+    // Crash-consent page sits after notifications (when present) and before the
+    // final first-remote page; its index must match buildOnboardingPages's order.
+    val crashIndex = if (crashAvailable) (if (notifPresent) 4 else 3) else -1
     val pageIndices = PageIndices(
         storage = 1,
         battery = 2,
-        notif = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) 3 else -1,
+        notif = if (notifPresent) 3 else -1,
+        crashReporting = crashIndex,
     )
+    // First-launch crash-reporting consent. Initial state follows the flavor:
+    // opt-out (on) for github, opt-in (off) for play. Persisted on completion.
+    var crashConsent by remember {
+        mutableStateOf(app.lusk.virga.BuildConfig.CRASH_REPORTING_DEFAULT_ON)
+    }
 
     val pagerState = rememberPagerState(pageCount = { pages.size })
     val scope = rememberCoroutineScope()
@@ -153,7 +165,16 @@ fun OnboardingScreen(
                     }
                     else -> null
                 }
-                PageContent(title = page.title, body = page.body, statusHint = statusHint)
+                if (page.isCrashConsent) {
+                    CrashConsentPage(
+                        title = page.title,
+                        body = page.body,
+                        enabled = crashConsent,
+                        onToggle = { crashConsent = it },
+                    )
+                } else {
+                    PageContent(title = page.title, body = page.body, statusHint = statusHint)
+                }
             }
 
             PageIndicator(pageCount = pages.size, current = pagerState.currentPage)
@@ -182,13 +203,13 @@ fun OnboardingScreen(
                     }) { Text(stringResource(R.string.onboarding_btn_back)) }
                 } else {
                     TextButton(onClick = {
-                        viewModel.completeOnboarding(); onFinished()
+                        viewModel.completeOnboarding(crashConsent); onFinished()
                     }) { Text(stringResource(R.string.onboarding_btn_skip)) }
                 }
 
                 // On the final page: secondary "Get started" TextButton + primary CTA.
                 if (isLastPage) {
-                    TextButton(onClick = { viewModel.completeOnboarding(); onFinished() }) {
+                    TextButton(onClick = { viewModel.completeOnboarding(crashConsent); onFinished() }) {
                         Text(stringResource(R.string.onboarding_btn_get_started))
                     }
                 }
@@ -211,7 +232,7 @@ fun OnboardingScreen(
                             return@Button
                         }
                         if (isLastPage) {
-                            viewModel.completeOnboarding(); onAddFirstRemote()
+                            viewModel.completeOnboarding(crashConsent); onAddFirstRemote()
                         } else {
                             scope.launch { pagerState.animateScrollToPage(page + 1) }
                         }
@@ -267,6 +288,45 @@ private fun PageContent(title: String, body: String, statusHint: String? = null)
 }
 
 /**
+ * Crash-reporting consent page (github/play only). Same layout as [PageContent] plus a
+ * Switch the user toggles; the initial state is the flavor default (opt-out on github,
+ * opt-in on play) and the choice is persisted when onboarding completes.
+ */
+@Composable
+private fun CrashConsentPage(
+    title: String,
+    body: String,
+    enabled: Boolean,
+    onToggle: (Boolean) -> Unit,
+) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(VirgaSpacing.md),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(title, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
+        Text(
+            body,
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = VirgaSpacing.md),
+        )
+        Row(
+            Modifier.fillMaxWidth().padding(top = VirgaSpacing.lg),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                stringResource(R.string.onboarding_crash_toggle_label),
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
+            )
+            Switch(checked = enabled, onCheckedChange = onToggle)
+        }
+    }
+}
+
+/**
  * Animated page indicator.
  *
  * a11y-04: the containing Row carries a "Page X of N" stateDescription and the
@@ -313,13 +373,13 @@ private fun PageIndicator(pageCount: Int, current: Int) {
     }
 }
 
-private data class Page(val title: String, val body: String)
+private data class Page(val title: String, val body: String, val isCrashConsent: Boolean = false)
 
 // Onboarding copy varies by distribution: F-Droid / GitHub builds get the
 // full "SD card access" pitch; Play Store builds soften it since Play review
 // is hostile to MANAGE_EXTERNAL_STORAGE for general sync apps.
 @Composable
-private fun buildOnboardingPages(): List<Page> = buildList {
+private fun buildOnboardingPages(crashAvailable: Boolean): List<Page> = buildList {
     val welcomeBody = stringResource(
         if (app.lusk.virga.BuildConfig.SDCARD_ACCESS_AVAILABLE) {
             R.string.onboarding_welcome_body_foss
@@ -347,6 +407,16 @@ private fun buildOnboardingPages(): List<Page> = buildList {
             Page(
                 title = stringResource(R.string.onboarding_notif_title),
                 body = stringResource(R.string.onboarding_notif_body),
+            ),
+        )
+    }
+    // Crash-reporting consent — only on builds that compile Sentry (github/play).
+    if (crashAvailable) {
+        add(
+            Page(
+                title = stringResource(R.string.onboarding_crash_title),
+                body = stringResource(R.string.onboarding_crash_body),
+                isCrashConsent = true,
             ),
         )
     }

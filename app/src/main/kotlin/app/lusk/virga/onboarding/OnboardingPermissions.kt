@@ -19,7 +19,14 @@ import app.lusk.virga.R
  * [notif] is -1 on API < 33 (page absent); all callers treat -1 as a non-match
  * because pager indices are always >= 0.
  */
-internal data class PageIndices(val storage: Int, val battery: Int, val notif: Int) {
+internal data class PageIndices(
+    val storage: Int,
+    val battery: Int,
+    val notif: Int,
+    // Crash-reporting consent page (github/play only); -1 when absent (fdroid, or any
+    // build without Sentry). Not a permission page — it never launches a system intent.
+    val crashReporting: Int = -1,
+) {
     fun isPermissionPage(page: Int) = page == storage || page == battery || page == notif
 }
 
@@ -123,9 +130,10 @@ internal fun openBatterySettings(context: Context): Boolean =
         // The targeted "Allow <app> to ignore battery optimizations?" dialog
         // (ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS + its permission) is restricted
         // by Play policy to app categories a general sync app doesn't qualify for, so
-        // only the FOSS/sideload build uses it. The Play build (and the fallback for
-        // both) opens the general optimization-settings list, which is always allowed.
-        if (app.lusk.virga.BuildConfig.DISTRIBUTION == "foss") {
+        // only the sideload builds (github/fdroid, which keep the permission) use it.
+        // The Play build strips the permission and opens the general optimization-
+        // settings list instead (always allowed); that list is also the fallback.
+        if (app.lusk.virga.BuildConfig.DISTRIBUTION != "play") {
             context.startActivity(
                 Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                     data = "package:${context.packageName}".toUri()

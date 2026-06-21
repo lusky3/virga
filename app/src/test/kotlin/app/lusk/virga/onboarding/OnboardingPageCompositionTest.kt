@@ -108,6 +108,16 @@ class OnboardingPageCompositionTest {
         composeRule.waitForIdle()
     }
 
+    /**
+     * The crash-reporting consent page (github/play flavors — BuildConfig
+     * CRASH_REPORTING_AVAILABLE) sits between the last permission page and the
+     * final first-remote page. It's an ordinary (non-permission) page, so one
+     * Next tap advances it. Absent on fdroid, where this is a no-op.
+     */
+    private fun advanceCrashConsentIfPresent() {
+        if (app.lusk.virga.BuildConfig.CRASH_REPORTING_AVAILABLE) advancePage()
+    }
+
     // ── API 34: notifications page is present (page count = 5) ─────────────────
 
     @Test
@@ -137,6 +147,7 @@ class OnboardingPageCompositionTest {
         advanceThroughPermissionPage()
         advanceThroughPermissionPage()
         advanceThroughPermissionPage()
+        advanceCrashConsentIfPresent()
 
         // On the final page the primary button reads "Add your first remote".
         composeRule.onNodeWithText("Add your first remote").assertIsDisplayed()
@@ -154,6 +165,7 @@ class OnboardingPageCompositionTest {
         advancePage()
         advanceThroughPermissionPage()
         advanceThroughPermissionPage()
+        advanceCrashConsentIfPresent()
 
         // "Stay informed" is the notif page title — it must never appear.
         composeRule.onNodeWithText("Stay informed").assertDoesNotExist()
@@ -169,6 +181,7 @@ class OnboardingPageCompositionTest {
         advancePage()
         advanceThroughPermissionPage()
         advanceThroughPermissionPage()
+        advanceCrashConsentIfPresent()
 
         // "Add your first cloud account" is the first-remote page title.
         composeRule.onNodeWithText("Add your first cloud account").assertIsDisplayed()
@@ -188,6 +201,7 @@ class OnboardingPageCompositionTest {
         advanceThroughPermissionPage()
         advanceThroughPermissionPage()
         advanceThroughPermissionPage()
+        advanceCrashConsentIfPresent()
 
         composeRule.onNodeWithText("Add your first remote").performClick()
         composeRule.waitForIdle()
@@ -207,6 +221,7 @@ class OnboardingPageCompositionTest {
         advanceThroughPermissionPage()
         advanceThroughPermissionPage()
         advanceThroughPermissionPage()
+        advanceCrashConsentIfPresent()
 
         composeRule.onNodeWithText("Get started").performClick()
         composeRule.waitForIdle()
@@ -227,6 +242,7 @@ class OnboardingPageCompositionTest {
         advancePage()
         advanceThroughPermissionPage()
         advanceThroughPermissionPage()
+        advanceCrashConsentIfPresent()
 
         composeRule.onNodeWithText("Add your first remote").performClick()
         composeRule.waitForIdle()
@@ -245,6 +261,7 @@ class OnboardingPageCompositionTest {
         advancePage()
         advanceThroughPermissionPage()
         advanceThroughPermissionPage()
+        advanceCrashConsentIfPresent()
 
         composeRule.onNodeWithText("Get started").performClick()
         composeRule.waitForIdle()
