@@ -75,14 +75,10 @@ fun OnboardingScreen(
     val crashAvailable = app.lusk.virga.BuildConfig.CRASH_REPORTING_AVAILABLE
     val pages = buildOnboardingPages(crashAvailable)
     val notifPresent = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-    // Crash-consent page sits after notifications (when present) and before the
-    // final first-remote page; its index must match buildOnboardingPages's order.
-    val crashIndex = if (crashAvailable) (if (notifPresent) 4 else 3) else -1
     val pageIndices = PageIndices(
         storage = 1,
         battery = 2,
         notif = if (notifPresent) 3 else -1,
-        crashReporting = crashIndex,
     )
     // First-launch crash-reporting consent. Initial state follows the flavor:
     // opt-out (on) for github, opt-in (off) for play. Persisted on completion.
@@ -229,9 +225,7 @@ fun OnboardingScreen(
                                 }
                             }
                             intentLaunchedPages = intentLaunchedPages + page
-                            return@Button
-                        }
-                        if (isLastPage) {
+                        } else if (isLastPage) {
                             viewModel.completeOnboarding(crashConsent); onAddFirstRemote()
                         } else {
                             scope.launch { pagerState.animateScrollToPage(page + 1) }

@@ -1,3 +1,4 @@
+import com.android.build.api.dsl.ApplicationProductFlavor
 import java.util.Properties
 
 plugins {
@@ -77,6 +78,28 @@ val rcloneVersion: String = rootProject.file("scripts/rclone-versions.env").read
 val enableUpdateCheck: Boolean =
     (project.findProperty("virga.enableUpdateCheck") as String?)?.toBoolean() ?: true
 
+// Single definition of the per-flavor BuildConfig surface. The three distribution
+// flavors are structurally identical, so routing every field through here keeps each
+// field-name string literal at one occurrence (no StringLiteralDuplication) and stops
+// the flavors from drifting apart.
+private fun ApplicationProductFlavor.distribution(
+    name: String,
+    sdcardAccess: Boolean,
+    updateCheck: Boolean,
+    crashAvailable: Boolean,
+    crashDefaultOn: Boolean,
+) {
+    fun boolField(field: String, value: Boolean) =
+        buildConfigField("boolean", field, value.toString())
+    dimension = "distribution"
+    boolField("ALLOW_BYO_OAUTH", true)
+    boolField("SDCARD_ACCESS_AVAILABLE", sdcardAccess)
+    buildConfigField("String", "DISTRIBUTION", "\"$name\"")
+    boolField("ENABLE_UPDATE_CHECK", updateCheck)
+    boolField("CRASH_REPORTING_AVAILABLE", crashAvailable)
+    boolField("CRASH_REPORTING_DEFAULT_ON", crashDefaultOn)
+}
+
 android {
     namespace = "app.lusk.virga"
 
@@ -139,39 +162,41 @@ android {
         // the GitHub-Releases self-update check, and opt-OUT crash reporting (Sentry
         // compiled in; on by default, disclosed + toggleable at first launch).
         create("github") {
-            dimension = "distribution"
-            buildConfigField("boolean", "ALLOW_BYO_OAUTH", "true")
-            buildConfigField("boolean", "SDCARD_ACCESS_AVAILABLE", "true")
-            buildConfigField("String", "DISTRIBUTION", "\"github\"")
-            buildConfigField("boolean", "ENABLE_UPDATE_CHECK", enableUpdateCheck.toString())
             // Crash reporting present; default enabled (opt-out) for this direct channel.
-            buildConfigField("boolean", "CRASH_REPORTING_AVAILABLE", "true")
-            buildConfigField("boolean", "CRASH_REPORTING_DEFAULT_ON", "true")
+            distribution(
+                name = "github",
+                sdcardAccess = true,
+                updateCheck = enableUpdateCheck,
+                crashAvailable = true,
+                crashDefaultOn = true,
+            )
         }
         // F-Droid (per-ABI APKs). Fully FOSS: NO Sentry SDK compiled in (src/fdroid
         // ships a no-op CrashReporter), NO self-update check, NO baked OAuth client
         // IDs (BYO-keys only). Full filesystem/SD-card access is allowed on F-Droid.
         create("fdroid") {
-            dimension = "distribution"
-            buildConfigField("boolean", "ALLOW_BYO_OAUTH", "true")
-            buildConfigField("boolean", "SDCARD_ACCESS_AVAILABLE", "true")
-            buildConfigField("String", "DISTRIBUTION", "\"fdroid\"")
-            buildConfigField("boolean", "ENABLE_UPDATE_CHECK", "false")
-            buildConfigField("boolean", "CRASH_REPORTING_AVAILABLE", "false")
-            buildConfigField("boolean", "CRASH_REPORTING_DEFAULT_ON", "false")
+            distribution(
+                name = "fdroid",
+                sdcardAccess = true,
+                updateCheck = false,
+                crashAvailable = false,
+                crashDefaultOn = false,
+            )
         }
         // Google Play (AAB). Play policy is hostile to MANAGE_EXTERNAL_STORAGE for
         // general-purpose sync apps, so the play manifest strips it (SAF instead);
         // SDCARD_ACCESS_AVAILABLE=false drives the UI explanation. In-app-update, BYO
         // OAuth, and opt-IN crash reporting (Sentry compiled in; off until consent).
         create("play") {
-            dimension = "distribution"
-            buildConfigField("boolean", "ALLOW_BYO_OAUTH", "true")
-            buildConfigField("boolean", "SDCARD_ACCESS_AVAILABLE", "false")
-            buildConfigField("String", "DISTRIBUTION", "\"play\"")
-            buildConfigField("boolean", "ENABLE_UPDATE_CHECK", "false")
-            buildConfigField("boolean", "CRASH_REPORTING_AVAILABLE", "true")
-            buildConfigField("boolean", "CRASH_REPORTING_DEFAULT_ON", "false")
+            // In-app-update, BYO OAuth, and opt-IN crash reporting (Sentry compiled
+            // in; off until consent).
+            distribution(
+                name = "play",
+                sdcardAccess = false,
+                updateCheck = false,
+                crashAvailable = true,
+                crashDefaultOn = false,
+            )
         }
     }
 

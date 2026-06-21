@@ -134,7 +134,10 @@ jobs:
         run: |
           set -euo pipefail
           ./gradlew :app:processPlayDebugMainManifest
-          manifest=$(find app/build/intermediates -path '*[Pp]layDebug*/AndroidManifest.xml' | head -1)
+          # Look only in the merged_manifest intermediate (not the whole tree, which
+          # also holds blame/aapt/packaged copies) and sort so the match is stable
+          # regardless of filesystem ordering.
+          manifest=$(find app/build/intermediates/merged_manifest -path '*[Pp]layDebug*/AndroidManifest.xml' | sort | head -1)
           if [ -z "$manifest" ]; then
             echo "::error::Play merged manifest not found" >&2; exit 1
           fi

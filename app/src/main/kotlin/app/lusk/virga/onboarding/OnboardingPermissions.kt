@@ -23,9 +23,6 @@ internal data class PageIndices(
     val storage: Int,
     val battery: Int,
     val notif: Int,
-    // Crash-reporting consent page (github/play only); -1 when absent (fdroid, or any
-    // build without Sentry). Not a permission page — it never launches a system intent.
-    val crashReporting: Int = -1,
 ) {
     fun isPermissionPage(page: Int) = page == storage || page == battery || page == notif
 }
