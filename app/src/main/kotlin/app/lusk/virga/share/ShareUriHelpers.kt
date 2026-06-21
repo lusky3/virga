@@ -25,6 +25,7 @@ internal fun sanitizeSafName(rawName: String, fallback: String = "upload"): Stri
         .substringAfterLast('/')
         .substringAfterLast('\\')
         .replace("..", "_")
+        .replace("\u0000", "") // strip a NUL byte; it would otherwise throw at File() construction
         .trim()
     return stripped.ifBlank { fallback }
 }

@@ -562,6 +562,10 @@ class RcloneEngineImpl @Inject constructor(
     override suspend fun dedupe(remoteName: String, dedupeMode: String): Result<Unit> {
         var leased = false
         return try {
+            // Validate the mode at this boundary before it reaches rclone. It's an
+            // internal value today ("skip"), not JSON/shell-injectable, but a corrupt
+            // DB row or a future caller shouldn't push an arbitrary string through.
+            require(dedupeMode in VALID_DEDUPE_MODES) { "Unsupported dedupe mode: $dedupeMode" }
             val d = acquireDaemon()
             leased = true
             // rclone exposes `dedupe` only as a CLI command, not an operations/* RC
@@ -879,6 +883,11 @@ class RcloneEngineImpl @Inject constructor(
 
     private companion object {
         const val TAG = "RcloneEngine"
+        // rclone's accepted --dedupe-mode values (rclone v1.74). Guards dedupe()'s
+        // boundary so only a known mode reaches the daemon.
+        val VALID_DEDUPE_MODES = setOf(
+            "skip", "first", "newest", "oldest", "rename", "largest", "smallest",
+        )
         // rclone RC parameter key naming the (sub)path within a remote's filesystem.
         const val KEY_REMOTE = "remote"
         // rclone RC command + param for fetching a job's transfer statistics.
