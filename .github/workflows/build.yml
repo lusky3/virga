@@ -23,6 +23,10 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # The weekly `schedule` exists only to drive the rclone-update-check job; the
+    # full build (NDK + rclone cross-compile + every flavor) shouldn't run on cron.
+    # It still runs on every push and PR.
+    if: github.event_name != 'schedule'
     # The `dev` environment holds the debug-keystore + debug OAuth client-ID
     # secrets. It has no protection rules, so this doesn't gate PR builds. Fork
     # PRs don't receive the secrets — the steps below degrade gracefully and the
@@ -205,6 +209,9 @@ jobs:
         with:
           name: github-debug-apks
           path: app/build/outputs/apk/github/debug/*.apk
+          # Fail loudly if a path/flavor regression produces no APKs, rather than
+          # silently uploading an empty artifact.
+          if-no-files-found: error
 
   secret-scan:
     # GitGuardian secret scanning over the commit range. Independent of the build

@@ -182,16 +182,28 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Verify release APKs are signed
-        # A tag-triggered release must never publish unsigned APKs. If the
+      - name: Verify release artifacts are signed
+        # A tag-triggered release must never publish unsigned artifacts. If the
         # signingConfig didn't run (missing keystore secrets), AGP emits
-        # *-unsigned.apk — fail loudly instead of shipping them.
+        # *-unsigned.apk for APKs — fail loudly instead of shipping them. A bundle
+        # keeps its name whether or not it's signed, so the AAB's jar signature is
+        # checked explicitly with jarsigner (JDK is already set up above).
         run: |
           set -euo pipefail
           if ls app/build/outputs/apk/github/release/*-unsigned.apk >/dev/null 2>&1; then
             echo "::error::Unsigned release APKs present — refusing to publish. Configure RELEASE_KEYSTORE_* secrets." >&2
             exit 1
           fi
+          aab=$(find app/build/outputs/bundle/playRelease -name '*.aab' | sort | head -1)
+          if [ -z "$aab" ]; then
+            echo "::error::Play release bundle not found — bundlePlayRelease did not produce an .aab." >&2
+            exit 1
+          fi
+          if ! jarsigner -verify "$aab" | grep -q '^jar verified\.'; then
+            echo "::error::Play AAB ($aab) is not signed — refusing to publish. Configure RELEASE_KEYSTORE_* secrets." >&2
+            exit 1
+          fi
+          echo "OK: $aab is signed"
 
       - name: Generate SHA-256 checksums
         run: |
