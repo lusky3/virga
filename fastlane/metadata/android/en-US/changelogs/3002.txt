@@ -1,0 +1,8 @@
+0.3.0
+
+• On-device browser OAuth for non-bundled backends (e.g. Box)
+• Google Drive sign-in fix; in-app remote folder picker for sync destinations
+• Three distribution builds: GitHub, Google Play, F-Droid (F-Droid ships zero telemetry)
+• First-launch crash-reporting consent (off by default on Play)
+• Sync history with search, filters, CSV/JSON export; per-task widgets; Quick tile
+• Numerous UI, privacy, and stability fixes
