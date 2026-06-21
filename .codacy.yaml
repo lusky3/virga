@@ -21,5 +21,7 @@
 exclude_paths:
   - "gh-pages/**"
   - "**/src/test/**"
-  - "**/src/testFoss/**"
+  - "**/src/testGithub/**"
+  - "**/src/testFdroid/**"
+  - "**/src/testPlay/**"
   - "**/src/androidTest/**"

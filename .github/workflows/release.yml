@@ -139,10 +139,12 @@ jobs:
           echo "::error::Release signing keystore not configured. Aborting."
           exit 1
 
-      - name: Build FOSS release APKs
-        # When the keystore env vars are present, the Gradle signingConfig signs
-        # the APKs in-build (no separate apksigner step). Without them (forks /
-        # inspection builds) the release variant is simply left unsigned.
+      - name: Build GitHub release APKs
+        # The github flavor is the GitHub-sideload channel (per-ABI APKs). When the
+        # keystore env vars are present, the Gradle signingConfig signs the APKs
+        # in-build (no separate apksigner step). Without them (forks / inspection
+        # builds) the release variant is simply left unsigned.
+        # (The fdroid flavor is built by F-Droid's own servers from its recipe, not here.)
         env:
           VIRGA_OAUTH_CLIENT_ID_GDRIVE: ${{ secrets.OAUTH_CLIENT_ID_GDRIVE }}
           VIRGA_OAUTH_CLIENT_ID_ONEDRIVE: ${{ secrets.OAUTH_CLIENT_ID_ONEDRIVE }}
@@ -153,7 +155,7 @@ jobs:
           VIRGA_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
           VIRGA_VERSION_NAME: ${{ steps.version.outputs.version }}
           VIRGA_VERSION_CODE: ${{ steps.version.outputs.code }}
-        run: ./gradlew assembleFossRelease
+        run: ./gradlew assembleGithubRelease
 
       - name: Build Play release bundle (AAB)
         # Google Play requires an .aab, not APKs. Built from the `play` flavor (which
@@ -186,7 +188,7 @@ jobs:
         # *-unsigned.apk — fail loudly instead of shipping them.
         run: |
           set -euo pipefail
-          if ls app/build/outputs/apk/foss/release/*-unsigned.apk >/dev/null 2>&1; then
+          if ls app/build/outputs/apk/github/release/*-unsigned.apk >/dev/null 2>&1; then
             echo "::error::Unsigned release APKs present — refusing to publish. Configure RELEASE_KEYSTORE_* secrets." >&2
             exit 1
           fi
@@ -194,7 +196,7 @@ jobs:
       - name: Generate SHA-256 checksums
         run: |
           set -euo pipefail
-          cd app/build/outputs/apk/foss/release
+          cd app/build/outputs/apk/github/release
           sha256sum *.apk > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
@@ -222,6 +224,6 @@ jobs:
           body_path: ${{ steps.notes.outputs.path }}
           generate_release_notes: true
           files: |
-            app/build/outputs/apk/foss/release/*.apk
-            app/build/outputs/apk/foss/release/SHA256SUMS.txt
+            app/build/outputs/apk/github/release/*.apk
+            app/build/outputs/apk/github/release/SHA256SUMS.txt
           fail_on_unmatched_files: true

@@ -97,12 +97,13 @@ jobs:
           # injected straight into the build step's env from secrets.
           echo "VIRGA_DEBUG_KEYSTORE_FILE=$RUNNER_TEMP/keystore/debug.jks" >> "$GITHUB_ENV"
 
-      - name: Build FOSS + Play debug APKs
+      - name: Build all-flavor debug APKs
         # Debug OAuth client IDs + debug-keystore signing come from the dev
         # environment so the artifact is installable with working OAuth. The
         # debug keystore password is the well-known `android`, not a real secret.
-        # Play is built too (not uploaded) so its manifest merge / flavor config
-        # regressions are caught in CI, not at release time.
+        # All three distribution flavors are built so manifest-merge / flavor-config
+        # regressions (e.g. Play's MANAGE_EXTERNAL_STORAGE strip, fdroid's Sentry-free
+        # graph) are caught in CI, not at release time.
         env:
           VIRGA_OAUTH_CLIENT_ID_GDRIVE: ${{ secrets.OAUTH_CLIENT_ID_GDRIVE }}
           VIRGA_OAUTH_CLIENT_ID_ONEDRIVE: ${{ secrets.OAUTH_CLIENT_ID_ONEDRIVE }}
@@ -110,25 +111,28 @@ jobs:
           VIRGA_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           VIRGA_DEBUG_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           VIRGA_DEBUG_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: ./gradlew assembleFossDebug assemblePlayDebug
+        run: ./gradlew assembleGithubDebug assembleFdroidDebug assemblePlayDebug
 
       - name: Unit tests + coverage
         # koverXmlReport runs every module's unit tests (incl. the library
-        # modules' testDebugUnitTest, which a bare testFossDebugUnitTest misses)
-        # and emits the aggregated JaCoCo-format report Codecov + Sonar consume.
+        # modules' testDebugUnitTest that a single-variant run would miss) and
+        # emits the aggregated JaCoCo-format report Codecov + Sonar consume. Kover
+        # aggregates across the app's flavors automatically.
         run: ./gradlew koverXmlReport
 
       - name: Lint
-        run: ./gradlew lintFossDebug
+        # Lint both the all-files-access manifest (github == fdroid) and the Play
+        # manifest (which strips MANAGE_EXTERNAL_STORAGE) so a regression in either
+        # variant's merged manifest is caught.
+        run: ./gradlew lintGithubDebug lintPlayDebug
 
       - name: Screenshot tests (Roborazzi)
         # Verifies every module's Compose screenshot goldens against the committed
         # baseline. Deterministic across machines because JvmTestConventionPlugin pins
         # the test JVM to UTC + en-US. The library modules expose verifyRoborazziDebug;
-        # :app is flavored, so its task is verifyRoborazziFossDebug (the screens are
-        # flavor-agnostic, so foss covers it). On a diff, regenerate locally with
-        # `./gradlew recordRoborazziDebug :app:recordRoborazziFossDebug` and commit the PNGs.
-        run: ./gradlew verifyRoborazziDebug :app:verifyRoborazziFossDebug
+        # :app is flavored, so use the github variant (screens are flavor-agnostic). On
+        # a diff, regenerate with `./gradlew recordRoborazziDebug :app:recordRoborazziGithubDebug`.
+        run: ./gradlew verifyRoborazziDebug :app:verifyRoborazziGithubDebug
 
       - name: Upload screenshot diffs on failure
         if: failure()
@@ -178,8 +182,8 @@ jobs:
       - name: Upload APKs
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: foss-debug-apks
-          path: app/build/outputs/apk/foss/debug/*.apk
+          name: github-debug-apks
+          path: app/build/outputs/apk/github/debug/*.apk
 
   secret-scan:
     # GitGuardian secret scanning over the commit range. Independent of the build

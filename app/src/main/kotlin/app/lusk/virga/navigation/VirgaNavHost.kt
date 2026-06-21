@@ -327,8 +327,10 @@ fun VirgaNavHost(
             SettingsScreen(
                 onOpenStats = dropUnlessResumed { navigator.navigate(StatsRoute) },
                 onOpenAbout = dropUnlessResumed { navigator.navigate(AboutRoute) },
-                crashReportingAvailable = app.lusk.virga.BuildConfig.SENTRY_DSN.isNotBlank(),
-                // All-files-access builds (foss) can offer a storage-access grant in Settings.
+                // Per-flavor: github/play compile Sentry in (true), fdroid does not (false).
+                // The toggle itself no-ops without a baked DSN (CrashReporter.isAvailable).
+                crashReportingAvailable = app.lusk.virga.BuildConfig.CRASH_REPORTING_AVAILABLE,
+                // All-files-access builds (github/fdroid) can offer a storage-access grant in Settings.
                 storageAccessRelevant = app.lusk.virga.BuildConfig.SDCARD_ACCESS_AVAILABLE,
                 // Apply the locale immediately when the user changes it; the VM also
                 // persists it to DataStore so startup can restore the choice.
