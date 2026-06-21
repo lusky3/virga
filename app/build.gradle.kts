@@ -77,6 +77,10 @@ val rcloneVersion: String = rootProject.file("scripts/rclone-versions.env").read
 val enableUpdateCheck: Boolean =
     (project.findProperty("virga.enableUpdateCheck") as String?)?.toBoolean() ?: true
 
+// Base versionCode (CI injects the git-tag-derived value). Per-ABI APKs derive a
+// distinct code from this in the androidComponents block below.
+val baseVersionCode: Int = System.getenv("VIRGA_VERSION_CODE")?.toIntOrNull() ?: 1
+
 android {
     namespace = "app.lusk.virga"
 
@@ -84,7 +88,7 @@ android {
         applicationId = "app.lusk.virga"
         // Injectable from CI (release.yml derives these from the git tag) so the
         // published build carries the real version, not a hardcoded 1 / 0.1.0.
-        versionCode = System.getenv("VIRGA_VERSION_CODE")?.toIntOrNull() ?: 1
+        versionCode = baseVersionCode
         versionName = System.getenv("VIRGA_VERSION_NAME") ?: "0.3.0"
         testInstrumentationRunner = "app.lusk.virga.HiltTestRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -167,7 +171,10 @@ android {
             isEnable = true
             reset()
             include("arm64-v8a", "armeabi-v7a", "x86_64")
-            isUniversalApk = true
+            // No universal APK: librclone.so is ~100 MB per ABI, so an all-ABI
+            // universal APK would be ~300 MB. Ship per-ABI APKs only (each carries
+            // a distinct versionCode — see the androidComponents block below).
+            isUniversalApk = false
         }
     }
 
@@ -250,6 +257,23 @@ sentry {
     val hasToken = !System.getenv("SENTRY_AUTH_TOKEN").isNullOrBlank()
     autoUploadProguardMapping.set(hasToken)
     includeSourceContext.set(hasToken)
+}
+
+// Per-ABI versionCode offsets. ABI splits would otherwise emit several APKs that all
+// share defaultConfig.versionCode — Play rejects that, and F-Droid/sideload users get
+// indistinguishable artifacts. Give each ABI a distinct, monotonic code
+// (baseVersionCode * 10 + abiOffset); the play AAB has no ABI filter so it keeps the
+// base code. Offsets are stable and < 10 so codes stay ordered across releases.
+androidComponents {
+    val abiOffsets = mapOf("armeabi-v7a" to 1, "arm64-v8a" to 2, "x86_64" to 3)
+    onVariants { variant ->
+        variant.outputs.forEach { output ->
+            val abi = output.filters
+                .find { it.filterType == com.android.build.api.variant.FilterConfiguration.FilterType.ABI }
+                ?.identifier
+            output.versionCode.set(baseVersionCode * 10 + (abiOffsets[abi] ?: 0))
+        }
+    }
 }
 
 dependencies {
