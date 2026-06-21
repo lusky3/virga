@@ -77,10 +77,6 @@ val rcloneVersion: String = rootProject.file("scripts/rclone-versions.env").read
 val enableUpdateCheck: Boolean =
     (project.findProperty("virga.enableUpdateCheck") as String?)?.toBoolean() ?: true
 
-// Base versionCode (CI injects the git-tag-derived value). Per-ABI APKs derive a
-// distinct code from this in the androidComponents block below.
-val baseVersionCode: Int = System.getenv("VIRGA_VERSION_CODE")?.toIntOrNull() ?: 1
-
 android {
     namespace = "app.lusk.virga"
 
@@ -88,7 +84,7 @@ android {
         applicationId = "app.lusk.virga"
         // Injectable from CI (release.yml derives these from the git tag) so the
         // published build carries the real version, not a hardcoded 1 / 0.1.0.
-        versionCode = baseVersionCode
+        versionCode = System.getenv("VIRGA_VERSION_CODE")?.toIntOrNull() ?: 1
         versionName = System.getenv("VIRGA_VERSION_NAME") ?: "0.3.0"
         testInstrumentationRunner = "app.lusk.virga.HiltTestRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -266,29 +262,6 @@ sentry {
     val hasToken = !System.getenv("SENTRY_AUTH_TOKEN").isNullOrBlank()
     autoUploadProguardMapping.set(hasToken)
     includeSourceContext.set(hasToken)
-}
-
-// Per-ABI versionCode offset. ABI splits would otherwise emit several APKs that all
-// share defaultConfig.versionCode — Play rejects that, and F-Droid/sideload users get
-// indistinguishable artifacts. Each ABI gets a distinct, monotonic code
-// (baseVersionCode * 10 + offset); the play AAB has no ABI filter so it keeps the base
-// code (offset 0). Offsets are stable and < 10 so codes stay ordered across releases.
-fun abiVersionCodeOffset(output: com.android.build.api.variant.VariantOutput): Int =
-    when (
-        output.filters
-            .find { it.filterType == com.android.build.api.variant.FilterConfiguration.FilterType.ABI }
-            ?.identifier
-    ) {
-        "armeabi-v7a" -> 1
-        "arm64-v8a" -> 2
-        "x86_64" -> 3
-        else -> 0
-    }
-
-androidComponents {
-    onVariants { variant ->
-        variant.outputs.forEach { it.versionCode.set(baseVersionCode * 10 + abiVersionCodeOffset(it)) }
-    }
 }
 
 dependencies {
