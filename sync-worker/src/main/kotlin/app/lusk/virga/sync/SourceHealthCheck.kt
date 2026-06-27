@@ -60,25 +60,40 @@ class SourceHealthCheck @Inject constructor(
     }
 
     /** Reads a small head of one file under [timeoutMs]; closes the stream on timeout. */
-    private suspend fun readProbe(uri: Uri, timeoutMs: Long): HealthResult = coroutineScope {
-        val stream: InputStream = try {
-            context.contentResolver.openInputStream(uri) ?: return@coroutineScope HealthResult.UNREADABLE
-        } catch (e: Exception) {
-            return@coroutineScope HealthResult.UNREADABLE
+    private suspend fun readProbe(uri: Uri, timeoutMs: Long): HealthResult {
+        val stream: InputStream = openOrNull(uri) ?: return HealthResult.UNREADABLE
+        return timedRead(stream, timeoutMs)
+    }
+
+    /** Opens the document stream, or null if it can't be opened (lost permission, IO). */
+    private fun openOrNull(uri: Uri): InputStream? =
+        try {
+            context.contentResolver.openInputStream(uri)
+        } catch (_: Exception) {
+            null
         }
+
+    /** Reads a small head of [stream] under [timeoutMs]; closes it on timeout so a wedged
+     *  read where the provider honors close() is broken rather than blocking forever. */
+    private suspend fun timedRead(stream: InputStream, timeoutMs: Long): HealthResult = coroutineScope {
         val job = launch(dispatchers.io) {
-            stream.use { it.read(ByteArray(64 * 1024)) }
+            stream.use { it.read(ByteArray(PROBE_READ_BYTES)) }
         }
         val done = withTimeoutOrNull(timeoutMs) { job.join() }
-        if (done == null) {
-            runCatching { stream.close() }
-            job.cancel()
-            HealthResult.TIMED_OUT
-        } else if (job.isCancelled) {
-            HealthResult.UNREADABLE
-        } else {
-            HealthResult.OK
+        when {
+            done == null -> {
+                runCatching { stream.close() }
+                job.cancel()
+                HealthResult.TIMED_OUT
+            }
+            job.isCancelled -> HealthResult.UNREADABLE
+            else -> HealthResult.OK
         }
+    }
+
+    private companion object {
+        /** Bytes read from each sampled file — just enough to force a real read. */
+        const val PROBE_READ_BYTES = 64 * 1024
     }
 }
 
