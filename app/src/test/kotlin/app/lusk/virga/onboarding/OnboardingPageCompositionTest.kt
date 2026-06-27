@@ -6,6 +6,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -15,6 +18,7 @@ import com.google.common.truth.Truth.assertThat
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -267,5 +271,50 @@ class OnboardingPageCompositionTest {
         composeRule.waitForIdle()
 
         assertThat(finishedInvoked).isTrue()
+    }
+
+    // ── Welcome-page Skip CTA ───────────────────────────────────────────────────
+
+    @Test
+    @Config(sdk = [34], shadows = [ShadowEnvNoManagerOnboarding::class])
+    fun `should invoke onFinished when Skip tapped on the welcome page`() {
+        var finishedInvoked = false
+
+        setContent(onFinished = { finishedInvoked = true })
+
+        // Welcome is page 0, where the secondary button reads "Skip" (it becomes
+        // "Back" on every later page); tapping it completes onboarding immediately.
+        composeRule.onNodeWithText("Skip").performClick()
+        composeRule.waitForIdle()
+
+        assertThat(finishedInvoked).isTrue()
+    }
+
+    // ── Crash-consent page + toggle (github/play — CRASH_REPORTING_AVAILABLE) ────
+
+    @Test
+    @Config(sdk = [34], shadows = [ShadowEnvNoManagerOnboarding::class])
+    fun `should render crash-consent page and flip the switch when crash reporting is available`() {
+        // Absent on fdroid (no Sentry compiled in), so skip there rather than fail.
+        assumeTrue(app.lusk.virga.BuildConfig.CRASH_REPORTING_AVAILABLE)
+
+        setContent()
+
+        // welcome→storage (1), storage→battery (2), battery→notif (2), notif→consent (2).
+        advancePage()
+        advanceThroughPermissionPage()
+        advanceThroughPermissionPage()
+        advanceThroughPermissionPage()
+
+        // The consent page is now showing; its Switch starts at the flavor default.
+        composeRule.onNodeWithText("Help improve Virga").assertIsDisplayed()
+        val startedOn = app.lusk.virga.BuildConfig.CRASH_REPORTING_DEFAULT_ON
+        val toggle = composeRule.onNode(isToggleable())
+        if (startedOn) toggle.assertIsOn() else toggle.assertIsOff()
+
+        // Tapping the Switch exercises the onToggle callback and flips the state.
+        toggle.performClick()
+        composeRule.waitForIdle()
+        if (startedOn) toggle.assertIsOff() else toggle.assertIsOn()
     }
 }
