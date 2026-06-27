@@ -63,6 +63,7 @@ class SyncWorkerNotifyOnFailureOnlyTest {
     private val scheduler: SyncScheduler = mockk(relaxed = true)
     private val remoteRepository: RemoteRepository = mockk(relaxed = true)
     private val checkUseCase: CheckUseCase = mockk(relaxed = true)
+    private val sourceHealthCheck: SourceHealthCheck = mockk(relaxed = true)
 
     private lateinit var notificationManager: NotificationManager
 
@@ -101,7 +102,7 @@ class SyncWorkerNotifyOnFailureOnlyTest {
                 ): ListenableWorker = SyncWorker(
                     appContext, workerParameters, executor, engine, taskRepository,
                     historyRepository, conflictRepository, statsRepository, staging, scheduler,
-                    remoteRepository, prefs, checkUseCase,
+                    remoteRepository, prefs, checkUseCase, sourceHealthCheck,
                 )
             })
             .build()

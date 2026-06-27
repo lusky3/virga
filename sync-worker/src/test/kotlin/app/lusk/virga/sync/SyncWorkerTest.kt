@@ -71,6 +71,7 @@ class SyncWorkerTest {
         every { preferences } returns flowOf(AppPreferences())
     }
     private val checkUseCase: CheckUseCase = mockk(relaxed = true)
+    private val sourceHealthCheck: SourceHealthCheck = mockk(relaxed = true)
 
     @Before
     fun setUp() {
@@ -86,6 +87,10 @@ class SyncWorkerTest {
         coEvery { historyRepository.startRun(any()) } returns RUN_ID
         coEvery { historyRepository.hasSucceeded(any()) } returns true
         coEvery { engine.listRemotes() } returns emptyList()
+        // The sample-read preflight only runs for content:// upload/bisync sources;
+        // default it to healthy so existing scenarios proceed exactly as before.
+        coEvery { sourceHealthCheck.probe(any(), any(), any()) } returns
+            SourceHealthCheck.HealthResult.OK
     }
 
     // inFlightOverride: when non-null, the built worker's anotherRunInFlight() seam
@@ -116,13 +121,13 @@ class SyncWorkerTest {
                         SyncWorker(
                             appContext, workerParameters, executor, engine, taskRepository,
                             historyRepository, conflictRepository, statsRepository, staging, scheduler,
-                            remoteRepository, preferencesRepository, checkUseCase,
+                            remoteRepository, preferencesRepository, checkUseCase, sourceHealthCheck,
                         )
                     } else {
                         object : SyncWorker(
                             appContext, workerParameters, executor, engine, taskRepository,
                             historyRepository, conflictRepository, statsRepository, staging, scheduler,
-                            remoteRepository, preferencesRepository, checkUseCase,
+                            remoteRepository, preferencesRepository, checkUseCase, sourceHealthCheck,
                         ) {
                             override fun anotherRunInFlight(taskId: Long): Boolean = inFlightOverride
                         }

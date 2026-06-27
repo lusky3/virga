@@ -57,6 +57,7 @@ open class SyncWorker @AssistedInject constructor(
     private val remoteRepository: RemoteRepository,
     private val preferencesRepository: PreferencesRepository,
     private val checkUseCase: CheckUseCase,
+    private val sourceHealthCheck: SourceHealthCheck,
 ) : CoroutineWorker(appContext, params) {
 
     private val notifications = SyncNotifications(appContext)
@@ -147,13 +148,40 @@ open class SyncWorker @AssistedInject constructor(
         log.line("Source: ${task.sourcePath}")
         log.line("Destination: ${task.remoteName}:${task.remotePath}")
 
-        val staged = staging.prepare(task.sourcePath, task.direction, runId)
-        val effectiveTask = if (staged.isStaged) task.copy(sourcePath = staged.localPath) else task
-        stagingTimeoutWarning(staged.readTimeouts)?.let { log.line(it) }
-
         var last: SyncProgress? = null
         var lastNotifiedPct = -1
         var failure: Throwable? = null
+
+        // Sample-read preflight (Phase 3): before staging a SAF upload/bisync, probe a
+        // few files under a tight timeout. A timeout/unreadable result is a strong "the
+        // card is failing" signal, so abort BEFORE the expensive staging copy + daemon
+        // lease rather than starting a doomed, minutes-long run. Setting [failure] here
+        // makes staging skip and the run fall through to the failure epilogue, where it
+        // is RECORDED (not swallowed). content:// + UPLOAD/BISYNC only; other sources
+        // and downloads pass straight through (probe() short-circuits to OK).
+        if (task.sourcePath.startsWith("content://") &&
+            (task.direction == SyncDirection.UPLOAD || task.direction == SyncDirection.BISYNC)
+        ) {
+            val health = sourceHealthCheck.probe(task.sourcePath)
+            preflightFailureMessage(health)?.let { warning ->
+                log.line(warning)
+                if (health != SourceHealthCheck.HealthResult.OK) {
+                    failure = VirgaError.Storage(warning)
+                }
+            }
+        }
+
+        // Only stage when the preflight passed: a failed probe must not trigger the
+        // doomed staging copy. A non-staged default keeps `staged` non-null so the
+        // finally's cleanup() (a no-op for cacheDir == null) and the downstream
+        // isStaged guards stay safe.
+        val staged = if (failure == null) {
+            staging.prepare(task.sourcePath, task.direction, runId)
+        } else {
+            LocalStaging.StagedSource(localPath = task.sourcePath, isStaged = false)
+        }
+        val effectiveTask = if (staged.isStaged) task.copy(sourcePath = staged.localPath) else task
+        stagingTimeoutWarning(staged.readTimeouts)?.let { log.line(it) }
         // Captured inside the daemon lease (after the sync flow) when errorCount > 0.
         // Capped at FAILED_FILES_CAP entries (100) to bound storage. Stored as
         // newline-joined "path\terror" lines for persistence in SyncRunEntity.failedFiles.
@@ -183,6 +211,10 @@ open class SyncWorker @AssistedInject constructor(
         val allowDeletes = task.deleteExtraneous && !allowMove
 
         try {
+          // Skip the whole sync body when the preflight already failed: the failure
+          // is recorded by the epilogue below. Guarding here (rather than staging the
+          // copy + leasing the daemon for a doomed run) is the point of the preflight.
+          if (failure == null) {
             // Lease the shared daemon for the lifetime of this sync (released in finally).
             engine.acquireDaemon()
             leased = true
@@ -250,6 +282,7 @@ open class SyncWorker @AssistedInject constructor(
                     }
                 }
             }
+          }
             // Capture per-file failures while the daemon lease is still held. Only
             // attempted on a partial-success run (errorCount > 0, no fatal failure):
             // a fatal abort has no meaningful per-file list. Cap at FAILED_FILES_CAP
