@@ -1,4 +1,5 @@
 import com.android.build.api.dsl.ApplicationProductFlavor
+import com.android.build.api.dsl.VariantDimension
 import java.util.Properties
 
 plugins {
@@ -78,23 +79,29 @@ val rcloneVersion: String = rootProject.file("scripts/rclone-versions.env").read
 val enableUpdateCheck: Boolean =
     (project.findProperty("virga.enableUpdateCheck") as String?)?.toBoolean() ?: true
 
+// Typed BuildConfig field helpers shared by defaultConfig and the per-flavor
+// surface below. Centralising the `"String"`/`"boolean"` type literals keeps each
+// at a single occurrence (no StringLiteralDuplication) and the quoting consistent.
+private fun VariantDimension.stringField(field: String, value: String) =
+    buildConfigField("String", field, "\"$value\"")
+
+private fun VariantDimension.boolField(field: String, value: Boolean) =
+    buildConfigField("boolean", field, value.toString())
+
 // Single definition of the per-flavor BuildConfig surface. The three distribution
 // flavors are structurally identical, so routing every field through here keeps each
-// field-name string literal at one occurrence (no StringLiteralDuplication) and stops
-// the flavors from drifting apart.
+// field-name string literal at one occurrence and stops the flavors from drifting
+// apart. The flavor's own name supplies DISTRIBUTION, so it isn't repeated per flavor.
 private fun ApplicationProductFlavor.distribution(
-    name: String,
     sdcardAccess: Boolean,
     updateCheck: Boolean,
     crashAvailable: Boolean,
     crashDefaultOn: Boolean,
 ) {
-    fun boolField(field: String, value: Boolean) =
-        buildConfigField("boolean", field, value.toString())
     dimension = "distribution"
     boolField("ALLOW_BYO_OAUTH", true)
     boolField("SDCARD_ACCESS_AVAILABLE", sdcardAccess)
-    buildConfigField("String", "DISTRIBUTION", "\"$name\"")
+    stringField("DISTRIBUTION", name)
     boolField("ENABLE_UPDATE_CHECK", updateCheck)
     boolField("CRASH_REPORTING_AVAILABLE", crashAvailable)
     boolField("CRASH_REPORTING_DEFAULT_ON", crashDefaultOn)
@@ -117,19 +124,19 @@ android {
         // local.properties (oauthClientId.gdrive=…) or VIRGA_OAUTH_CLIENT_ID_*
         // env vars. Empty defaults keep CI builds compiling.
         val gdriveClientId = oauthClientId("gdrive")
-        buildConfigField("String", "OAUTH_CLIENT_ID_GDRIVE", "\"$gdriveClientId\"")
-        buildConfigField("String", "OAUTH_CLIENT_ID_ONEDRIVE", "\"${oauthClientId("onedrive")}\"")
-        buildConfigField("String", "OAUTH_CLIENT_ID_DROPBOX", "\"${oauthClientId("dropbox")}\"")
-        buildConfigField("String", "OAUTH_CLIENT_ID_PCLOUD", "\"${oauthClientId("pcloud")}\"")
+        stringField("OAUTH_CLIENT_ID_GDRIVE", gdriveClientId)
+        stringField("OAUTH_CLIENT_ID_ONEDRIVE", oauthClientId("onedrive"))
+        stringField("OAUTH_CLIENT_ID_DROPBOX", oauthClientId("dropbox"))
+        stringField("OAUTH_CLIENT_ID_PCLOUD", oauthClientId("pcloud"))
 
         // Opt-in crash reporting endpoint (empty = disabled). Read at runtime by
         // CrashReporter, which only initializes Sentry when this is non-blank AND the
         // user has enabled the Settings toggle.
-        buildConfigField("String", "SENTRY_DSN", "\"${sentryDsn()}\"")
+        stringField("SENTRY_DSN", sentryDsn())
 
         // Bundled rclone version (from scripts/rclone-versions.env) so the About
         // screen can show exactly which rclone build ships in this APK.
-        buildConfigField("String", "RCLONE_VERSION", "\"$rcloneVersion\"")
+        stringField("RCLONE_VERSION", rcloneVersion)
 
         // Google Android OAuth clients require a redirect URI scheme of the
         // form com.googleusercontent.apps.<reversed-client-id>. The reversed
@@ -164,7 +171,6 @@ android {
         create("github") {
             // Crash reporting present; default enabled (opt-out) for this direct channel.
             distribution(
-                name = "github",
                 sdcardAccess = true,
                 updateCheck = enableUpdateCheck,
                 crashAvailable = true,
@@ -176,7 +182,6 @@ android {
         // IDs (BYO-keys only). Full filesystem/SD-card access is allowed on F-Droid.
         create("fdroid") {
             distribution(
-                name = "fdroid",
                 sdcardAccess = true,
                 updateCheck = false,
                 crashAvailable = false,
@@ -191,7 +196,6 @@ android {
             // In-app-update, BYO OAuth, and opt-IN crash reporting (Sentry compiled
             // in; off until consent).
             distribution(
-                name = "play",
                 sdcardAccess = false,
                 updateCheck = false,
                 crashAvailable = true,
