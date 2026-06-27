@@ -162,10 +162,13 @@ git commit -m "feat(sync): surface in-flight transferring filenames on SyncProgr
 
 **Files:**
 - Modify: `core/common/src/main/kotlin/app/lusk/virga/core/common/error/VirgaError.kt`
-- Test: `core/common/src/test/kotlin/app/lusk/virga/core/common/error/VirgaErrorTest.kt` (create if absent)
+- Modify: `core/common/src/main/kotlin/app/lusk/virga/core/common/error/VirgaErrorExt.kt` (the `toUserMessage()` `when` is exhaustive over the sealed type — a new subtype requires a branch)
+- Test: `core/common/src/test/kotlin/app/lusk/virga/core/common/error/VirgaErrorTest.kt` (already exists; APPEND; it has its own exhaustive `when` in `sealed when covers all subtypes`)
 
 **Interfaces:**
 - Produces: `VirgaError.Stall(val file: String? = null, message: String, cause: Throwable? = null) : VirgaError` — thrown by the engine when the stall guard fires on a non-tolerant run, carrying the in-flight filename (nullable).
+
+> **Exhaustiveness note:** `VirgaError` is a sealed class with exhaustive `when` sites. Adding `Stall` breaks `core/common/.../error/VirgaErrorExt.kt:toUserMessage()` AND the test's `sealed when covers all subtypes` — both need an `is VirgaError.Stall ->` branch (Steps 3b/3c below) or `:core:common:compileDebugKotlin` fails before any test runs.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -210,6 +213,19 @@ In `VirgaError.kt`, add this class inside the sealed class, immediately after th
     class Stall(val file: String? = null, message: String, cause: Throwable? = null) :
         VirgaError(message, cause)
 ```
+
+- [ ] **Step 3b: Add the `Stall` branch to `toUserMessage()`**
+
+In `VirgaErrorExt.kt`, add a branch to the `when (this)` in `fun VirgaError.toUserMessage()` (place it just before `is VirgaError.Conflict`), matching the `Rclone` pattern of surfacing the carried message with a generic fallback:
+
+```kotlin
+    is VirgaError.Stall ->
+        message.ifBlank { "The transfer stalled — the source may be slow or failing. Try again." }
+```
+
+- [ ] **Step 3c: Add the `Stall` case to the test's exhaustiveness check**
+
+In `VirgaErrorTest.kt`, in `sealed when covers all subtypes`: add `VirgaError.Stall(message = "st")` to the `errors` list (after the `Rclone` entry), add `is VirgaError.Stall -> "stall"` to the inner `when` (after the `Rclone` branch), and add `"stall"` to the `containsExactly(...)` assertion in the matching position.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
