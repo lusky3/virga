@@ -258,6 +258,7 @@ open class SyncWorker @AssistedInject constructor(
             if (failure == null && errorCount > 0 && statsGroup != null) {
                 failedFiles = captureFailedFiles(statsGroup, log)
             }
+            failedFiles = mergeStalledFile(failedFiles, last?.stalledFile)
 
             // For staged downloads, copy rclone's output back into the SAF tree
             // BEFORE the finally runs staging.cleanup() (which recursively deletes
@@ -717,6 +718,17 @@ open class SyncWorker @AssistedInject constructor(
 /** Collapses tab/newline to spaces so a value can't break the "path\terror"-per-line
  *  encoding of [SyncRunEntity.failedFiles]. */
 private fun String.sanitiseRow(): String = replace('\t', ' ').replace('\n', ' ').replace('\r', ' ')
+
+/** Appends [stalledFile] to the newline-joined `path\terror` [failedFiles] record, unless
+ *  null or already listed. Used so a soft-stalled file (which rclone never reports as an
+ *  error — the read never returned) still shows up in the run's failed-files list. */
+internal fun mergeStalledFile(failedFiles: String, stalledFile: String?): String {
+    if (stalledFile.isNullOrBlank()) return failedFiles
+    val alreadyListed = failedFiles.lineSequence().any { it.substringBefore('\t') == stalledFile }
+    if (alreadyListed) return failedFiles
+    val row = "$stalledFile\tstalled: read timed out"
+    return if (failedFiles.isBlank()) row else "$failedFiles\n$row"
+}
 
 /**
  * User-facing copy for a [VirgaError.Stall]. An upload that wedged reading a local/staged
