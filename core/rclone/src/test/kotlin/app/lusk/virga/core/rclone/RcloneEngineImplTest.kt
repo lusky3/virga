@@ -864,7 +864,9 @@ class RcloneEngineImplTest {
         coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
         coEvery { daemonManager.start(any()) } returns fakeDaemon
         every { daemonManager.isAlive(fakeDaemon) } returns true
-        coEvery { apiClient.call(any(), any(), any(), "sync/copy", any()) } returns
+        // A mirror (deleteExtraneous) is tolerateFileErrors=false, so a stall hard-fails
+        // even after progress — the case where Stall must still be thrown with its file.
+        coEvery { apiClient.call(any(), any(), any(), "sync/sync", any()) } returns
             buildJsonObject { put("jobid", 9) }
         // Never finishes.
         coEvery { apiClient.call(any(), any(), any(), "job/status", any()) } returns
@@ -883,13 +885,77 @@ class RcloneEngineImplTest {
 
         engine.sync(
             "local:/x", "gdrive:x",
-            SyncOptions(SyncDirection.UPLOAD), stallTimeoutMs = 0L,
+            SyncOptions(SyncDirection.UPLOAD, deleteExtraneous = true), stallTimeoutMs = 0L,
         ).test {
             // First poll arms the clock; second poll (still flat, 0ms window) trips it.
             awaitItem() // first running emission
             val error = awaitError()
             assertThat(error).isInstanceOf(VirgaError.Stall::class.java)
             assertThat((error as VirgaError.Stall).file).isEqualTo("DCIM/IMG_BAD.jpg")
+        }
+    }
+
+    @Test fun `a soft stall on a copy emits partial success with the stalled file`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "sync/copy", any()) } returns
+            buildJsonObject { put("jobid", 11) }
+        coEvery { apiClient.call(any(), any(), any(), "job/status", any()) } returns
+            buildJsonObject { put("finished", false) }
+        // First tick: real progress (bytes move). Subsequent ticks: flat + a named file.
+        var tick = 0
+        coEvery { apiClient.call(any(), any(), any(), "core/stats", any()) } answers {
+            tick++
+            buildJsonObject {
+                put("bytes", if (tick == 1) 100L else 100L) // moves on tick 1, then flat
+                put("transfers", if (tick == 1) 1 else 1)
+                put("checks", 0)
+                put("transferring", kotlinx.serialization.json.buildJsonArray {
+                    add(buildJsonObject { put("name", "DCIM/IMG_BAD.jpg") })
+                })
+            }
+        }
+        coEvery { apiClient.call(any(), any(), any(), "job/stop", any()) } returns buildJsonObject {}
+
+        engine.startDaemon()
+
+        // tolerateFileErrors is true for a copy (UPLOAD, no delete/move).
+        engine.sync(
+            "local:/x", "gdrive:x",
+            SyncOptions(SyncDirection.UPLOAD), stallTimeoutMs = 0L,
+        ).test {
+            // tick 1 arms the clock with progress; tick 2 is flat → soft stall → terminal emit.
+            val first = awaitItem()
+            assertThat(first.transferredFiles).isEqualTo(1)
+            val terminal = awaitItem()
+            assertThat(terminal.errors).isAtLeast(1)
+            assertThat(terminal.stalledFile).isEqualTo("DCIM/IMG_BAD.jpg")
+            awaitComplete()
+        }
+    }
+
+    @Test fun `a mirror stall still throws (no partial success)`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "sync/sync", any()) } returns
+            buildJsonObject { put("jobid", 12) }
+        coEvery { apiClient.call(any(), any(), any(), "job/status", any()) } returns
+            buildJsonObject { put("finished", false) }
+        coEvery { apiClient.call(any(), any(), any(), "core/stats", any()) } returns buildJsonObject {
+            put("bytes", 0L); put("checks", 0)
+        }
+        coEvery { apiClient.call(any(), any(), any(), "job/stop", any()) } returns buildJsonObject {}
+
+        engine.startDaemon()
+
+        engine.sync(
+            "local:/x", "gdrive:x",
+            SyncOptions(SyncDirection.UPLOAD, deleteExtraneous = true), stallTimeoutMs = 0L,
+        ).test {
+            awaitItem()
+            assertThat(awaitError()).isInstanceOf(VirgaError.Stall::class.java)
         }
     }
 

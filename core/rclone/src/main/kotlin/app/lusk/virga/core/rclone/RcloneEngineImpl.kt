@@ -767,6 +767,22 @@ class RcloneEngineImpl @Inject constructor(
                     lastChecks = checks
                     lastProgressAtMs = System.currentTimeMillis()
                 } else if (System.currentTimeMillis() - lastProgressAtMs > stallTimeoutMs) {
+                    val madeProgress = lastProgressAtMs != Long.MAX_VALUE
+                    if (tolerateFileErrors && madeProgress) {
+                        // Copy/backup: keep what already transferred. Stop the job, read
+                        // final stats, and report a partial success naming the wedged file.
+                        jobFinished = true
+                        runCatching { rc(d, "job/stop", buildJsonObject { put("jobid", jobId) }) }
+                        val finalStats = statsFor(d, group)
+                        emit(
+                            finalStats.copy(
+                                errors = maxOf(finalStats.errors, 1),
+                                stalledFile = lastTransferringName,
+                                statsGroup = group,
+                            ),
+                        )
+                        break
+                    }
                     throw VirgaError.Stall(
                         file = lastTransferringName,
                         message = stallMessage(stallTimeoutMs, lastTransferringName),
