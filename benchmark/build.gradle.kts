@@ -3,9 +3,9 @@
 // trimming ~30% off startup on first launch / after install.
 //
 // Generate the profile (connected device or emulator required, API 28+):
-//   ./gradlew :app:generateFossReleaseBaselineProfile
+//   ./gradlew :app:generateGithubReleaseBaselineProfile
 //
-// The profile lands at app/src/foss/generated/baselineProfiles/.
+// The profile lands at app/src/githubRelease/generated/baselineProfiles/.
 
 plugins {
     // AGP 9 brought `com.android.test` onto the build-logic classpath via the
@@ -24,10 +24,10 @@ android {
         minSdk = 28          // benchmark requires API 28+
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        // Tell the variant matcher that when :app advertises both `foss` and
-        // `play` flavors, we want `foss`. (Declared on defaultConfig because
-        // the benchmark module itself has no flavors.)
-        missingDimensionStrategy("distribution", "foss")
+        // :app advertises three distribution flavors (github / fdroid / play);
+        // the benchmark targets `github` (the primary sideload release). Declared on
+        // defaultConfig because the benchmark module itself has no flavors.
+        missingDimensionStrategy("distribution", "github")
     }
 
     compileOptions {

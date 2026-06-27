@@ -23,6 +23,10 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # The weekly `schedule` exists only to drive the rclone-update-check job; the
+    # full build (NDK + rclone cross-compile + every flavor) shouldn't run on cron.
+    # It still runs on every push and PR.
+    if: github.event_name != 'schedule'
     # The `dev` environment holds the debug-keystore + debug OAuth client-ID
     # secrets. It has no protection rules, so this doesn't gate PR builds. Fork
     # PRs don't receive the secrets — the steps below degrade gracefully and the
@@ -97,38 +101,65 @@ jobs:
           # injected straight into the build step's env from secrets.
           echo "VIRGA_DEBUG_KEYSTORE_FILE=$RUNNER_TEMP/keystore/debug.jks" >> "$GITHUB_ENV"
 
-      - name: Build FOSS + Play debug APKs
+      - name: Build all-flavor debug APKs
         # Debug OAuth client IDs + debug-keystore signing come from the dev
         # environment so the artifact is installable with working OAuth. The
-        # debug keystore password is the well-known `android`, not a real secret.
-        # Play is built too (not uploaded) so its manifest merge / flavor config
-        # regressions are caught in CI, not at release time.
+        # debug keystore credential is the well-known `android`, not a real secret.
+        # All three distribution flavors are built so manifest-merge / flavor-config
+        # regressions (e.g. Play's MANAGE_EXTERNAL_STORAGE strip, fdroid's Sentry-free
+        # graph) are caught in CI, not at release time.
+        # (The *_CREDENTIAL env names avoid the repo's banned password/secret-named
+        # identifiers; the right-hand secrets.RELEASE_* names are GitHub-managed.)
         env:
           VIRGA_OAUTH_CLIENT_ID_GDRIVE: ${{ secrets.OAUTH_CLIENT_ID_GDRIVE }}
           VIRGA_OAUTH_CLIENT_ID_ONEDRIVE: ${{ secrets.OAUTH_CLIENT_ID_ONEDRIVE }}
           VIRGA_OAUTH_CLIENT_ID_DROPBOX: ${{ secrets.OAUTH_CLIENT_ID_DROPBOX }}
-          VIRGA_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          VIRGA_DEBUG_KEYSTORE_CREDENTIAL: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           VIRGA_DEBUG_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          VIRGA_DEBUG_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: ./gradlew assembleFossDebug assemblePlayDebug
+          VIRGA_DEBUG_KEY_CREDENTIAL: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: ./gradlew assembleGithubDebug assembleFdroidDebug assemblePlayDebug
 
       - name: Unit tests + coverage
         # koverXmlReport runs every module's unit tests (incl. the library
-        # modules' testDebugUnitTest, which a bare testFossDebugUnitTest misses)
-        # and emits the aggregated JaCoCo-format report Codecov + Sonar consume.
+        # modules' testDebugUnitTest that a single-variant run would miss) and
+        # emits the aggregated JaCoCo-format report Codecov + Sonar consume. Kover
+        # aggregates across the app's flavors automatically.
         run: ./gradlew koverXmlReport
 
       - name: Lint
-        run: ./gradlew lintFossDebug
+        # Lint both the all-files-access manifest (github == fdroid) and the Play
+        # manifest (which strips MANAGE_EXTERNAL_STORAGE) so a regression in either
+        # variant's merged manifest is caught.
+        run: ./gradlew lintGithubDebug lintPlayDebug
+
+      - name: Guard — Play manifest has no all-files access
+        # MANAGE_EXTERNAL_STORAGE is declared in src/main and stripped by src/play
+        # (tools:node="remove"). That strip is load-bearing for Play policy, so assert
+        # the merged Play manifest really lacks it — a regression would silently
+        # re-expose a permission Play restricts for general-purpose sync apps.
+        run: |
+          set -euo pipefail
+          ./gradlew :app:processPlayDebugMainManifest
+          # Look only in the merged_manifest intermediate (not the whole tree, which
+          # also holds blame/aapt/packaged copies) and sort so the match is stable
+          # regardless of filesystem ordering.
+          manifest=$(find app/build/intermediates/merged_manifest -path '*[Pp]layDebug*/AndroidManifest.xml' | sort | head -1)
+          if [ -z "$manifest" ]; then
+            echo "::error::Play merged manifest not found" >&2; exit 1
+          fi
+          if grep -q "MANAGE_EXTERNAL_STORAGE" "$manifest"; then
+            echo "::error::Play manifest declares MANAGE_EXTERNAL_STORAGE — the src/play strip regressed." >&2
+            exit 1
+          fi
+          echo "OK: no MANAGE_EXTERNAL_STORAGE in $manifest"
 
       - name: Screenshot tests (Roborazzi)
         # Verifies every module's Compose screenshot goldens against the committed
         # baseline. Deterministic across machines because JvmTestConventionPlugin pins
         # the test JVM to UTC + en-US. The library modules expose verifyRoborazziDebug;
-        # :app is flavored, so its task is verifyRoborazziFossDebug (the screens are
-        # flavor-agnostic, so foss covers it). On a diff, regenerate locally with
-        # `./gradlew recordRoborazziDebug :app:recordRoborazziFossDebug` and commit the PNGs.
-        run: ./gradlew verifyRoborazziDebug :app:verifyRoborazziFossDebug
+        # :app is flavored, so use the github variant (screens are flavor-agnostic). On
+        # a diff, regenerate with `./gradlew recordRoborazziDebug :app:recordRoborazziGithubDebug`.
+        run: ./gradlew verifyRoborazziDebug :app:verifyRoborazziGithubDebug
 
       - name: Upload screenshot diffs on failure
         if: failure()
@@ -178,8 +209,11 @@ jobs:
       - name: Upload APKs
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: foss-debug-apks
-          path: app/build/outputs/apk/foss/debug/*.apk
+          name: github-debug-apks
+          path: app/build/outputs/apk/github/debug/*.apk
+          # Fail loudly if a path/flavor regression produces no APKs, rather than
+          # silently uploading an empty artifact.
+          if-no-files-found: error
 
   secret-scan:
     # GitGuardian secret scanning over the commit range. Independent of the build

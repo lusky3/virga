@@ -26,7 +26,19 @@ class OnboardingViewModel @Inject constructor(
             .map { it.onboardingComplete }
             .stateIn(viewModelScope, SharingStarted.Eagerly, initialValue = null)
 
-    fun completeOnboarding() = viewModelScope.launch {
+    /**
+     * Persists the onboarding-complete flag. On builds that ship crash reporting
+     * (github/play — [BuildConfig.CRASH_REPORTING_AVAILABLE]) it also records the
+     * user's first-launch consent choice ([crashReportingEnabled]); the default
+     * follows the flavor ([BuildConfig.CRASH_REPORTING_DEFAULT_ON]: opt-out on
+     * github, opt-in on play). On fdroid (no Sentry SDK) the consent is not written.
+     */
+    fun completeOnboarding(
+        crashReportingEnabled: Boolean = app.lusk.virga.BuildConfig.CRASH_REPORTING_DEFAULT_ON,
+    ) = viewModelScope.launch {
+        if (app.lusk.virga.BuildConfig.CRASH_REPORTING_AVAILABLE) {
+            preferences.setCrashReportingEnabled(crashReportingEnabled)
+        }
         preferences.setOnboardingComplete(true)
     }
 }

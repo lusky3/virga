@@ -1,11 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <application>
+        <!-- SEC: exported=true is required for the broadcast framework to deliver these
+             actions, but all four (BOOT_COMPLETED, LOCKED_BOOT_COMPLETED, TIMEZONE_CHANGED,
+             TIME_SET) are protected broadcasts — only the system can send them (since API
+             8.0 = minSdk 26), so the export is effectively inert and exposes no surface. -->
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
-            android:exported="true">
+            android:exported="true"
+            tools:ignore="ExportedReceiver">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />

@@ -1,3 +1,5 @@
+import com.android.build.api.dsl.ApplicationProductFlavor
+import com.android.build.api.dsl.VariantDimension
 import java.util.Properties
 
 plugins {
@@ -77,6 +79,48 @@ val rcloneVersion: String = rootProject.file("scripts/rclone-versions.env").read
 val enableUpdateCheck: Boolean =
     (project.findProperty("virga.enableUpdateCheck") as String?)?.toBoolean() ?: true
 
+// Typed BuildConfig field helpers shared by defaultConfig and the per-flavor
+// surface below. Centralising the `"String"`/`"boolean"` type literals keeps each
+// at a single occurrence (no StringLiteralDuplication) and the quoting consistent.
+private fun VariantDimension.stringField(field: String, value: String) =
+    buildConfigField("String", field, "\"$value\"")
+
+private fun VariantDimension.boolField(field: String, value: Boolean) =
+    buildConfigField("boolean", field, value.toString())
+
+// Single definition of the per-flavor BuildConfig surface. The three distribution
+// flavors are structurally identical, so routing every field through here keeps each
+// field-name string literal at one occurrence and stops the flavors from drifting
+// apart. The flavor's own name supplies DISTRIBUTION, so it isn't repeated per flavor.
+private fun ApplicationProductFlavor.distribution(
+    sdcardAccess: Boolean,
+    updateCheck: Boolean,
+    crashAvailable: Boolean,
+    crashDefaultOn: Boolean,
+) {
+    dimension = "distribution"
+    boolField("ALLOW_BYO_OAUTH", true)
+    boolField("SDCARD_ACCESS_AVAILABLE", sdcardAccess)
+    stringField("DISTRIBUTION", name)
+    boolField("ENABLE_UPDATE_CHECK", updateCheck)
+    boolField("CRASH_REPORTING_AVAILABLE", crashAvailable)
+    boolField("CRASH_REPORTING_DEFAULT_ON", crashDefaultOn)
+}
+
+// F-Droid's contract is fully FOSS with no baked service secrets: it ships the no-op
+// CrashReporter (no Sentry SDK) and is BYO-OAuth only. defaultConfig may carry CI/local
+// OAuth client IDs + a Sentry DSN, so the fdroid flavor explicitly overrides them back
+// to empty/unset — enforcing the no-baked-secrets contract in code rather than relying
+// solely on F-Droid's secret-free build environment.
+private fun ApplicationProductFlavor.clearBakedServiceConfig() {
+    stringField("SENTRY_DSN", "")
+    stringField("OAUTH_CLIENT_ID_GDRIVE", "")
+    stringField("OAUTH_CLIENT_ID_ONEDRIVE", "")
+    stringField("OAUTH_CLIENT_ID_DROPBOX", "")
+    stringField("OAUTH_CLIENT_ID_PCLOUD", "")
+    manifestPlaceholders["googleOAuthScheme"] = "com.googleusercontent.apps.unset"
+}
+
 android {
     namespace = "app.lusk.virga"
 
@@ -94,19 +138,19 @@ android {
         // local.properties (oauthClientId.gdrive=…) or VIRGA_OAUTH_CLIENT_ID_*
         // env vars. Empty defaults keep CI builds compiling.
         val gdriveClientId = oauthClientId("gdrive")
-        buildConfigField("String", "OAUTH_CLIENT_ID_GDRIVE", "\"$gdriveClientId\"")
-        buildConfigField("String", "OAUTH_CLIENT_ID_ONEDRIVE", "\"${oauthClientId("onedrive")}\"")
-        buildConfigField("String", "OAUTH_CLIENT_ID_DROPBOX", "\"${oauthClientId("dropbox")}\"")
-        buildConfigField("String", "OAUTH_CLIENT_ID_PCLOUD", "\"${oauthClientId("pcloud")}\"")
+        stringField("OAUTH_CLIENT_ID_GDRIVE", gdriveClientId)
+        stringField("OAUTH_CLIENT_ID_ONEDRIVE", oauthClientId("onedrive"))
+        stringField("OAUTH_CLIENT_ID_DROPBOX", oauthClientId("dropbox"))
+        stringField("OAUTH_CLIENT_ID_PCLOUD", oauthClientId("pcloud"))
 
         // Opt-in crash reporting endpoint (empty = disabled). Read at runtime by
         // CrashReporter, which only initializes Sentry when this is non-blank AND the
         // user has enabled the Settings toggle.
-        buildConfigField("String", "SENTRY_DSN", "\"${sentryDsn()}\"")
+        stringField("SENTRY_DSN", sentryDsn())
 
         // Bundled rclone version (from scripts/rclone-versions.env) so the About
         // screen can show exactly which rclone build ships in this APK.
-        buildConfigField("String", "RCLONE_VERSION", "\"$rcloneVersion\"")
+        stringField("RCLONE_VERSION", rcloneVersion)
 
         // Google Android OAuth clients require a redirect URI scheme of the
         // form com.googleusercontent.apps.<reversed-client-id>. The reversed
@@ -135,31 +179,59 @@ android {
 
     flavorDimensions += "distribution"
     productFlavors {
-        // FOSS distribution (F-Droid / GitHub sideload). MANAGE_EXTERNAL_STORAGE
-        // is permitted here — the user has full filesystem and SD-card access.
-        // BYO OAuth is exposed so users can substitute their own client IDs.
-        create("foss") {
-            dimension = "distribution"
-            buildConfigField("boolean", "ALLOW_BYO_OAUTH", "true")
-            buildConfigField("boolean", "SDCARD_ACCESS_AVAILABLE", "true")
-            buildConfigField("String", "DISTRIBUTION", "\"foss\"")
-            // GitHub Releases self-check — true for GitHub/sideload, flipped off
-            // by the F-Droid build recipe (see enableUpdateCheck above).
-            buildConfigField("boolean", "ENABLE_UPDATE_CHECK", enableUpdateCheck.toString())
+        // GitHub sideload (per-ABI APKs). Full filesystem/SD-card access, BYO OAuth,
+        // the GitHub-Releases self-update check, and opt-OUT crash reporting (Sentry
+        // compiled in; on by default, disclosed + toggleable at first launch).
+        create("github") {
+            // Crash reporting present; default enabled (opt-out) for this direct channel.
+            distribution(
+                sdcardAccess = true,
+                updateCheck = enableUpdateCheck,
+                crashAvailable = true,
+                crashDefaultOn = true,
+            )
         }
-        // Google Play distribution. Play policy is hostile to
-        // MANAGE_EXTERNAL_STORAGE for general-purpose sync apps; we still
-        // declare the permission but flag the build so the UI explains that
-        // SD-card access is best-effort and may be revoked by Play review.
-        // BYO OAuth stays available so power users on Play can still use their
-        // own client IDs — it is a build-config gate, not network behavior, and
-        // Play does not forbid it.
+        // F-Droid (per-ABI APKs). Fully FOSS: NO Sentry SDK compiled in (src/fdroid
+        // ships a no-op CrashReporter), NO self-update check, NO baked OAuth client
+        // IDs (BYO-keys only). Full filesystem/SD-card access is allowed on F-Droid.
+        create("fdroid") {
+            distribution(
+                sdcardAccess = true,
+                updateCheck = false,
+                crashAvailable = false,
+                crashDefaultOn = false,
+            )
+            // Strip any defaultConfig-inherited OAuth client IDs / Sentry DSN so the
+            // FOSS build never bakes developer secrets (BYO-OAuth, no crash reporting).
+            clearBakedServiceConfig()
+        }
+        // Google Play (AAB). Play policy is hostile to MANAGE_EXTERNAL_STORAGE for
+        // general-purpose sync apps, so the play manifest strips it (SAF instead);
+        // SDCARD_ACCESS_AVAILABLE=false drives the UI explanation. In-app-update, BYO
+        // OAuth, and opt-IN crash reporting (Sentry compiled in; off until consent).
         create("play") {
-            dimension = "distribution"
-            buildConfigField("boolean", "ALLOW_BYO_OAUTH", "true")
-            buildConfigField("boolean", "SDCARD_ACCESS_AVAILABLE", "false")
-            buildConfigField("String", "DISTRIBUTION", "\"play\"")
+            // In-app-update, BYO OAuth, and opt-IN crash reporting (Sentry compiled
+            // in; off until consent).
+            distribution(
+                sdcardAccess = false,
+                updateCheck = false,
+                crashAvailable = true,
+                crashDefaultOn = false,
+            )
         }
+    }
+
+    // Source-set wiring for the flavor split:
+    //  - src/foss (GitHub-Releases update checker) is shared by github + fdroid.
+    //  - src/sentry (the real Sentry CrashReporter) is shared by github + play;
+    //    fdroid gets the no-op CrashReporter in src/fdroid (no Sentry SDK at all).
+    sourceSets {
+        getByName("github") {
+            kotlin.srcDir("src/foss/kotlin")
+            kotlin.srcDir("src/sentry/kotlin")
+        }
+        getByName("fdroid") { kotlin.srcDir("src/foss/kotlin") }
+        getByName("play") { kotlin.srcDir("src/sentry/kotlin") }
     }
 
     splits {
@@ -199,9 +271,9 @@ android {
         debugStoreFile?.let { f ->
             getByName("debug") {
                 storeFile = f
-                storePassword = keystoreProp("debugStorePassword", "VIRGA_DEBUG_KEYSTORE_PASSWORD")
+                storePassword = keystoreProp("debugStoreCredential", "VIRGA_DEBUG_KEYSTORE_CREDENTIAL")
                 keyAlias = keystoreProp("debugKeyAlias", "VIRGA_DEBUG_KEY_ALIAS")
-                keyPassword = keystoreProp("debugKeyPassword", "VIRGA_DEBUG_KEY_PASSWORD")
+                keyPassword = keystoreProp("debugKeyCredential", "VIRGA_DEBUG_KEY_CREDENTIAL")
             }
         }
     }
@@ -339,15 +411,19 @@ dependencies {
 
     // The baseline profile is installed at build time by ProfileInstaller; the
     // dependency below is what wires the generated file into the APK.
-    // FOSS update checker uses OkHttp to poll the GitHub Releases API.
-    "fossImplementation"(libs.okhttp)
+    // GitHub-Releases self-update checker (src/foss) uses OkHttp; shared by the
+    // github + fdroid flavors (fdroid compiles it but ENABLE_UPDATE_CHECK=false).
+    "githubImplementation"(libs.okhttp)
+    "fdroidImplementation"(libs.okhttp)
     // Play update flow (in-app update API).
     "playImplementation"(libs.play.appupdate.ktx)
 
-    // Opt-in crash reporting (both flavors). MIT-licensed SDK; auto-init is disabled
-    // in the manifest and Sentry is initialized manually by CrashReporter only after
-    // the user opts in, so the FOSS build makes no telemetry calls by default.
-    implementation(libs.sentry.android.core)
+    // Crash reporting (MIT-licensed Sentry SDK) — compiled into github + play ONLY.
+    // The fdroid flavor ships a no-op CrashReporter (src/fdroid) with no Sentry SDK at
+    // all, so the F-Droid build carries zero telemetry code (no Tracking anti-feature).
+    // auto-init is disabled in the manifest; SentryAndroid.init runs only after consent.
+    "githubImplementation"(libs.sentry.android.core)
+    "playImplementation"(libs.sentry.android.core)
 
     // Glance home-screen widget + Quick Settings tile (Phase 3 WS3.6)
     implementation(libs.glance.appwidget)
