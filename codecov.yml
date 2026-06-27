@@ -43,3 +43,11 @@ ignore:
   # only run with a real subprocess — its binary-missing guard and stop()/teardown
   # ARE unit-tested; the launch + drainer thread need the Android runtime.
   - "core/rclone/src/main/kotlin/app/lusk/virga/core/rclone/daemon/RcloneDaemonManager.kt"
+  # The pre-sync source health probe. Its pure decision (preflightFailureMessage), the
+  # per-file read-timeout/close mechanic (timedRead, unit-tested via timedReadForTest), and
+  # probe()'s short-circuit branches (non-content pass-through, unreadable-tree) ARE
+  # unit-tested (SourceHealthCheckTest + SourceHealthCheckProbeTest). What remains — the
+  # DocumentFile depth-first tree-walk (firstFiles) and the real SAF sample reads over a
+  # populated tree — needs a registered DocumentsProvider / the Android runtime and can't
+  # run under Robolectric unit tests, same limitation as LocalStaging's copy paths.
+  - "sync-worker/src/main/kotlin/app/lusk/virga/sync/SourceHealthCheck.kt"
