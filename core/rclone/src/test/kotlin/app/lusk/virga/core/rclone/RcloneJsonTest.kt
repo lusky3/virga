@@ -4,12 +4,15 @@ import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.common.model.SyncDirection
 import com.google.common.truth.Truth.assertThat
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Test
 
 /**
@@ -293,5 +296,28 @@ class RcloneJsonTest {
         }
         val cfg = obj["_config"]!!.jsonObject
         assertThat(cfg.containsKey("ConflictResolve")).isFalse()
+    }
+
+    // --- toSyncProgress: in-flight transferring names -----------------------
+
+    @Test
+    fun `toSyncProgress extracts in-flight transferring names`() {
+        val stats = buildJsonObject {
+            put("bytes", 10L)
+            put("transfers", 1)
+            put("transferring", buildJsonArray {
+                add(buildJsonObject { put("name", "DCIM/2019/IMG_4471.jpg") })
+                add(buildJsonObject { put("name", "DCIM/2019/IMG_4472.jpg") })
+            })
+        }
+        val progress = stats.toSyncProgress()
+        assertThat(progress.transferringNames)
+            .containsExactly("DCIM/2019/IMG_4471.jpg", "DCIM/2019/IMG_4472.jpg")
+    }
+
+    @Test
+    fun `toSyncProgress yields empty names when transferring absent`() {
+        val progress = buildJsonObject { put("bytes", 0L) }.toSyncProgress()
+        assertThat(progress.transferringNames).isEmpty()
     }
 }
