@@ -154,4 +154,17 @@ class ExtraConfigParserTest {
         val err = ExtraConfigParser.firstError("\n\nCheckSum=true\n\n")
         assertThat(err).isNull()
     }
+
+    @Test
+    fun `MaxDuration is an allowlisted passthrough key`() {
+        val result = ExtraConfigParser.validateLine("MaxDuration=10m")
+        assertThat(result).isInstanceOf(ExtraConfigParser.ParseResult.Ok::class.java)
+        assertThat((result as ExtraConfigParser.ParseResult.Ok).key).isEqualTo("MaxDuration")
+    }
+
+    @Test
+    fun `CutoffMode is an allowlisted passthrough key`() {
+        val result = ExtraConfigParser.validateLine("CutoffMode=HARD")
+        assertThat(result).isInstanceOf(ExtraConfigParser.ParseResult.Ok::class.java)
+    }
 }
