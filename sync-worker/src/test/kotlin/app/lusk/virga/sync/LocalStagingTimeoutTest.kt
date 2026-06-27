@@ -1,11 +1,8 @@
 package app.lusk.virga.sync
 
 import android.content.Context
-import android.net.Uri
 import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import com.google.common.truth.Truth.assertThat
-import io.mockk.every
-import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
@@ -49,9 +46,6 @@ class LocalStagingTimeoutTest {
     @Test
     fun `a read that exceeds the timeout is closed and counted as a timeout`() = runBlocking {
         val closed = AtomicBoolean(false)
-        val resolver = context.contentResolver
-        val spyContext = mockk<Context>(relaxed = true)
-        every { spyContext.contentResolver } returns resolver
         // Drive the helper directly via the test-only entry point.
         val dest = File(context.cacheDir, "out.bin")
         val outcome = staging.copyDocumentToFileTimedForTest(
