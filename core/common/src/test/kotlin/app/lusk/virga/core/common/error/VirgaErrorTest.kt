@@ -57,6 +57,7 @@ class VirgaErrorTest {
             VirgaError.Auth("r", "a"),
             VirgaError.Storage("s"),
             VirgaError.Rclone(message = "rc"),
+            VirgaError.Stall(message = "st"),
             VirgaError.Conflict("c"),
             VirgaError.Unknown("u"),
         )
@@ -66,11 +67,12 @@ class VirgaErrorTest {
                 is VirgaError.Auth     -> "auth"
                 is VirgaError.Storage  -> "storage"
                 is VirgaError.Rclone   -> "rclone"
+                is VirgaError.Stall    -> "stall"
                 is VirgaError.Conflict -> "conflict"
                 is VirgaError.Unknown  -> "unknown"
             }
         }
-        assertThat(labels).containsExactly("network", "auth", "storage", "rclone", "conflict", "unknown").inOrder()
+        assertThat(labels).containsExactly("network", "auth", "storage", "rclone", "stall", "conflict", "unknown").inOrder()
     }
 
     // --- Edge cases ---
@@ -78,5 +80,18 @@ class VirgaErrorTest {
     @Test fun `empty message is preserved`() {
         val e = VirgaError.Unknown("")
         assertThat(e.message).isEmpty()
+    }
+
+    @Test
+    fun `Stall carries the in-flight file and message`() {
+        val e = VirgaError.Stall(file = "DCIM/IMG_1.jpg", message = "stalled")
+        assertThat(e).isInstanceOf(VirgaError::class.java)
+        assertThat(e.file).isEqualTo("DCIM/IMG_1.jpg")
+        assertThat(e.message).isEqualTo("stalled")
+    }
+
+    @Test
+    fun `Stall file defaults to null`() {
+        assertThat(VirgaError.Stall(message = "stalled").file).isNull()
     }
 }

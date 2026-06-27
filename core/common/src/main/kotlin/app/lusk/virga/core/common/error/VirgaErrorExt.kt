@@ -16,6 +16,8 @@ fun VirgaError.toUserMessage(): String = when (this) {
         // Surface the real rclone error (e.g. "directory not found", quota, token
         // problems) when present; fall back to the generic line otherwise.
         message.ifBlank { "Sync engine error${exitCode?.let { " (code $it)" } ?: ""}. Try again." }
+    is VirgaError.Stall ->
+        message.ifBlank { "The transfer stalled — the source may be slow or failing. Try again." }
     is VirgaError.Conflict ->
         "Conflict detected. Open the Conflicts screen to resolve."
     is VirgaError.Unknown ->
