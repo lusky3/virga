@@ -149,6 +149,7 @@ open class SyncWorker @AssistedInject constructor(
 
         val staged = staging.prepare(task.sourcePath, task.direction, runId)
         val effectiveTask = if (staged.isStaged) task.copy(sourcePath = staged.localPath) else task
+        stagingTimeoutWarning(staged.readTimeouts)?.let { log.line(it) }
 
         var last: SyncProgress? = null
         var lastNotifiedPct = -1
@@ -763,3 +764,14 @@ internal fun retryDecisionFor(failure: Throwable, attempt: Int, task: SyncTask):
         (task.retryOnRclone && failure is VirgaError.Rclone)
     return if (retryable && attempt < task.maxRetries - 1) RetryOutcome.RETRY else RetryOutcome.FAIL
 }
+
+/** A run-log warning when [readTimeouts] source files were abandoned because their read
+ *  exceeded the per-file timeout — a strong signal the source storage is failing. Null
+ *  when nothing timed out. */
+internal fun stagingTimeoutWarning(readTimeouts: Int): String? =
+    if (readTimeouts > 0) {
+        "$readTimeouts file(s) timed out while reading the source — the card or drive may " +
+            "be failing. Copy your files off and replace it."
+    } else {
+        null
+    }
