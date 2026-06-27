@@ -56,4 +56,29 @@ class LocalStagingTimeoutTest {
         assertThat(outcome).isEqualTo(LocalStaging.CopyOutcome.TIMEOUT)
         assertThat(closed.get()).isTrue() // outer coroutine closed the wedged stream
     }
+
+    @Test
+    fun `a normal stream copies fully and is counted as COPIED`() = runBlocking {
+        val dest = File(context.cacheDir, "copied.bin")
+        val outcome = staging.copyDocumentToFileTimedForTest(
+            stream = "hello".byteInputStream(),
+            dest = dest,
+            timeoutMs = 5_000L,
+        )
+        assertThat(outcome).isEqualTo(LocalStaging.CopyOutcome.COPIED)
+        assertThat(dest.readText()).isEqualTo("hello")
+    }
+
+    @Test
+    fun `CopyTally record folds outcomes into copied, error, and timeout totals`() {
+        val tally = LocalStaging.CopyTally()
+        tally.record(LocalStaging.CopyOutcome.COPIED)
+        tally.record(LocalStaging.CopyOutcome.COPIED)
+        tally.record(LocalStaging.CopyOutcome.ERROR)
+        tally.record(LocalStaging.CopyOutcome.TIMEOUT)
+        assertThat(tally.copied).isEqualTo(2)
+        // A timeout counts as both a timeout AND an error (file is absent from the stage).
+        assertThat(tally.errors).isEqualTo(2)
+        assertThat(tally.timeouts).isEqualTo(1)
+    }
 }

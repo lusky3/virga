@@ -94,4 +94,18 @@ class VirgaErrorTest {
     fun `Stall file defaults to null`() {
         assertThat(VirgaError.Stall(message = "stalled").file).isNull()
     }
+
+    @Test
+    fun `Stall toUserMessage surfaces the carried message`() {
+        val msg = VirgaError.Stall(file = "DCIM/IMG_1.jpg", message = "no progress, last read DCIM/IMG_1.jpg")
+            .toUserMessage()
+        assertThat(msg).isEqualTo("no progress, last read DCIM/IMG_1.jpg")
+    }
+
+    @Test
+    fun `Stall toUserMessage falls back to generic copy when message blank`() {
+        val msg = VirgaError.Stall(message = "").toUserMessage()
+        assertThat(msg).contains("stalled")
+        assertThat(msg).contains("Try again")
+    }
 }

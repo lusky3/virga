@@ -91,6 +91,10 @@ class SourceHealthCheck @Inject constructor(
         }
     }
 
+    /** Test-only seam: run the timeout/close mechanic against a supplied stream. */
+    internal suspend fun timedReadForTest(stream: InputStream, timeoutMs: Long): HealthResult =
+        timedRead(stream, timeoutMs)
+
     private companion object {
         /** Bytes read from each sampled file — just enough to force a real read. */
         const val PROBE_READ_BYTES = 64 * 1024

@@ -154,7 +154,18 @@ class LocalStaging @Inject constructor(
     // --- private helpers ---
 
     /** Running totals for a staging copy: files written vs. files that failed/skipped. */
-    private class CopyTally(var copied: Int = 0, var errors: Int = 0, var timeouts: Int = 0)
+    internal class CopyTally(var copied: Int = 0, var errors: Int = 0, var timeouts: Int = 0) {
+        /** Fold one file's [CopyOutcome] into the totals. A timeout counts as BOTH a
+         *  timeout (the failing-card signal) and an error (the file isn't in the stage,
+         *  so a mirror must not delete its remote counterpart). */
+        fun record(outcome: CopyOutcome) {
+            when (outcome) {
+                CopyOutcome.COPIED -> copied++
+                CopyOutcome.TIMEOUT -> { timeouts++; errors++ }
+                CopyOutcome.ERROR -> errors++
+            }
+        }
+    }
 
     /**
      * Copies [dir] into [dest] recursively, accumulating into [tally]. Any file that
@@ -175,11 +186,7 @@ class LocalStaging @Inject constructor(
                 target.mkdirs()
                 copyTreeToLocal(child, target, tally)
             } else {
-                when (copyDocumentToFileTimed(child.uri, target)) {
-                    CopyOutcome.COPIED -> tally.copied++
-                    CopyOutcome.TIMEOUT -> { tally.timeouts++; tally.errors++ }
-                    CopyOutcome.ERROR -> tally.errors++
-                }
+                tally.record(copyDocumentToFileTimed(child.uri, target))
             }
         }
     }

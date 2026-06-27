@@ -185,6 +185,29 @@ class SyncWorkerTest {
     }
 
     @Test
+    fun preflightTimeout_recordsFailed_andSkipsStagingAndDaemon() = runBlocking {
+        // A failing SD card: the sample-read preflight times out for the content:// upload
+        // source, so the run must fail fast — before the expensive staging copy or a daemon
+        // lease — and be recorded FAILED, not silently swallowed.
+        val task = task(direction = SyncDirection.UPLOAD)
+        coEvery { taskRepository.getTask(TASK_ID) } returns task
+        coEvery { sourceHealthCheck.probe(any(), any(), any()) } returns
+            SourceHealthCheck.HealthResult.TIMED_OUT
+
+        val result = buildWorker().doWork()
+
+        assertThat(result).isEqualTo(ListenableWorker.Result.failure())
+        coVerify {
+            historyRepository.finishRun(
+                RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+            )
+        }
+        // The doomed run is short-circuited: no staging copy, no daemon lease.
+        coVerify(exactly = 0) { staging.prepare(any(), any(), any()) }
+        coVerify(exactly = 0) { engine.acquireDaemon() }
+    }
+
+    @Test
     fun bisyncSuccess_runsConflictDetectionUnderAFreshDaemonLease() = runBlocking {
         // sync-M1: detectFor() → engine.listDir() needs a daemon, but the worker's
         // own lease is released (daemon stopped) in the finally before the epilogue.
