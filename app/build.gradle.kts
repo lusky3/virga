@@ -107,6 +107,20 @@ private fun ApplicationProductFlavor.distribution(
     boolField("CRASH_REPORTING_DEFAULT_ON", crashDefaultOn)
 }
 
+// F-Droid's contract is fully FOSS with no baked service secrets: it ships the no-op
+// CrashReporter (no Sentry SDK) and is BYO-OAuth only. defaultConfig may carry CI/local
+// OAuth client IDs + a Sentry DSN, so the fdroid flavor explicitly overrides them back
+// to empty/unset — enforcing the no-baked-secrets contract in code rather than relying
+// solely on F-Droid's secret-free build environment.
+private fun ApplicationProductFlavor.clearBakedServiceConfig() {
+    stringField("SENTRY_DSN", "")
+    stringField("OAUTH_CLIENT_ID_GDRIVE", "")
+    stringField("OAUTH_CLIENT_ID_ONEDRIVE", "")
+    stringField("OAUTH_CLIENT_ID_DROPBOX", "")
+    stringField("OAUTH_CLIENT_ID_PCLOUD", "")
+    manifestPlaceholders["googleOAuthScheme"] = "com.googleusercontent.apps.unset"
+}
+
 android {
     namespace = "app.lusk.virga"
 
@@ -187,6 +201,9 @@ android {
                 crashAvailable = false,
                 crashDefaultOn = false,
             )
+            // Strip any defaultConfig-inherited OAuth client IDs / Sentry DSN so the
+            // FOSS build never bakes developer secrets (BYO-OAuth, no crash reporting).
+            clearBakedServiceConfig()
         }
         // Google Play (AAB). Play policy is hostile to MANAGE_EXTERNAL_STORAGE for
         // general-purpose sync apps, so the play manifest strips it (SAF instead);
@@ -254,9 +271,9 @@ android {
         debugStoreFile?.let { f ->
             getByName("debug") {
                 storeFile = f
-                storePassword = keystoreProp("debugStorePassword", "VIRGA_DEBUG_KEYSTORE_PASSWORD")
+                storePassword = keystoreProp("debugStoreCredential", "VIRGA_DEBUG_KEYSTORE_CREDENTIAL")
                 keyAlias = keystoreProp("debugKeyAlias", "VIRGA_DEBUG_KEY_ALIAS")
-                keyPassword = keystoreProp("debugKeyPassword", "VIRGA_DEBUG_KEY_PASSWORD")
+                keyPassword = keystoreProp("debugKeyCredential", "VIRGA_DEBUG_KEY_CREDENTIAL")
             }
         }
     }

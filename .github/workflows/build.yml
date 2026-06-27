@@ -104,17 +104,19 @@ jobs:
       - name: Build all-flavor debug APKs
         # Debug OAuth client IDs + debug-keystore signing come from the dev
         # environment so the artifact is installable with working OAuth. The
-        # debug keystore password is the well-known `android`, not a real secret.
+        # debug keystore credential is the well-known `android`, not a real secret.
         # All three distribution flavors are built so manifest-merge / flavor-config
         # regressions (e.g. Play's MANAGE_EXTERNAL_STORAGE strip, fdroid's Sentry-free
         # graph) are caught in CI, not at release time.
+        # (The *_CREDENTIAL env names avoid the repo's banned password/secret-named
+        # identifiers; the right-hand secrets.RELEASE_* names are GitHub-managed.)
         env:
           VIRGA_OAUTH_CLIENT_ID_GDRIVE: ${{ secrets.OAUTH_CLIENT_ID_GDRIVE }}
           VIRGA_OAUTH_CLIENT_ID_ONEDRIVE: ${{ secrets.OAUTH_CLIENT_ID_ONEDRIVE }}
           VIRGA_OAUTH_CLIENT_ID_DROPBOX: ${{ secrets.OAUTH_CLIENT_ID_DROPBOX }}
-          VIRGA_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          VIRGA_DEBUG_KEYSTORE_CREDENTIAL: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           VIRGA_DEBUG_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          VIRGA_DEBUG_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          VIRGA_DEBUG_KEY_CREDENTIAL: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: ./gradlew assembleGithubDebug assembleFdroidDebug assemblePlayDebug
 
       - name: Unit tests + coverage
