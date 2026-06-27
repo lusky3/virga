@@ -12,7 +12,7 @@
 
 - **Pre-production:** DB schema changes may use destructive migration (bump version; no clean `Migration` required). Wiping app data between edits is acceptable.
 - **`:app` is flavored (`foss`→`github`/`fdroid`, plus `play`).** The modules touched here (`core:common`, `core:rclone`, `sync-worker`) are **not** flavored — their tests run via `:<module>:testDebugUnitTest`.
-- **DI changes must be verified under the Hilt graph build:** `:app:hiltJavaCompileFossDebug` AND `:app:hiltJavaCompilePlayDebug` (plain `compile*Kotlin` skips Dagger aggregation). A default value on an `@Inject` constructor param does **not** exempt it from needing a binding.
+- **DI changes must be verified under the Hilt graph build:** `:app:hiltJavaCompileGithubDebug` AND `:app:hiltJavaCompilePlayDebug` (plain `compile*Kotlin` skips Dagger aggregation). A default value on an `@Inject` constructor param does **not** exempt it from needing a binding.
 - **After changing a shared interface** (`RcloneEngine`, `SyncProgress`, `VirgaError`): also build dependent test sources `:sync-worker:compileDebugUnitTestKotlin` and update hand-rolled test doubles.
 - **Codacy (server-side detekt + Lizard, delta-scanned on changed lines):** Lizard nloc ≤ 50 / params ≤ 8 / CCN ≤ 8; detekt LongMethod ≤ 60, LongParameterList ≤ 6 (data-class ctors exempt), TooManyFunctions ≤ 11 per class, **no `return@label` on new/edited lines** (use a positive `if`/`?.let`), StringLiteralDuplication flags a ≥5-char literal repeated ≥3×. detekt `@Suppress` is honored by detekt but **not** Lizard.
 - **`codecov/patch` is a blocking gate.** `LocalStaging.kt`, `RcloneEngineImpl.kt`, `RcloneJson.kt`, `SyncWorker.kt` are **NOT** in `codecov.yml` `ignore:` — new logic in them needs unit-test coverage. Keep new pure logic in testable suspend helpers with an injectable `DispatcherProvider` seam.
@@ -586,7 +586,7 @@ git commit -m "feat(sync): source-aware stall message; never retry a stall"
 
 - [ ] **Step 11: Verify the Hilt graph still builds (no DI change, but a shared interface changed)**
 
-Run: `./gradlew :app:hiltJavaCompileFossDebug :app:hiltJavaCompilePlayDebug -q`
+Run: `./gradlew :app:hiltJavaCompileGithubDebug :app:hiltJavaCompilePlayDebug -q`
 Expected: BUILD SUCCESSFUL.
 
 ---
@@ -1077,7 +1077,7 @@ Expected: PASS — the new timeout test plus the existing `LocalStagingPrepareTe
 
 - [ ] **Step 8: Verify the Hilt graph builds (DI change: LocalStaging gained a ctor param)**
 
-Run: `./gradlew :app:hiltJavaCompileFossDebug :app:hiltJavaCompilePlayDebug -q`
+Run: `./gradlew :app:hiltJavaCompileGithubDebug :app:hiltJavaCompilePlayDebug -q`
 Expected: BUILD SUCCESSFUL. A `MissingBinding` here means Step 6's provider is needed.
 
 - [ ] **Step 9: Commit**
@@ -1540,7 +1540,7 @@ Add `private val sourceHealthCheck: SourceHealthCheck` to the `SyncWorker` const
 
 - [ ] **Step 6: Verify the Hilt graph builds (DI change: new ctor param)**
 
-Run: `./gradlew :app:hiltJavaCompileFossDebug :app:hiltJavaCompilePlayDebug -q`
+Run: `./gradlew :app:hiltJavaCompileGithubDebug :app:hiltJavaCompilePlayDebug -q`
 Expected: BUILD SUCCESSFUL (`SourceHealthCheck` is `@Inject @Singleton`, deps already bound).
 
 - [ ] **Step 7: Run the full sync-worker suite**
@@ -1568,7 +1568,7 @@ Expected: all green.
 
 - [ ] **Both flavor Hilt graphs build**
 
-Run: `./gradlew :app:hiltJavaCompileFossDebug :app:hiltJavaCompilePlayDebug -q`
+Run: `./gradlew :app:hiltJavaCompileGithubDebug :app:hiltJavaCompilePlayDebug -q`
 Expected: BUILD SUCCESSFUL.
 
 - [ ] **App assembles on both flavor families**
