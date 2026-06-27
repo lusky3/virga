@@ -860,6 +860,39 @@ class RcloneEngineImplTest {
         }
     }
 
+    @Test fun `a real stall throws VirgaError_Stall naming the in-flight file`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "sync/copy", any()) } returns
+            buildJsonObject { put("jobid", 9) }
+        // Never finishes.
+        coEvery { apiClient.call(any(), any(), any(), "job/status", any()) } returns
+            buildJsonObject { put("finished", false) }
+        // Flat stats (zero progress) but a named in-flight file each tick.
+        coEvery { apiClient.call(any(), any(), any(), "core/stats", any()) } returns buildJsonObject {
+            put("bytes", 0L); put("checks", 0)
+            put("transferring", kotlinx.serialization.json.buildJsonArray {
+                add(buildJsonObject { put("name", "DCIM/IMG_BAD.jpg") })
+            })
+        }
+        // job/stop in the finally.
+        coEvery { apiClient.call(any(), any(), any(), "job/stop", any()) } returns buildJsonObject {}
+
+        engine.startDaemon()
+
+        engine.sync(
+            "local:/x", "gdrive:x",
+            SyncOptions(SyncDirection.UPLOAD), stallTimeoutMs = 0L,
+        ).test {
+            // First poll arms the clock; second poll (still flat, 0ms window) trips it.
+            awaitItem() // first running emission
+            val error = awaitError()
+            assertThat(error).isInstanceOf(VirgaError.Stall::class.java)
+            assertThat((error as VirgaError.Stall).file).isEqualTo("DCIM/IMG_BAD.jpg")
+        }
+    }
+
     // --- providers ---
 
     @Test fun `providers returns parsed RemoteProvider list`() = runTest(testDispatcher) {
