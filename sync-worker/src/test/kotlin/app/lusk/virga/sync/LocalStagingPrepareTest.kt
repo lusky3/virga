@@ -34,7 +34,14 @@ class LocalStagingPrepareTest {
     @Before
     fun setUp() {
         context = RuntimeEnvironment.getApplication()
-        staging = LocalStaging(context)
+        staging = LocalStaging(
+            context,
+            object : app.lusk.virga.core.common.dispatchers.DispatcherProvider {
+                override val main = kotlinx.coroutines.Dispatchers.Unconfined
+                override val default = kotlinx.coroutines.Dispatchers.IO
+                override val io = kotlinx.coroutines.Dispatchers.IO
+            },
+        )
     }
 
     // --- non-content:// passthrough -----------------------------------------

@@ -19,7 +19,14 @@ import java.io.File
  */
 class LocalStagingSafeChildTest {
 
-    private val staging = LocalStaging(mockk<Context>(relaxed = true))
+    private val staging = LocalStaging(
+        mockk<Context>(relaxed = true),
+        object : app.lusk.virga.core.common.dispatchers.DispatcherProvider {
+            override val main = kotlinx.coroutines.Dispatchers.Unconfined
+            override val default = kotlinx.coroutines.Dispatchers.IO
+            override val io = kotlinx.coroutines.Dispatchers.IO
+        },
+    )
 
     private val safeChild = LocalStaging::class.java
         .getDeclaredMethod("safeChild", File::class.java, String::class.java)
