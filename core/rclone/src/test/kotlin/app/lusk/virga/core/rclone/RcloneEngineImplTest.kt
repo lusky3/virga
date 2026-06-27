@@ -959,6 +959,33 @@ class RcloneEngineImplTest {
         }
     }
 
+    @Test fun `a wedged job with no other lease force-stops the daemon`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { daemonManager.stop(any()) } returns Unit
+        coEvery { apiClient.call(any(), any(), any(), "sync/sync", any()) } returns
+            buildJsonObject { put("jobid", 21) }
+        coEvery { apiClient.call(any(), any(), any(), "job/status", any()) } returns
+            buildJsonObject { put("finished", false) }
+        coEvery { apiClient.call(any(), any(), any(), "core/stats", any()) } returns
+            buildJsonObject { put("bytes", 0L); put("checks", 0) }
+        // job/stop "succeeds" but the job never confirms finished (wedged thread).
+        coEvery { apiClient.call(any(), any(), any(), "job/stop", any()) } returns buildJsonObject {}
+
+        engine.startDaemon()
+
+        engine.sync(
+            "local:/x", "gdrive:x",
+            SyncOptions(SyncDirection.UPLOAD, deleteExtraneous = true), stallTimeoutMs = 0L,
+        ).test {
+            awaitItem()
+            awaitError() // VirgaError.Stall (mirror path)
+        }
+        // Backstop fired: the daemon was force-stopped.
+        coVerify { daemonManager.stop(fakeDaemon) }
+    }
+
     // --- providers ---
 
     @Test fun `providers returns parsed RemoteProvider list`() = runTest(testDispatcher) {

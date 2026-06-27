@@ -797,6 +797,12 @@ class RcloneEngineImpl @Inject constructor(
             if (!jobFinished) {
                 withContext(NonCancellable) {
                     runCatching { rc(d, "job/stop", buildJsonObject { put("jobid", jobId) }) }
+                    // If no other consumer holds the daemon, a job that won't confirm
+                    // stopped is a wedged (kernel-blocked) transfer thread that job/stop
+                    // can't reach. Force-kill the daemon process so we don't leak it.
+                    if (leaseCount() <= 1 && !jobStopped(d, jobId)) {
+                        runCatching { daemonManager.stop(d) }
+                    }
                 }
             }
         }
@@ -919,6 +925,23 @@ class RcloneEngineImpl @Inject constructor(
     private suspend fun rc(d: RcloneDaemon, command: String, params: JsonObject = JsonObject(emptyMap())): JsonObject =
         apiClient.call(d.baseUrl, d.user, d.pass, command, params)
 
+    /** Current daemon lease count, read under the lock. */
+    private suspend fun leaseCount(): Int = lock.withLock { leases }
+
+    /** Polls job/status briefly; true once the job reports finished, false if it stays
+     *  unfinished through the grace window (a wedged thread job/stop can't reach). */
+    private suspend fun jobStopped(d: RcloneDaemon, jobId: Int): Boolean {
+        repeat(JOB_STOP_CONFIRM_POLLS) {
+            val finished = runCatching {
+                rc(d, "job/status", buildJsonObject { put("jobid", jobId) })["finished"]
+                    ?.jsonPrimitive?.booleanOrNull
+            }.getOrNull() ?: false
+            if (finished) return true
+            delay(JOB_STOP_CONFIRM_INTERVAL_MS)
+        }
+        return false
+    }
+
     private fun stallMessage(timeoutMs: Long, file: String?): String {
         val base = "Sync stalled — no progress for ${timeoutMs / 1000}s."
         return if (file != null) "$base Last read: $file" else base
@@ -939,6 +962,8 @@ class RcloneEngineImpl @Inject constructor(
         const val POLL_INTERVAL_MS = 750L
         // Max time an in-flight job may make zero progress before we abort it.
         const val STALL_TIMEOUT_MS = RcloneEngine.DEFAULT_STALL_TIMEOUT_MS
+        const val JOB_STOP_CONFIRM_POLLS = 4
+        const val JOB_STOP_CONFIRM_INTERVAL_MS = 250L
         // operations/copyfile and operations/movefile parameter keys.
         const val KEY_SRC_FS = "srcFs"
         const val KEY_SRC_REMOTE = "srcRemote"
