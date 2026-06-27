@@ -381,7 +381,10 @@ open class SyncWorker @AssistedInject constructor(
                 .onFailure { Log.w(TAG, "Failed to clear needsReauth for ${task.remoteName}", it) }
             Result.success()
         } else {
-            val msg = failure.message ?: "Sync failed"
+            val sourceIsLocal = !task.sourcePath.startsWith("content://") || staged.isStaged
+            val msg = (failure as? VirgaError.Stall)
+                ?.let { stallUserMessage(it, task.direction, sourceIsLocal) }
+                ?: failure.message ?: "Sync failed"
             log.line("Failed: $msg")
             finishFailed(runId, last, msg, log.path.takeIf { log.flush() }, task.direction, runStartMs, task.remoteName, metered)
             runCatching {
@@ -432,14 +435,11 @@ open class SyncWorker @AssistedInject constructor(
      * first try. With maxRetries=3: attempts 0 and 1 retry (runAttemptCount < 2),
      * attempt 2 fails — yielding exactly 3 total tries.
      */
-    private fun retryDecision(failure: Throwable, attempt: Int, task: SyncTask): Result {
-        val isAuth = failure is VirgaError.Auth || isAuthError(failure.message ?: "")
-        if (isAuth) return Result.failure()
-        val retryable = failure is VirgaError.Network ||
-            (task.retryOnRclone && failure is VirgaError.Rclone)
-        if (retryable && attempt < task.maxRetries - 1) return Result.retry()
-        return Result.failure()
-    }
+    private fun retryDecision(failure: Throwable, attempt: Int, task: SyncTask): Result =
+        when (retryDecisionFor(failure, attempt, task)) {
+            RetryOutcome.RETRY -> Result.retry()
+            RetryOutcome.FAIL -> Result.failure()
+        }
 
     /**
      * Advisory pre-sync conflict detection for one-way tasks. Runs a check (no transfer)
@@ -717,3 +717,37 @@ open class SyncWorker @AssistedInject constructor(
 /** Collapses tab/newline to spaces so a value can't break the "path\terror"-per-line
  *  encoding of [SyncRunEntity.failedFiles]. */
 private fun String.sanitiseRow(): String = replace('\t', ' ').replace('\n', ' ').replace('\r', ' ')
+
+/**
+ * User-facing copy for a [VirgaError.Stall]. An upload that wedged reading a local/staged
+ * source is almost always failing storage (e.g. an SD card going read-only), so we say so
+ * and name the file; a download/remote-side stall points at the connection instead.
+ */
+internal fun stallUserMessage(
+    error: VirgaError.Stall,
+    direction: SyncDirection,
+    sourceIsLocal: Boolean,
+): String {
+    val file = error.file
+    val fileSuffix = if (file != null) " (last read: $file)" else ""
+    return if (direction != SyncDirection.DOWNLOAD && sourceIsLocal) {
+        "Couldn't read your source$fileSuffix — the card or drive may be failing. " +
+            "Copy your files off and replace it."
+    } else {
+        "The transfer stalled$fileSuffix — check your connection and try again."
+    }
+}
+
+internal enum class RetryOutcome { RETRY, FAIL }
+
+/** Pure retry policy. A [VirgaError.Stall] is never retried — re-running hammers the
+ *  same unreadable region. Network errors (and rclone errors when the task opts in)
+ *  retry within the attempt budget. Auth is handled by the caller before this. */
+internal fun retryDecisionFor(failure: Throwable, attempt: Int, task: SyncTask): RetryOutcome {
+    if (failure is VirgaError.Stall) return RetryOutcome.FAIL
+    val isAuth = failure is VirgaError.Auth || isAuthError(failure.message ?: "")
+    if (isAuth) return RetryOutcome.FAIL
+    val retryable = failure is VirgaError.Network ||
+        (task.retryOnRclone && failure is VirgaError.Rclone)
+    return if (retryable && attempt < task.maxRetries - 1) RetryOutcome.RETRY else RetryOutcome.FAIL
+}
