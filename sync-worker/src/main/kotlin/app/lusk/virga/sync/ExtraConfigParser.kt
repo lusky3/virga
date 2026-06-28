@@ -13,6 +13,8 @@ import java.util.logging.Logger
  *
  * DEFERRED dedicated typed toggles reachable via this passthrough using their
  * allowlisted keys: TrackRenames, SizeOnly, ConflictResolve, MaxTransfer, OrderBy.
+ * For flaky sources, MaxDuration (e.g. MaxDuration=10m) and CutoffMode (e.g.
+ * CutoffMode=HARD) wall-clock-cap a run without dedicated UI.
  */
 object ExtraConfigParser {
 
@@ -35,6 +37,8 @@ object ExtraConfigParser {
         "IgnoreExisting",
         "IgnoreSize",
         "NoTraverse",
+        "MaxDuration",
+        "CutoffMode",
     )
 
     /**

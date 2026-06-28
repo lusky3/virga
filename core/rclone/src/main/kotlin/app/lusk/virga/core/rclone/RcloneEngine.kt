@@ -26,6 +26,11 @@ import kotlinx.coroutines.flow.Flow
  * as a non-fatal, surfaced-to-snackbar outcome rather than a thrown error.
  */
 interface RcloneEngine {
+    companion object {
+        /** Default stall window: abort a job that makes zero progress this long. */
+        const val DEFAULT_STALL_TIMEOUT_MS = 120_000L
+    }
+
     suspend fun startDaemon(): RcloneDaemon
     suspend fun stopDaemon()
     suspend fun isDaemonHealthy(): Boolean
@@ -227,8 +232,18 @@ interface RcloneEngine {
     suspend fun testConnectivity(remoteName: String): Result<Unit>
 
     /** Emits progress until the sync completes; the terminal emission has full counts. */
-    fun sync(source: String, dest: String, options: SyncOptions): Flow<SyncProgress>
-    fun bisync(path1: String, path2: String, options: BisyncOptions): Flow<SyncProgress>
+    fun sync(
+        source: String,
+        dest: String,
+        options: SyncOptions,
+        stallTimeoutMs: Long = DEFAULT_STALL_TIMEOUT_MS,
+    ): Flow<SyncProgress>
+    fun bisync(
+        path1: String,
+        path2: String,
+        options: BisyncOptions,
+        stallTimeoutMs: Long = DEFAULT_STALL_TIMEOUT_MS,
+    ): Flow<SyncProgress>
 
     /**
      * Compares [source] and [dest] without transferring any data (rclone check).
@@ -244,7 +259,12 @@ interface RcloneEngine {
      * treat it as the "files that differ or are missing" count, not an exact clean
      * diff. The flow completes with a single terminal emission (like [sync]).
      */
-    fun check(source: String, dest: String, options: SyncOptions): Flow<SyncProgress>
+    fun check(
+        source: String,
+        dest: String,
+        options: SyncOptions,
+        stallTimeoutMs: Long = DEFAULT_STALL_TIMEOUT_MS,
+    ): Flow<SyncProgress>
 
     /**
      * Returns the transferred files for the run identified by [group] (the rclone

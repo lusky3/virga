@@ -3,12 +3,18 @@ package app.lusk.virga.sync
 import android.content.Context
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
+import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import app.lusk.virga.core.common.model.SyncDirection
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -29,7 +35,16 @@ import javax.inject.Singleton
 @Singleton
 class LocalStaging @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val dispatchers: DispatcherProvider,
 ) {
+
+    enum class CopyOutcome { COPIED, ERROR, TIMEOUT }
+
+    private companion object {
+        /** Max wall-clock a single staged file read may take before it's abandoned.
+         *  Bounds a wedged read on a failing card so staging can't hang forever. */
+        const val PER_FILE_READ_TIMEOUT_MS = 30_000L
+    }
 
     data class StagedSource(
         val localPath: String,
@@ -54,6 +69,10 @@ class LocalStaging @Inject constructor(
          * non-staged sources.
          */
         val fullyStaged: Boolean = true,
+        /** Number of source files abandoned because a single read exceeded the per-file
+         *  timeout (a strong "the card is failing" signal). Counted within [errors]-style
+         *  accounting too: a timed-out file is NOT in the staged copy. */
+        val readTimeouts: Int = 0,
     )
 
     /**
@@ -97,6 +116,7 @@ class LocalStaging @Inject constructor(
                     sourceReadable = true,
                     stagedFileCount = tally.copied,
                     fullyStaged = tally.errors == 0,
+                    readTimeouts = tally.timeouts,
                 )
             }
             // DOWNLOAD: leave stageDir empty; rclone fills it, writeBack copies out.
@@ -135,7 +155,18 @@ class LocalStaging @Inject constructor(
     // --- private helpers ---
 
     /** Running totals for a staging copy: files written vs. files that failed/skipped. */
-    private class CopyTally(var copied: Int = 0, var errors: Int = 0)
+    internal class CopyTally(var copied: Int = 0, var errors: Int = 0, var timeouts: Int = 0) {
+        /** Fold one file's [CopyOutcome] into the totals. A timeout counts as BOTH a
+         *  timeout (the failing-card signal) and an error (the file isn't in the stage,
+         *  so a mirror must not delete its remote counterpart). */
+        fun record(outcome: CopyOutcome) {
+            when (outcome) {
+                CopyOutcome.COPIED -> copied++
+                CopyOutcome.TIMEOUT -> { timeouts++; errors++ }
+                CopyOutcome.ERROR -> errors++
+            }
+        }
+    }
 
     /**
      * Copies [dir] into [dest] recursively, accumulating into [tally]. Any file that
@@ -143,7 +174,7 @@ class LocalStaging @Inject constructor(
      * is counted as an error rather than silently dropped, so the caller can refuse to
      * run a delete-enabled mirror against an incomplete stage.
      */
-    private fun copyTreeToLocal(dir: DocumentFile, dest: File, tally: CopyTally) {
+    private suspend fun copyTreeToLocal(dir: DocumentFile, dest: File, tally: CopyTally) {
         for (child in dir.listFiles()) {
             val target = safeChild(dest, child.name)
             if (target == null) {
@@ -155,10 +186,8 @@ class LocalStaging @Inject constructor(
             if (child.isDirectory) {
                 target.mkdirs()
                 copyTreeToLocal(child, target, tally)
-            } else if (copyDocumentToFile(child.uri, target)) {
-                tally.copied++
             } else {
-                tally.errors++
+                tally.record(copyDocumentToFileTimed(child.uri, target))
             }
         }
     }
@@ -181,12 +210,59 @@ class LocalStaging @Inject constructor(
         return if (child.canonicalPath.startsWith(destPrefix)) child else null
     }
 
-    /** Copies one SAF document to [dest]; returns false (no throw) if it can't be read. */
-    private fun copyDocumentToFile(uri: Uri, dest: File): Boolean = runCatching {
-        val stream = context.contentResolver.openInputStream(uri) ?: return false
-        stream.use { input -> dest.outputStream().use { output -> input.copyTo(output) } }
-        true
-    }.getOrDefault(false)
+    /** Copies one SAF document to [dest] with a per-file read timeout. On timeout the
+     *  stream is closed from this (outer) coroutine to unblock a wedged read where the
+     *  provider honors close(); returns [CopyOutcome.TIMEOUT]. Open/IO failures →
+     *  [CopyOutcome.ERROR]; success → [CopyOutcome.COPIED]. */
+    private suspend fun copyDocumentToFileTimed(uri: Uri, dest: File): CopyOutcome {
+        val stream = try {
+            context.contentResolver.openInputStream(uri) ?: return CopyOutcome.ERROR
+        } catch (_: Exception) {
+            return CopyOutcome.ERROR
+        }
+        return copyStreamTimed(stream, dest, PER_FILE_READ_TIMEOUT_MS)
+    }
+
+    /** Shared copy-with-deadline logic. Runs the blocking copy on [dispatchers.io]; the
+     *  child captures its own IO failure as ERROR (so a mid-copy error never escapes this
+     *  scope and aborts the whole stage); on timeout, closes the stream from this (outer)
+     *  coroutine to break a wedged read. A TIMEOUT/ERROR leaves a partial/truncated file in
+     *  the staging dir, so it is deleted — otherwise an additive (copy) upload could ship a
+     *  corrupt file to the cloud (mirror/bisync already block on fullyStaged; additive
+     *  copies do not). */
+    private suspend fun copyStreamTimed(stream: InputStream, dest: File, timeoutMs: Long): CopyOutcome =
+        coroutineScope {
+            var copied = false
+            val copy = launch(dispatchers.io) {
+                try {
+                    stream.use { input -> dest.outputStream().use { output -> input.copyTo(output) } }
+                    copied = true
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: IOException) {
+                    copied = false
+                }
+            }
+            val finished = withTimeoutOrNull(timeoutMs) { copy.join() }
+            val outcome = when {
+                finished == null -> {
+                    runCatching { stream.close() } // unblock the wedged read where honored
+                    copy.cancel()
+                    CopyOutcome.TIMEOUT
+                }
+                copied -> CopyOutcome.COPIED
+                else -> CopyOutcome.ERROR
+            }
+            if (outcome != CopyOutcome.COPIED) runCatching { dest.delete() }
+            outcome
+        }
+
+    /** Test-only entry point: run the timeout/close logic against a supplied stream. */
+    internal suspend fun copyDocumentToFileTimedForTest(
+        stream: InputStream,
+        dest: File,
+        timeoutMs: Long,
+    ): CopyOutcome = copyStreamTimed(stream, dest, timeoutMs)
 
     private fun copyLocalToTree(src: File, treeDir: DocumentFile, tally: CopyTally) {
         val children = src.listFiles() ?: return

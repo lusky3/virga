@@ -24,12 +24,22 @@ class SyncExecutorTest {
         var bisyncArgs: Triple<String, String, BisyncOptions>? = null
         var checkArgs: Triple<String, String, SyncOptions>? = null
 
-        override fun sync(source: String, dest: String, options: SyncOptions): Flow<SyncProgress> {
+        override fun sync(
+            source: String,
+            dest: String,
+            options: SyncOptions,
+            stallTimeoutMs: Long,
+        ): Flow<SyncProgress> {
             syncArgs = Triple(source, dest, options)
             return flowOf(SyncProgress(100, 100, 0.0, 2, 2, null, 0))
         }
 
-        override fun bisync(path1: String, path2: String, options: BisyncOptions): Flow<SyncProgress> {
+        override fun bisync(
+            path1: String,
+            path2: String,
+            options: BisyncOptions,
+            stallTimeoutMs: Long,
+        ): Flow<SyncProgress> {
             bisyncArgs = Triple(path1, path2, options)
             return flowOf(SyncProgress(0, 0, 0.0, 0, 0, null, 0))
         }
@@ -78,7 +88,12 @@ class SyncExecutorTest {
         ) = Unit
         override suspend fun <T> withDaemonForOAuth(block: suspend (app.lusk.virga.core.rclone.RcloneDaemon) -> T): T =
             error("unused")
-        override fun check(source: String, dest: String, options: SyncOptions): Flow<SyncProgress> {
+        override fun check(
+            source: String,
+            dest: String,
+            options: SyncOptions,
+            stallTimeoutMs: Long,
+        ): Flow<SyncProgress> {
             checkArgs = Triple(source, dest, options)
             return flowOf(SyncProgress(0, 0, 0.0, 0, 0, null, 0))
         }

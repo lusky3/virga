@@ -54,6 +54,11 @@ class RcloneEngineImpl @Inject constructor(
     private val lock = Mutex()
     @Volatile private var daemon: RcloneDaemon? = null
 
+    // Wall-clock source for the stall guard. Injectable so tests can drive the stall
+    // window deterministically instead of depending on real elapsed time between polls
+    // (the guard compares against this, not the coroutine test scheduler's virtual time).
+    internal var nowMs: () -> Long = { System.currentTimeMillis() }
+
     // Reference count of active long-lived consumers (syncs, dry-run, file browser).
     // The daemon is torn down only when the last lease is released, so one sync's
     // completion can't kill a daemon another concurrent sync is still using.
@@ -404,13 +409,21 @@ class RcloneEngineImpl @Inject constructor(
         }
     }
 
-    override fun sync(source: String, dest: String, options: SyncOptions): Flow<SyncProgress> =
+    override fun sync(
+        source: String,
+        dest: String,
+        options: SyncOptions,
+        stallTimeoutMs: Long,
+    ): Flow<SyncProgress> =
         // A one-way COPY/backup tolerates file-level errors (one unreadable source file
         // mustn't fail the whole run — rclone copies the rest and continues). A delete
         // MIRROR or MOVE must NOT: a mirror that proceeded despite unreadable source files
         // could delete their cloud counterparts; a move that proceeds despite errors would
         // delete the source after only a partial transfer, risking data loss.
-        runJobWithProgress(tolerateFileErrors = !options.deleteExtraneous && !options.deleteSource) { d ->
+        runJobWithProgress(
+            tolerateFileErrors = !options.deleteExtraneous && !options.deleteSource,
+            stallTimeoutMs = stallTimeoutMs,
+        ) { d ->
             // Fail-fast on the one flag combination that has no coherent rclone command:
             // move (delete source) AND mirror (delete extraneous on dest) are mutually
             // exclusive. The editor normalizes this away, but a malformed persisted task
@@ -438,8 +451,13 @@ class RcloneEngineImpl @Inject constructor(
             })
         }
 
-    override fun bisync(path1: String, path2: String, options: BisyncOptions): Flow<SyncProgress> =
-        runJobWithProgress { d ->
+    override fun bisync(
+        path1: String,
+        path2: String,
+        options: BisyncOptions,
+        stallTimeoutMs: Long,
+    ): Flow<SyncProgress> =
+        runJobWithProgress(stallTimeoutMs = stallTimeoutMs) { d ->
             // rclone bisync requires BOTH endpoints to already exist — even a
             // first run with --resync aborts with "directory not found" if the
             // remote (path2) dir is missing. The local path1 is a user-picked
@@ -547,9 +565,14 @@ class RcloneEngineImpl @Inject constructor(
         }
     }
 
-    override fun check(source: String, dest: String, options: SyncOptions): Flow<SyncProgress> =
+    override fun check(
+        source: String,
+        dest: String,
+        options: SyncOptions,
+        stallTimeoutMs: Long,
+    ): Flow<SyncProgress> =
         // check never deletes, so file-level errors (a missing file) are informational.
-        runJobWithProgress(tolerateFileErrors = true) { d ->
+        runJobWithProgress(tolerateFileErrors = true, stallTimeoutMs = stallTimeoutMs) { d ->
             rc(d, "operations/check", buildJsonObject {
                 put("srcFs", source)
                 put("dstFs", dest)
@@ -694,6 +717,7 @@ class RcloneEngineImpl @Inject constructor(
      */
     private fun runJobWithProgress(
         tolerateFileErrors: Boolean = false,
+        stallTimeoutMs: Long = STALL_TIMEOUT_MS,
         start: suspend (RcloneDaemon) -> JsonObject,
     ): Flow<SyncProgress> = flow {
         val d = ensureDaemon()
@@ -715,6 +739,7 @@ class RcloneEngineImpl @Inject constructor(
         var lastDeletes = -1
         var lastChecks = -1
         var lastProgressAtMs = Long.MAX_VALUE
+        var lastTransferringName: String? = null
 
         // Track whether the rclone job reached a terminal state. If we exit the
         // loop for any other reason (collector cancellation, stall-guard abort,
@@ -734,6 +759,7 @@ class RcloneEngineImpl @Inject constructor(
                 // Fetch stats only while running (drives the throttled UI update).
                 val stats = rc(d, CMD_CORE_STATS, buildJsonObject { put(KEY_GROUP, group) })
                 val progress = stats.toSyncProgress()
+                progress.transferringNames.firstOrNull()?.let { lastTransferringName = it }
                 val checks = stats["checks"]?.jsonPrimitive?.intOrNull ?: 0
                 if (progress.bytesTransferred != lastBytes ||
                     progress.transferredFiles != lastTransfers ||
@@ -744,10 +770,33 @@ class RcloneEngineImpl @Inject constructor(
                     lastTransfers = progress.transferredFiles
                     lastDeletes = progress.deletes
                     lastChecks = checks
-                    lastProgressAtMs = System.currentTimeMillis()
-                } else if (System.currentTimeMillis() - lastProgressAtMs > STALL_TIMEOUT_MS) {
-                    throw VirgaError.Rclone(
-                        message = "Sync stalled — no progress for ${STALL_TIMEOUT_MS / 1000}s.",
+                    lastProgressAtMs = nowMs()
+                } else if (nowMs() - lastProgressAtMs > stallTimeoutMs) {
+                    // Only a copy/backup that ACTUALLY transferred something is a partial
+                    // success worth preserving. The progress clock arms on the first poll
+                    // (even all-zero stats), so gate on real transferred bytes/files — a run
+                    // that wedged before moving anything must FAIL, not record a 0-file
+                    // "success". Mirror/move (tolerateFileErrors=false) always hard-fails.
+                    val movedSomething = lastBytes > 0 || lastTransfers > 0
+                    if (tolerateFileErrors && movedSomething) {
+                        // Stop the job and read final stats BEFORE marking it finished, so a
+                        // statsFor failure still leaves the finally to stop + run the kill
+                        // backstop rather than skipping cleanup.
+                        runCatching { rc(d, "job/stop", buildJsonObject { put("jobid", jobId) }) }
+                        val finalStats = statsFor(d, group)
+                        jobFinished = true
+                        emit(
+                            finalStats.copy(
+                                errors = maxOf(finalStats.errors, 1),
+                                stalledFile = lastTransferringName,
+                                statsGroup = group,
+                            ),
+                        )
+                        break
+                    }
+                    throw VirgaError.Stall(
+                        file = lastTransferringName,
+                        message = stallMessage(stallTimeoutMs, lastTransferringName),
                     )
                 }
                 emit(progress)
@@ -759,6 +808,17 @@ class RcloneEngineImpl @Inject constructor(
             if (!jobFinished) {
                 withContext(NonCancellable) {
                     runCatching { rc(d, "job/stop", buildJsonObject { put("jobid", jobId) }) }
+                    // If a job won't confirm stopped, it's a wedged (kernel-blocked) transfer
+                    // thread that job/stop can't reach. Force-kill the daemon process so we
+                    // don't leak it — but ONLY when no other consumer holds it. The lease
+                    // count is re-checked while HOLDING the lock and the kill happens under
+                    // it, so a concurrent acquireDaemon() can't slip in between the check and
+                    // the kill (and ensureDaemonLocked restarts a dead daemon anyway).
+                    if (!jobStopped(d, jobId)) {
+                        lock.withLock {
+                            if (leases <= 1) runCatching { daemonManager.stop(d) }
+                        }
+                    }
                 }
             }
         }
@@ -881,6 +941,25 @@ class RcloneEngineImpl @Inject constructor(
     private suspend fun rc(d: RcloneDaemon, command: String, params: JsonObject = JsonObject(emptyMap())): JsonObject =
         apiClient.call(d.baseUrl, d.user, d.pass, command, params)
 
+    /** Polls job/status briefly; true once the job reports finished, false if it stays
+     *  unfinished through the grace window (a wedged thread job/stop can't reach). */
+    private suspend fun jobStopped(d: RcloneDaemon, jobId: Int): Boolean {
+        repeat(JOB_STOP_CONFIRM_POLLS) {
+            val finished = runCatching {
+                rc(d, "job/status", buildJsonObject { put("jobid", jobId) })["finished"]
+                    ?.jsonPrimitive?.booleanOrNull
+            }.getOrNull() ?: false
+            if (finished) return true
+            delay(JOB_STOP_CONFIRM_INTERVAL_MS)
+        }
+        return false
+    }
+
+    private fun stallMessage(timeoutMs: Long, file: String?): String {
+        val base = "Sync stalled — no progress for ${timeoutMs / 1000}s."
+        return if (file != null) "$base Last read: $file" else base
+    }
+
     private companion object {
         const val TAG = "RcloneEngine"
         // rclone's accepted --dedupe-mode values (rclone v1.74). Guards dedupe()'s
@@ -895,7 +974,9 @@ class RcloneEngineImpl @Inject constructor(
         const val KEY_GROUP = "group"
         const val POLL_INTERVAL_MS = 750L
         // Max time an in-flight job may make zero progress before we abort it.
-        const val STALL_TIMEOUT_MS = 120_000L
+        const val STALL_TIMEOUT_MS = RcloneEngine.DEFAULT_STALL_TIMEOUT_MS
+        const val JOB_STOP_CONFIRM_POLLS = 4
+        const val JOB_STOP_CONFIRM_INTERVAL_MS = 250L
         // operations/copyfile and operations/movefile parameter keys.
         const val KEY_SRC_FS = "srcFs"
         const val KEY_SRC_REMOTE = "srcRemote"

@@ -275,6 +275,14 @@ data class SyncProgress(
      *  otherwise cross-contaminate each other's failed-file lists. Null on
      *  non-terminal and dry-run emissions. */
     val statsGroup: String? = null,
+    /** Names of files rclone reported in-flight on the tick this snapshot was built
+     *  (rclone `core/stats.transferring[].name`). Empty on terminal/dry-run emissions.
+     *  Used by the stall guard to name the file a wedged read was stuck on. */
+    val transferringNames: List<String> = emptyList(),
+    /** On a soft-stall partial-success terminal emission (copy/backup only), the file
+     *  whose read wedged the run, so the worker can record it in the failed-files list.
+     *  Null on every other emission. */
+    val stalledFile: String? = null,
 ) {
     val fraction: Float
         get() = if (totalBytes > 0) (bytesTransferred.toFloat() / totalBytes).coerceIn(0f, 1f) else 0f

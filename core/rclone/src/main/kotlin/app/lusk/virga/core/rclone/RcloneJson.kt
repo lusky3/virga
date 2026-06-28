@@ -4,6 +4,7 @@ import app.lusk.virga.core.common.error.VirgaError
 import app.lusk.virga.core.common.model.RemoteOption
 import app.lusk.virga.core.common.model.RemoteProvider
 import app.lusk.virga.core.common.model.SyncProgress
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.JsonPrimitive
@@ -74,6 +75,9 @@ internal fun JsonObject.toSyncProgress(): SyncProgress = SyncProgress(
     etaSeconds = this["eta"]?.jsonPrimitive?.longOrNull,
     errors = this["errors"]?.jsonPrimitive?.intOrNull ?: 0,
     deletes = this["deletes"]?.jsonPrimitive?.intOrNull ?: 0,
+    transferringNames = (this["transferring"] as? JsonArray)
+        ?.mapNotNull { (it as? JsonObject)?.get("name")?.jsonPrimitive?.contentOrNull }
+        ?: emptyList(),
 )
 
 /**

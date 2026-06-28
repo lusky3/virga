@@ -71,6 +71,7 @@ class SyncWorkerTest {
         every { preferences } returns flowOf(AppPreferences())
     }
     private val checkUseCase: CheckUseCase = mockk(relaxed = true)
+    private val sourceHealthCheck: SourceHealthCheck = mockk(relaxed = true)
 
     @Before
     fun setUp() {
@@ -86,6 +87,10 @@ class SyncWorkerTest {
         coEvery { historyRepository.startRun(any()) } returns RUN_ID
         coEvery { historyRepository.hasSucceeded(any()) } returns true
         coEvery { engine.listRemotes() } returns emptyList()
+        // The sample-read preflight only runs for content:// upload/bisync sources;
+        // default it to healthy so existing scenarios proceed exactly as before.
+        coEvery { sourceHealthCheck.probe(any(), any(), any()) } returns
+            SourceHealthCheck.HealthResult.OK
     }
 
     // inFlightOverride: when non-null, the built worker's anotherRunInFlight() seam
@@ -116,13 +121,13 @@ class SyncWorkerTest {
                         SyncWorker(
                             appContext, workerParameters, executor, engine, taskRepository,
                             historyRepository, conflictRepository, statsRepository, staging, scheduler,
-                            remoteRepository, preferencesRepository, checkUseCase,
+                            remoteRepository, preferencesRepository, checkUseCase, sourceHealthCheck,
                         )
                     } else {
                         object : SyncWorker(
                             appContext, workerParameters, executor, engine, taskRepository,
                             historyRepository, conflictRepository, statsRepository, staging, scheduler,
-                            remoteRepository, preferencesRepository, checkUseCase,
+                            remoteRepository, preferencesRepository, checkUseCase, sourceHealthCheck,
                         ) {
                             override fun anotherRunInFlight(taskId: Long): Boolean = inFlightOverride
                         }
@@ -177,6 +182,29 @@ class SyncWorkerTest {
         coVerify { historyRepository.finishRun(RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
         // Cleanup still runs even though write-back failed.
         coVerify { staging.cleanup(staged) }
+    }
+
+    @Test
+    fun preflightTimeout_recordsFailed_andSkipsStagingAndDaemon() = runBlocking {
+        // A failing SD card: the sample-read preflight times out for the content:// upload
+        // source, so the run must fail fast — before the expensive staging copy or a daemon
+        // lease — and be recorded FAILED, not silently swallowed.
+        val task = task(direction = SyncDirection.UPLOAD)
+        coEvery { taskRepository.getTask(TASK_ID) } returns task
+        coEvery { sourceHealthCheck.probe(any(), any(), any()) } returns
+            SourceHealthCheck.HealthResult.TIMED_OUT
+
+        val result = buildWorker().doWork()
+
+        assertThat(result).isEqualTo(ListenableWorker.Result.failure())
+        coVerify {
+            historyRepository.finishRun(
+                RUN_ID, SyncStatus.FAILED, any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+            )
+        }
+        // The doomed run is short-circuited: no staging copy, no daemon lease.
+        coVerify(exactly = 0) { staging.prepare(any(), any(), any()) }
+        coVerify(exactly = 0) { engine.acquireDaemon() }
     }
 
     @Test

@@ -24,6 +24,13 @@ sealed class VirgaError(
     class Rclone(val exitCode: Int? = null, message: String, cause: Throwable? = null) :
         VirgaError(message, cause)
 
+    /** An in-flight transfer made zero progress past the stall window — typically a
+     *  source read wedged on a failing disk/SD card. [file] is the file rclone was
+     *  reading when it stalled, when known. Non-retryable: re-running hammers the same
+     *  unreadable region. */
+    class Stall(val file: String? = null, message: String, cause: Throwable? = null) :
+        VirgaError(message, cause)
+
     /** A sync surfaced a conflict that policy could not resolve automatically. */
     class Conflict(message: String, cause: Throwable? = null) : VirgaError(message, cause)
 

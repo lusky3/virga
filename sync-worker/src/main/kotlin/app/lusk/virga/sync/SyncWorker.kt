@@ -57,6 +57,7 @@ open class SyncWorker @AssistedInject constructor(
     private val remoteRepository: RemoteRepository,
     private val preferencesRepository: PreferencesRepository,
     private val checkUseCase: CheckUseCase,
+    private val sourceHealthCheck: SourceHealthCheck,
 ) : CoroutineWorker(appContext, params) {
 
     private val notifications = SyncNotifications(appContext)
@@ -147,12 +148,40 @@ open class SyncWorker @AssistedInject constructor(
         log.line("Source: ${task.sourcePath}")
         log.line("Destination: ${task.remoteName}:${task.remotePath}")
 
-        val staged = staging.prepare(task.sourcePath, task.direction, runId)
-        val effectiveTask = if (staged.isStaged) task.copy(sourcePath = staged.localPath) else task
-
         var last: SyncProgress? = null
         var lastNotifiedPct = -1
         var failure: Throwable? = null
+
+        // Sample-read preflight (Phase 3): before staging a SAF upload/bisync, probe a
+        // few files under a tight timeout. A timeout/unreadable result is a strong "the
+        // card is failing" signal, so abort BEFORE the expensive staging copy + daemon
+        // lease rather than starting a doomed, minutes-long run. Setting [failure] here
+        // makes staging skip and the run fall through to the failure epilogue, where it
+        // is RECORDED (not swallowed). content:// + UPLOAD/BISYNC only; other sources
+        // and downloads pass straight through (probe() short-circuits to OK).
+        if (task.sourcePath.startsWith("content://") &&
+            (task.direction == SyncDirection.UPLOAD || task.direction == SyncDirection.BISYNC)
+        ) {
+            val health = sourceHealthCheck.probe(task.sourcePath)
+            preflightFailureMessage(health)?.let { warning ->
+                log.line(warning)
+                if (health != SourceHealthCheck.HealthResult.OK) {
+                    failure = VirgaError.Storage(warning)
+                }
+            }
+        }
+
+        // Only stage when the preflight passed: a failed probe must not trigger the
+        // doomed staging copy. A non-staged default keeps `staged` non-null so the
+        // finally's cleanup() (a no-op for cacheDir == null) and the downstream
+        // isStaged guards stay safe.
+        val staged = if (failure == null) {
+            staging.prepare(task.sourcePath, task.direction, runId)
+        } else {
+            LocalStaging.StagedSource(localPath = task.sourcePath, isStaged = false)
+        }
+        val effectiveTask = if (staged.isStaged) task.copy(sourcePath = staged.localPath) else task
+        stagingTimeoutWarning(staged.readTimeouts)?.let { log.line(it) }
         // Captured inside the daemon lease (after the sync flow) when errorCount > 0.
         // Capped at FAILED_FILES_CAP entries (100) to bound storage. Stored as
         // newline-joined "path\terror" lines for persistence in SyncRunEntity.failedFiles.
@@ -182,6 +211,10 @@ open class SyncWorker @AssistedInject constructor(
         val allowDeletes = task.deleteExtraneous && !allowMove
 
         try {
+          // Skip the whole sync body when the preflight already failed: the failure
+          // is recorded by the epilogue below. Guarding here (rather than staging the
+          // copy + leasing the daemon for a doomed run) is the point of the preflight.
+          if (failure == null) {
             // Lease the shared daemon for the lifetime of this sync (released in finally).
             engine.acquireDaemon()
             leased = true
@@ -249,6 +282,7 @@ open class SyncWorker @AssistedInject constructor(
                     }
                 }
             }
+          }
             // Capture per-file failures while the daemon lease is still held. Only
             // attempted on a partial-success run (errorCount > 0, no fatal failure):
             // a fatal abort has no meaningful per-file list. Cap at FAILED_FILES_CAP
@@ -258,6 +292,7 @@ open class SyncWorker @AssistedInject constructor(
             if (failure == null && errorCount > 0 && statsGroup != null) {
                 failedFiles = captureFailedFiles(statsGroup, log)
             }
+            failedFiles = mergeStalledFile(failedFiles, last?.stalledFile)
 
             // For staged downloads, copy rclone's output back into the SAF tree
             // BEFORE the finally runs staging.cleanup() (which recursively deletes
@@ -381,7 +416,10 @@ open class SyncWorker @AssistedInject constructor(
                 .onFailure { Log.w(TAG, "Failed to clear needsReauth for ${task.remoteName}", it) }
             Result.success()
         } else {
-            val msg = failure.message ?: "Sync failed"
+            val sourceIsLocal = !task.sourcePath.startsWith("content://") || staged.isStaged
+            val msg = (failure as? VirgaError.Stall)
+                ?.let { stallUserMessage(it, task.direction, sourceIsLocal) }
+                ?: failure.message ?: "Sync failed"
             log.line("Failed: $msg")
             finishFailed(runId, last, msg, log.path.takeIf { log.flush() }, task.direction, runStartMs, task.remoteName, metered)
             runCatching {
@@ -432,14 +470,11 @@ open class SyncWorker @AssistedInject constructor(
      * first try. With maxRetries=3: attempts 0 and 1 retry (runAttemptCount < 2),
      * attempt 2 fails — yielding exactly 3 total tries.
      */
-    private fun retryDecision(failure: Throwable, attempt: Int, task: SyncTask): Result {
-        val isAuth = failure is VirgaError.Auth || isAuthError(failure.message ?: "")
-        if (isAuth) return Result.failure()
-        val retryable = failure is VirgaError.Network ||
-            (task.retryOnRclone && failure is VirgaError.Rclone)
-        if (retryable && attempt < task.maxRetries - 1) return Result.retry()
-        return Result.failure()
-    }
+    private fun retryDecision(failure: Throwable, attempt: Int, task: SyncTask): Result =
+        when (retryDecisionFor(failure, attempt, task)) {
+            RetryOutcome.RETRY -> Result.retry()
+            RetryOutcome.FAIL -> Result.failure()
+        }
 
     /**
      * Advisory pre-sync conflict detection for one-way tasks. Runs a check (no transfer)
@@ -717,3 +752,70 @@ open class SyncWorker @AssistedInject constructor(
 /** Collapses tab/newline to spaces so a value can't break the "path\terror"-per-line
  *  encoding of [SyncRunEntity.failedFiles]. */
 private fun String.sanitiseRow(): String = replace('\t', ' ').replace('\n', ' ').replace('\r', ' ')
+
+/** Appends [stalledFile] to the newline-joined `path\terror` [failedFiles] record, unless
+ *  null or already listed. Used so a soft-stalled file (which rclone never reports as an
+ *  error — the read never returned) still shows up in the run's failed-files list. */
+internal fun mergeStalledFile(failedFiles: String, stalledFile: String?): String {
+    if (stalledFile.isNullOrBlank()) return failedFiles
+    // Sanitise so a tab/newline in the path can't corrupt the "path\terror"-per-line
+    // encoding of SyncRunEntity.failedFiles (captureFailedFiles sanitises the same way).
+    val safe = stalledFile.sanitiseRow()
+    val alreadyListed = failedFiles.lineSequence().any { it.substringBefore('\t') == safe }
+    if (alreadyListed) return failedFiles
+    val row = "$safe\tstalled: read timed out"
+    return if (failedFiles.isBlank()) row else "$failedFiles\n$row"
+}
+
+/**
+ * User-facing copy for a [VirgaError.Stall]. An upload that wedged reading a local/staged
+ * source is almost always failing storage (e.g. an SD card going read-only), so we say so
+ * and name the file; a download/remote-side stall points at the connection instead.
+ */
+internal fun stallUserMessage(
+    error: VirgaError.Stall,
+    direction: SyncDirection,
+    sourceIsLocal: Boolean,
+): String {
+    val file = error.file
+    val fileSuffix = if (file != null) " (last read: $file)" else ""
+    return if (direction != SyncDirection.DOWNLOAD && sourceIsLocal) {
+        "Couldn't read your source$fileSuffix — the card or drive may be failing. " +
+            "Copy your files off and replace it."
+    } else {
+        "The transfer stalled$fileSuffix — check your connection and try again."
+    }
+}
+
+internal enum class RetryOutcome { RETRY, FAIL }
+
+/** Pure retry policy. A [VirgaError.Stall] is never retried — re-running hammers the
+ *  same unreadable region. Network errors (and rclone errors when the task opts in)
+ *  retry within the attempt budget. Auth is handled by the caller before this. */
+internal fun retryDecisionFor(failure: Throwable, attempt: Int, task: SyncTask): RetryOutcome =
+    if (isRetryableFailure(failure, task) && attempt < task.maxRetries - 1) {
+        RetryOutcome.RETRY
+    } else {
+        RetryOutcome.FAIL
+    }
+
+/** Whether [failure] is the kind we retry at all (before the attempt-budget check). A stall
+ *  is never retried (re-running hammers the same unreadable region); auth is never retried
+ *  (it won't clear on its own). Network errors — and rclone errors when the task opts in —
+ *  are retryable. */
+private fun isRetryableFailure(failure: Throwable, task: SyncTask): Boolean {
+    if (failure is VirgaError.Stall) return false
+    if (failure is VirgaError.Auth || isAuthError(failure.message ?: "")) return false
+    return failure is VirgaError.Network || (task.retryOnRclone && failure is VirgaError.Rclone)
+}
+
+/** A run-log warning when [readTimeouts] source files were abandoned because their read
+ *  exceeded the per-file timeout — a strong signal the source storage is failing. Null
+ *  when nothing timed out. */
+internal fun stagingTimeoutWarning(readTimeouts: Int): String? =
+    if (readTimeouts > 0) {
+        "$readTimeouts file(s) timed out while reading the source — the card or drive may " +
+            "be failing. Copy your files off and replace it."
+    } else {
+        null
+    }
