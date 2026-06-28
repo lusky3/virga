@@ -6,6 +6,7 @@ import androidx.documentfile.provider.DocumentFile
 import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import app.lusk.virga.core.common.model.SyncDirection
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -216,30 +217,44 @@ class LocalStaging @Inject constructor(
     private suspend fun copyDocumentToFileTimed(uri: Uri, dest: File): CopyOutcome {
         val stream = try {
             context.contentResolver.openInputStream(uri) ?: return CopyOutcome.ERROR
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             return CopyOutcome.ERROR
         }
         return copyStreamTimed(stream, dest, PER_FILE_READ_TIMEOUT_MS)
     }
 
-    /** Shared copy-with-deadline logic. Runs the blocking copy on [dispatchers.io]; on
-     *  timeout, closes the stream (from this coroutine, a different thread) to break a
-     *  wedged read, then counts a TIMEOUT. */
+    /** Shared copy-with-deadline logic. Runs the blocking copy on [dispatchers.io]; the
+     *  child captures its own IO failure as ERROR (so a mid-copy error never escapes this
+     *  scope and aborts the whole stage); on timeout, closes the stream from this (outer)
+     *  coroutine to break a wedged read. A TIMEOUT/ERROR leaves a partial/truncated file in
+     *  the staging dir, so it is deleted — otherwise an additive (copy) upload could ship a
+     *  corrupt file to the cloud (mirror/bisync already block on fullyStaged; additive
+     *  copies do not). */
     private suspend fun copyStreamTimed(stream: InputStream, dest: File, timeoutMs: Long): CopyOutcome =
         coroutineScope {
+            var copied = false
             val copy = launch(dispatchers.io) {
-                stream.use { input -> dest.outputStream().use { output -> input.copyTo(output) } }
+                try {
+                    stream.use { input -> dest.outputStream().use { output -> input.copyTo(output) } }
+                    copied = true
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: IOException) {
+                    copied = false
+                }
             }
             val finished = withTimeoutOrNull(timeoutMs) { copy.join() }
-            if (finished == null) {
-                runCatching { stream.close() } // unblock the wedged read where honored
-                copy.cancel()
-                CopyOutcome.TIMEOUT
-            } else if (copy.isCancelled) {
-                CopyOutcome.ERROR
-            } else {
-                CopyOutcome.COPIED
+            val outcome = when {
+                finished == null -> {
+                    runCatching { stream.close() } // unblock the wedged read where honored
+                    copy.cancel()
+                    CopyOutcome.TIMEOUT
+                }
+                copied -> CopyOutcome.COPIED
+                else -> CopyOutcome.ERROR
             }
+            if (outcome != CopyOutcome.COPIED) runCatching { dest.delete() }
+            outcome
         }
 
     /** Test-only entry point: run the timeout/close logic against a supplied stream. */

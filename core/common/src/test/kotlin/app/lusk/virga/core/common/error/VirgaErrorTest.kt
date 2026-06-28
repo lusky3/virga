@@ -103,9 +103,10 @@ class VirgaErrorTest {
     }
 
     @Test
-    fun `Stall toUserMessage falls back to generic copy when message blank`() {
+    fun `Stall toUserMessage falls back to neutral non-retry copy when message blank`() {
         val msg = VirgaError.Stall(message = "").toUserMessage()
         assertThat(msg).contains("stalled")
-        assertThat(msg).contains("Try again")
+        // A stall is non-retryable, so the copy must not tell the user to retry.
+        assertThat(msg).doesNotContain("Try again")
     }
 }

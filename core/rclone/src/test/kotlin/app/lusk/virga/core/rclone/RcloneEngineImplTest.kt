@@ -73,6 +73,13 @@ class RcloneEngineImplTest {
         coEvery { daemonManager.stop(any()) } returns Unit
         coEvery { configManager.persistAndCleanup() } returns Unit
         engine = RcloneEngineImpl(daemonManager, configManager, apiClient, dispatchers)
+        // Deterministic stall clock: +1ms per read. The stall guard uses wall-clock
+        // (System.currentTimeMillis), not the test scheduler's virtual time, so without
+        // this the stallTimeoutMs=0L tests race real elapsed time between polls and flake.
+        // +1ms/read trips a 0ms timeout on the first flat poll yet stays far below the
+        // 120s default, so progressing/finishing tests never falsely stall.
+        var clk = 0L
+        engine.nowMs = { val v = clk; clk += 1L; v }
         fakeDaemon = RcloneDaemon(
             process = mockk { every { isAlive } returns true },
             port = 9999,
@@ -932,6 +939,36 @@ class RcloneEngineImplTest {
             assertThat(terminal.errors).isAtLeast(1)
             assertThat(terminal.stalledFile).isEqualTo("DCIM/IMG_BAD.jpg")
             awaitComplete()
+        }
+    }
+
+    @Test fun `a copy that stalls before transferring anything throws, not a false partial success`() = runTest(testDispatcher) {
+        coEvery { configManager.decryptForDaemon() } returns File("/tmp/rclone.conf")
+        coEvery { daemonManager.start(any()) } returns fakeDaemon
+        every { daemonManager.isAlive(fakeDaemon) } returns true
+        coEvery { apiClient.call(any(), any(), any(), "sync/copy", any()) } returns
+            buildJsonObject { put("jobid", 13) }
+        coEvery { apiClient.call(any(), any(), any(), "job/status", any()) } returns
+            buildJsonObject { put("finished", false) }
+        // The card is dead from the first file: zero bytes, zero transfers, every tick.
+        // The progress clock arms on the first poll, but nothing was actually moved, so this
+        // must FAIL (VirgaError.Stall), not record a 0-file partial "success".
+        coEvery { apiClient.call(any(), any(), any(), "core/stats", any()) } returns buildJsonObject {
+            put("bytes", 0L); put("transfers", 0); put("checks", 0)
+            put("transferring", kotlinx.serialization.json.buildJsonArray {
+                add(buildJsonObject { put("name", "DCIM/IMG_FIRST.jpg") })
+            })
+        }
+        coEvery { apiClient.call(any(), any(), any(), "job/stop", any()) } returns buildJsonObject {}
+
+        engine.startDaemon()
+
+        engine.sync(
+            "local:/x", "gdrive:x",
+            SyncOptions(SyncDirection.UPLOAD), stallTimeoutMs = 0L,
+        ).test {
+            awaitItem()
+            assertThat(awaitError()).isInstanceOf(VirgaError.Stall::class.java)
         }
     }
 

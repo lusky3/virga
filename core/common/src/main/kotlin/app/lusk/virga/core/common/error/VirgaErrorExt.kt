@@ -17,7 +17,10 @@ fun VirgaError.toUserMessage(): String = when (this) {
         // problems) when present; fall back to the generic line otherwise.
         message.ifBlank { "Sync engine error${exitCode?.let { " (code $it)" } ?: ""}. Try again." }
     is VirgaError.Stall ->
-        message.ifBlank { "The transfer stalled — the source may be slow or failing. Try again." }
+        // A stall is non-retryable (re-running hammers the same unreadable region), so the
+        // fallback must NOT suggest retrying. The engine always sets a specific message
+        // (incl. the wedged filename); this blank-guard is just defensive.
+        message.ifBlank { "The transfer stalled — the source stopped responding." }
     is VirgaError.Conflict ->
         "Conflict detected. Open the Conflicts screen to resolve."
     is VirgaError.Unknown ->

@@ -22,4 +22,12 @@ class StalledFileRecordTest {
         val merged = mergeStalledFile("DCIM/IMG_BAD.jpg\tboom", "DCIM/IMG_BAD.jpg")
         assertThat(merged.lines()).hasSize(1)
     }
+
+    @Test
+    fun `sanitises tabs and newlines in the stalled path so the row encoding is not corrupted`() {
+        val merged = mergeStalledFile("", "weird\tname\nwith\rbreaks.jpg")
+        // One row, and exactly one tab — the path\terror separator (embedded breaks collapsed).
+        assertThat(merged.lines()).hasSize(1)
+        assertThat(merged.count { it == '\t' }).isEqualTo(1)
+    }
 }

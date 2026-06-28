@@ -54,6 +54,11 @@ class RcloneEngineImpl @Inject constructor(
     private val lock = Mutex()
     @Volatile private var daemon: RcloneDaemon? = null
 
+    // Wall-clock source for the stall guard. Injectable so tests can drive the stall
+    // window deterministically instead of depending on real elapsed time between polls
+    // (the guard compares against this, not the coroutine test scheduler's virtual time).
+    internal var nowMs: () -> Long = { System.currentTimeMillis() }
+
     // Reference count of active long-lived consumers (syncs, dry-run, file browser).
     // The daemon is torn down only when the last lease is released, so one sync's
     // completion can't kill a daemon another concurrent sync is still using.
@@ -765,15 +770,21 @@ class RcloneEngineImpl @Inject constructor(
                     lastTransfers = progress.transferredFiles
                     lastDeletes = progress.deletes
                     lastChecks = checks
-                    lastProgressAtMs = System.currentTimeMillis()
-                } else if (System.currentTimeMillis() - lastProgressAtMs > stallTimeoutMs) {
-                    val madeProgress = lastProgressAtMs != Long.MAX_VALUE
-                    if (tolerateFileErrors && madeProgress) {
-                        // Copy/backup: keep what already transferred. Stop the job, read
-                        // final stats, and report a partial success naming the wedged file.
-                        jobFinished = true
+                    lastProgressAtMs = nowMs()
+                } else if (nowMs() - lastProgressAtMs > stallTimeoutMs) {
+                    // Only a copy/backup that ACTUALLY transferred something is a partial
+                    // success worth preserving. The progress clock arms on the first poll
+                    // (even all-zero stats), so gate on real transferred bytes/files — a run
+                    // that wedged before moving anything must FAIL, not record a 0-file
+                    // "success". Mirror/move (tolerateFileErrors=false) always hard-fails.
+                    val movedSomething = lastBytes > 0 || lastTransfers > 0
+                    if (tolerateFileErrors && movedSomething) {
+                        // Stop the job and read final stats BEFORE marking it finished, so a
+                        // statsFor failure still leaves the finally to stop + run the kill
+                        // backstop rather than skipping cleanup.
                         runCatching { rc(d, "job/stop", buildJsonObject { put("jobid", jobId) }) }
                         val finalStats = statsFor(d, group)
+                        jobFinished = true
                         emit(
                             finalStats.copy(
                                 errors = maxOf(finalStats.errors, 1),
@@ -797,11 +808,16 @@ class RcloneEngineImpl @Inject constructor(
             if (!jobFinished) {
                 withContext(NonCancellable) {
                     runCatching { rc(d, "job/stop", buildJsonObject { put("jobid", jobId) }) }
-                    // If no other consumer holds the daemon, a job that won't confirm
-                    // stopped is a wedged (kernel-blocked) transfer thread that job/stop
-                    // can't reach. Force-kill the daemon process so we don't leak it.
-                    if (leaseCount() <= 1 && !jobStopped(d, jobId)) {
-                        runCatching { daemonManager.stop(d) }
+                    // If a job won't confirm stopped, it's a wedged (kernel-blocked) transfer
+                    // thread that job/stop can't reach. Force-kill the daemon process so we
+                    // don't leak it — but ONLY when no other consumer holds it. The lease
+                    // count is re-checked while HOLDING the lock and the kill happens under
+                    // it, so a concurrent acquireDaemon() can't slip in between the check and
+                    // the kill (and ensureDaemonLocked restarts a dead daemon anyway).
+                    if (!jobStopped(d, jobId)) {
+                        lock.withLock {
+                            if (leases <= 1) runCatching { daemonManager.stop(d) }
+                        }
                     }
                 }
             }
@@ -924,9 +940,6 @@ class RcloneEngineImpl @Inject constructor(
 
     private suspend fun rc(d: RcloneDaemon, command: String, params: JsonObject = JsonObject(emptyMap())): JsonObject =
         apiClient.call(d.baseUrl, d.user, d.pass, command, params)
-
-    /** Current daemon lease count, read under the lock. */
-    private suspend fun leaseCount(): Int = lock.withLock { leases }
 
     /** Polls job/status briefly; true once the job reports finished, false if it stays
      *  unfinished through the grace window (a wedged thread job/stop can't reach). */

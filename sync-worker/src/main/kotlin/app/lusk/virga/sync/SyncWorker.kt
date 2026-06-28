@@ -758,9 +758,12 @@ private fun String.sanitiseRow(): String = replace('\t', ' ').replace('\n', ' ')
  *  error — the read never returned) still shows up in the run's failed-files list. */
 internal fun mergeStalledFile(failedFiles: String, stalledFile: String?): String {
     if (stalledFile.isNullOrBlank()) return failedFiles
-    val alreadyListed = failedFiles.lineSequence().any { it.substringBefore('\t') == stalledFile }
+    // Sanitise so a tab/newline in the path can't corrupt the "path\terror"-per-line
+    // encoding of SyncRunEntity.failedFiles (captureFailedFiles sanitises the same way).
+    val safe = stalledFile.sanitiseRow()
+    val alreadyListed = failedFiles.lineSequence().any { it.substringBefore('\t') == safe }
     if (alreadyListed) return failedFiles
-    val row = "$stalledFile\tstalled: read timed out"
+    val row = "$safe\tstalled: read timed out"
     return if (failedFiles.isBlank()) row else "$failedFiles\n$row"
 }
 
@@ -789,13 +792,21 @@ internal enum class RetryOutcome { RETRY, FAIL }
 /** Pure retry policy. A [VirgaError.Stall] is never retried — re-running hammers the
  *  same unreadable region. Network errors (and rclone errors when the task opts in)
  *  retry within the attempt budget. Auth is handled by the caller before this. */
-internal fun retryDecisionFor(failure: Throwable, attempt: Int, task: SyncTask): RetryOutcome {
-    if (failure is VirgaError.Stall) return RetryOutcome.FAIL
-    val isAuth = failure is VirgaError.Auth || isAuthError(failure.message ?: "")
-    if (isAuth) return RetryOutcome.FAIL
-    val retryable = failure is VirgaError.Network ||
-        (task.retryOnRclone && failure is VirgaError.Rclone)
-    return if (retryable && attempt < task.maxRetries - 1) RetryOutcome.RETRY else RetryOutcome.FAIL
+internal fun retryDecisionFor(failure: Throwable, attempt: Int, task: SyncTask): RetryOutcome =
+    if (isRetryableFailure(failure, task) && attempt < task.maxRetries - 1) {
+        RetryOutcome.RETRY
+    } else {
+        RetryOutcome.FAIL
+    }
+
+/** Whether [failure] is the kind we retry at all (before the attempt-budget check). A stall
+ *  is never retried (re-running hammers the same unreadable region); auth is never retried
+ *  (it won't clear on its own). Network errors — and rclone errors when the task opts in —
+ *  are retryable. */
+private fun isRetryableFailure(failure: Throwable, task: SyncTask): Boolean {
+    if (failure is VirgaError.Stall) return false
+    if (failure is VirgaError.Auth || isAuthError(failure.message ?: "")) return false
+    return failure is VirgaError.Network || (task.retryOnRclone && failure is VirgaError.Rclone)
 }
 
 /** A run-log warning when [readTimeouts] source files were abandoned because their read

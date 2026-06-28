@@ -5,9 +5,11 @@ import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import app.lusk.virga.core.common.dispatchers.DispatcherProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.IOException
 import java.io.InputStream
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -76,8 +78,16 @@ class SourceHealthCheck @Inject constructor(
     /** Reads a small head of [stream] under [timeoutMs]; closes it on timeout so a wedged
      *  read where the provider honors close() is broken rather than blocking forever. */
     private suspend fun timedRead(stream: InputStream, timeoutMs: Long): HealthResult = coroutineScope {
+        var readOk = false
         val job = launch(dispatchers.io) {
-            stream.use { it.read(ByteArray(PROBE_READ_BYTES)) }
+            try {
+                stream.use { it.read(ByteArray(PROBE_READ_BYTES)) }
+                readOk = true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: IOException) {
+                readOk = false
+            }
         }
         val done = withTimeoutOrNull(timeoutMs) { job.join() }
         when {
@@ -86,8 +96,9 @@ class SourceHealthCheck @Inject constructor(
                 job.cancel()
                 HealthResult.TIMED_OUT
             }
-            job.isCancelled -> HealthResult.UNREADABLE
-            else -> HealthResult.OK
+            readOk -> HealthResult.OK
+            // A read that failed (IO error) without timing out — an unreadable sample.
+            else -> HealthResult.UNREADABLE
         }
     }
 

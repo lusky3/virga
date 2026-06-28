@@ -43,8 +43,14 @@ class LocalStagingTimeoutTest {
         override fun close() { closed.set(true) }
     }
 
+    /** An InputStream whose reads always fail (a bad-sector source). */
+    private class ErroringStream : InputStream() {
+        override fun read(): Int = throw java.io.IOException("bad sector")
+        override fun read(b: ByteArray, off: Int, len: Int): Int = throw java.io.IOException("bad sector")
+    }
+
     @Test
-    fun `a read that exceeds the timeout is closed and counted as a timeout`() = runBlocking {
+    fun `a read that exceeds the timeout is closed, counted TIMEOUT, and leaves no partial file`() = runBlocking {
         val closed = AtomicBoolean(false)
         // Drive the helper directly via the test-only entry point.
         val dest = File(context.cacheDir, "out.bin")
@@ -55,6 +61,21 @@ class LocalStagingTimeoutTest {
         )
         assertThat(outcome).isEqualTo(LocalStaging.CopyOutcome.TIMEOUT)
         assertThat(closed.get()).isTrue() // outer coroutine closed the wedged stream
+        assertThat(dest.exists()).isFalse() // partial output removed so it can't be uploaded
+    }
+
+    @Test
+    fun `a stream that errors mid-copy is counted ERROR and leaves no partial file`() = runBlocking {
+        val dest = File(context.cacheDir, "errored.bin")
+        // The IO error is captured by the child as ERROR — it must NOT escape and abort
+        // the whole staging copy.
+        val outcome = staging.copyDocumentToFileTimedForTest(
+            stream = ErroringStream(),
+            dest = dest,
+            timeoutMs = 5_000L,
+        )
+        assertThat(outcome).isEqualTo(LocalStaging.CopyOutcome.ERROR)
+        assertThat(dest.exists()).isFalse()
     }
 
     @Test
