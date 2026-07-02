@@ -31,10 +31,10 @@ import org.junit.jupiter.api.Test
  * changelog + update banner state from preferences and the update checker.
  *
  * Lives in src/test (HomeBannersViewModel is in the main source set), so it runs
- * under both :app:testFossDebugUnitTest and :app:testPlayDebugUnitTest.
+ * under each flavor's unit-test task (e.g. :app:testGithubDebugUnitTest).
  *
  * Note on BuildConfig: in unit tests the app module's generated BuildConfig has
- * VERSION_CODE=1 and VERSION_NAME="0.1.0" (the gradle defaults, no env override).
+ * VERSION_CODE=1 and VERSION_NAME="0.3.1" (the gradle defaults, no env override).
  * Resources are provided via a MockK [Resources] stub that returns the same English
  * strings as the real res/values/strings.xml, so the resource-backed changelog
  * builder works without Robolectric.
@@ -51,10 +51,16 @@ class HomeBannersViewModelTest {
 
     /**
      * Stub [Resources] that serves the English strings for every version entry.
-     * Only the 0.1.0 entry matters for most tests (BuildConfig.VERSION_NAME = "0.1.0"),
-     * but all three are stubbed so [releaseNotes] can build the full list without crashing.
+     * The 0.3.1 entry is the one that matters (BuildConfig.VERSION_NAME = "0.3.1"),
+     * but all four are stubbed so [releaseNotes] can build the full list without crashing.
      */
     private val resources: Resources = mockk {
+        every { getString(R.string.release_version_0_3_1) } returns "0.3.1"
+        every { getStringArray(R.array.release_notes_0_3_1) } returns arrayOf(
+            "Backups now keep going when a local source (like an SD card) gets flaky or stops responding — the files that already transferred are kept, and the file that stalled is named",
+            "A failing source fails fast with a clearer message instead of hanging the whole backup, and a half-written file is never uploaded",
+            "Choose whether to send anonymous crash reports on first launch (off by default; the F-Droid build sends nothing)",
+        )
         every { getString(R.string.release_version_0_3_0) } returns "0.3.0"
         every { getStringArray(R.array.release_notes_0_3_0) } returns arrayOf(
             "Create a new destination folder right from the folder picker",
