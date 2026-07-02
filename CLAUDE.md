@@ -14,11 +14,14 @@ Hard-won notes — these gate every PR and are expensive to rediscover. (The gen
 `npm run build && npm test` in "Build & Test" below is boilerplate; this is the real
 build.)
 
-- **`:app` is flavored (`foss` / `play`).** Reach for the flavor-qualified tasks —
-  `:app:compileFossDebugKotlin` / `:app:assembleFossDebug` (and `…Play…`); the bare
-  `compileDebug` is ambiguous across the two flavors and lets flavor-specific breakage slip through.
-- **DI changes surface under a Hilt/Dagger graph build** (`:app:hiltJavaCompileFossDebug` +
-  `:app:hiltJavaCompilePlayDebug`), not under `compile*Kotlin`, which skips graph
+- **`:app` is flavored (`github` / `fdroid` / `play`).** Reach for the flavor-qualified tasks —
+  `:app:compileGithubDebugKotlin` / `:app:assembleGithubDebug` (and `…Fdroid…` / `…Play…`); the bare
+  `compileDebug` is ambiguous across the flavors and lets flavor-specific breakage slip through.
+  (`github` is the FOSS-equivalent default; `fdroid` compile-excludes Sentry for zero telemetry;
+  `play` stages through SAF. `foss` was split into `github` + `fdroid` in #69 — `…Foss…` tasks are gone.)
+- **DI changes surface under a Hilt/Dagger graph build** (`:app:hiltJavaCompileGithubDebug` +
+  `:app:hiltJavaCompileFdroidDebug` + `:app:hiltJavaCompilePlayDebug` — `fdroid`'s compile-time
+  Sentry exclusion gives it a distinct graph), not under `compile*Kotlin`, which skips graph
   aggregation — so a `MissingBinding` passes local Kotlin compile and only fails ~7min
   into CI's `build`. A **default value on an `@Inject` constructor param does not
   exempt it from Hilt** — it still needs a binding (use a `@Qualifier` + `@Provides`,
