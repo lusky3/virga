@@ -14,11 +14,14 @@ Hard-won notes — these gate every PR and are expensive to rediscover. (The gen
 `npm run build && npm test` in "Build & Test" below is boilerplate; this is the real
 build.)
 
-- **`:app` is flavored (`foss` / `play`).** Reach for the flavor-qualified tasks —
-  `:app:compileFossDebugKotlin` / `:app:assembleFossDebug` (and `…Play…`); the bare
-  `compileDebug` is ambiguous across the two flavors and lets flavor-specific breakage slip through.
-- **DI changes surface under a Hilt/Dagger graph build** (`:app:hiltJavaCompileFossDebug` +
-  `:app:hiltJavaCompilePlayDebug`), not under `compile*Kotlin`, which skips graph
+- **`:app` is flavored (`github` / `fdroid` / `play`).** Reach for the flavor-qualified tasks —
+  `:app:compileGithubDebugKotlin` / `:app:assembleGithubDebug` (and `…Fdroid…` / `…Play…`); the bare
+  `compileDebug` is ambiguous across the flavors and lets flavor-specific breakage slip through.
+  (`github` is the FOSS-equivalent default; `fdroid` compile-excludes Sentry for zero telemetry;
+  `play` stages through SAF. `foss` was split into `github` + `fdroid` in #69 — `…Foss…` tasks are gone.)
+- **DI changes surface under a Hilt/Dagger graph build** (`:app:hiltJavaCompileGithubDebug` +
+  `:app:hiltJavaCompileFdroidDebug` + `:app:hiltJavaCompilePlayDebug` — `fdroid`'s compile-time
+  Sentry exclusion gives it a distinct graph), not under `compile*Kotlin`, which skips graph
   aggregation — so a `MissingBinding` passes local Kotlin compile and only fails ~7min
   into CI's `build`. A **default value on an `@Inject` constructor param does not
   exempt it from Hilt** — it still needs a binding (use a `@Qualifier` + `@Provides`,
@@ -51,7 +54,7 @@ build.)
 ## Rules
 
 - Do what has been asked; nothing more, nothing less
-- NEVER create files unless absolutely necessary — prefer editing existing files
+- Prefer editing an existing file; create a new file only when the content has no home in one (a new module, a new test, or a doc you were explicitly asked to create)
 - NEVER create documentation files unless explicitly requested
 - NEVER save working files or tests to root — use `/src`, `/tests`, `/docs`, `/config`, `/scripts`
 - ALWAYS read a file before editing it
@@ -96,13 +99,13 @@ SendMessage({ to: "researcher", summary: "Start", message: "[task context]" })
 | **Fan-out** | Lead → A, B, C → Lead | Independent parallel work (research) |
 | **Supervisor** | Lead ↔ workers | Ongoing coordination (complex refactor) |
 
-### Rules
+### Coordination rules
 
-- ALWAYS name agents — `name: "role"` makes them addressable
-- ALWAYS include comms instructions in prompts — who to message, what to send
+- Name agents you'll coordinate with (`name: "role"`) so they're addressable via SendMessage — a fire-and-forget agent that receives no messages doesn't need one
+- Include comms instructions in each agent's prompt (who to message, what to send), unless the agent has no downstream dependents
 - Spawn ALL agents in ONE message with `run_in_background: true`
 - After spawning: STOP, tell user what's running, wait for results
-- NEVER poll status — agents message back or complete automatically
+- Don't poll status — agents message back or complete automatically; only check in manually if one stalls well past its expected runtime
 
 ## Swarm & Routing
 
@@ -192,8 +195,8 @@ Any string works as a custom agent type.
 
 ## Build & Test
 
-- ALWAYS run tests after code changes
-- ALWAYS verify build succeeds before committing
+- Run tests after code changes, unless the change can't affect them (docs, comments, or config with no test coverage)
+- Verify the build succeeds before committing; a docs-only or comment change that can't affect compilation can skip it
 
 ```bash
 npm run build && npm test

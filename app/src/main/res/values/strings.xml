@@ -96,6 +96,13 @@
          Each version gets a string-array of bullet items (newest first) and a
          plain string for the version label. Add a new triplet here when shipping
          a new release; no Kotlin changes needed to display it. -->
+    <string name="release_version_0_3_1" translatable="false">0.3.1</string>
+    <string-array name="release_notes_0_3_1">
+        <item>Backups now keep going when a local source (like an SD card) gets flaky or stops responding — the files that already transferred are kept, and the file that stalled is named</item>
+        <item>A failing source fails fast with a clearer message instead of hanging the whole backup, and a half-written file is never uploaded</item>
+        <item>Choose whether to send anonymous crash reports on first launch (off by default; the F-Droid build sends nothing)</item>
+    </string-array>
+
     <string name="release_version_0_3_0" translatable="false">0.3.0</string>
     <string-array name="release_notes_0_3_0">
         <item>Create a new destination folder right from the folder picker</item>

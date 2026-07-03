@@ -17,6 +17,13 @@
 # secret-scan job, CodeQL, and Semgrep, which scan the whole repo. Quality analysis
 # stays on main source, where it matters.
 #
+# CHANGELOG.md is excluded from markdownlint: the Keep a Changelog format repeats
+# the same section headings (### Added / ### Changed / ### Fixed / ### Security)
+# under each version's ## entry, which trips markdownlint MD024 ("Multiple headings
+# with the same content"). That repetition is the standard, intentional structure
+# of a changelog, not a defect — a false positive of the same flavour as the
+# exclusions above.
+#
 # Patterns use Java glob syntax (Codacy configuration-file spec).
 exclude_paths:
   - "gh-pages/**"
@@ -25,3 +32,4 @@ exclude_paths:
   - "**/src/testFdroid/**"
   - "**/src/testPlay/**"
   - "**/src/androidTest/**"
+  - "CHANGELOG.md"

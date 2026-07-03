@@ -28,6 +28,7 @@ private data class VersionEntry(val versionNameRes: Int, val notesArrayRes: Int)
 
 /** Newest-first registry. Add entries here when a new release ships. */
 private val VERSION_ENTRIES: List<VersionEntry> = listOf(
+    VersionEntry(R.string.release_version_0_3_1, R.array.release_notes_0_3_1),
     VersionEntry(R.string.release_version_0_3_0, R.array.release_notes_0_3_0),
     VersionEntry(R.string.release_version_0_2_0, R.array.release_notes_0_2_0),
     VersionEntry(R.string.release_version_0_1_0, R.array.release_notes_0_1_0),

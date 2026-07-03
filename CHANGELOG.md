@@ -8,6 +8,80 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Nothing yet.
 
+## [0.3.1] - 2026-06-27
+
+### Added
+
+- Three distribution builds — GitHub, Google Play, and F-Droid. The F-Droid
+  build excludes Sentry at compile time, so it ships with no telemetry.
+- First-launch crash-reporting consent, off by default (and absent entirely from
+  the F-Droid build).
+
+### Changed
+
+- Backups now survive a flaky or failing local source — for example, an SD card
+  that goes read-only on I/O errors — instead of hanging and aborting the whole
+  run. A stalled copy/backup records partial success and keeps the files that
+  already transferred (mirror and move still hard-fail), the wedged file is named
+  in the error, and a stall is never retried.
+- SAF staging enforces a per-file read timeout and deletes partial output, so a
+  truncated file can't be uploaded.
+- A pre-sync source health probe sample-reads the source and fails fast when it
+  is unresponsive, rather than stalling mid-run.
+
+### Security
+
+- 0.3.0 security-audit follow-ups: the F-Droid build clears inherited OAuth and
+  Sentry baked secrets, debug-signing environment identifiers were renamed, and a
+  Play-manifest CI guard was added.
+
+## [0.3.0] - 2026-06-21
+
+### Added
+
+- On-device browser OAuth for backends without a bundled sign-in (e.g. Box).
+- Browse and pick the destination folder from an in-app remote folder picker in
+  the first-sync wizard, including creating a new folder inline.
+- On-demand connectivity test for a remote from its card menu.
+- Google Play AAB (app bundle) release path.
+
+### Changed
+
+- Importing a config now warns before it replaces your remotes.
+- Old per-run sync logs are pruned automatically instead of growing without bound.
+- Distinct per-ABI `versionCode`s; the ~300 MB universal APK was dropped, and ABI
+  splits are gated off for the Play bundle.
+
+### Fixed
+
+- Google Drive sign-in: the OAuth redirect activity is declared in the app
+  manifest so the redirect routes correctly.
+- First-sync summary action buttons wrap instead of squeezing the Verify button;
+  remote-form quota spinner, name-field gating, and deferred field errors.
+
+### Security
+
+- Excluded the encrypted `virga.db` from cloud backup and device-to-device
+  transfer.
+- Validate the dedupe mode and strip NUL bytes from share names.
+- Bundled the rclone MIT license text.
+
+## [0.2.0] - 2026-06-14
+
+### Added
+
+- Configure any rclone provider by hand — Box, Dropbox, OneDrive, Google Drive,
+  pCloud, and more — signing in with OAuth or bringing your own credentials.
+- Daemon-mediated OAuth for providers without a bundled sign-in.
+- Crypt and wrapper remotes (union, alias, and others).
+- Import and export of the rclone config.
+- A standalone About screen.
+
+### Changed
+
+- Backups continue past unreadable files and report an error summary instead of
+  stopping at the first failure.
+
 ## [0.1.0] - 2026-06-04
 
 First pre-release. Everything below is what the 0.1.0 build ships; since there's
@@ -79,5 +153,8 @@ no prior version, it's all new.
 - Showcase site at <https://lusky3.github.io/virga/>, deployed from `gh-pages/`
   on `main` via Actions.
 
-[Unreleased]: https://github.com/lusky3/virga/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/lusky3/virga/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/lusky3/virga/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/lusky3/virga/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/lusky3/virga/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/lusky3/virga/releases/tag/v0.1.0

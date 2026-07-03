@@ -127,9 +127,12 @@ android {
     defaultConfig {
         applicationId = "app.lusk.virga"
         // Injectable from CI (release.yml derives these from the git tag) so the
-        // published build carries the real version, not a hardcoded 1 / 0.1.0.
-        versionCode = System.getenv("VIRGA_VERSION_CODE")?.toIntOrNull() ?: 1
-        versionName = System.getenv("VIRGA_VERSION_NAME") ?: "0.3.0"
+        // published build carries the real version. The defaults track the current
+        // release as a local/non-CI fallback and are kept in sync: versionName
+        // MAJOR.MINOR.PATCH and versionCode MAJOR*10000 + MINOR*100 + PATCH
+        // (0.3.1 -> 301, which the app convention plugin expands per-ABI to 3010-3013).
+        versionCode = System.getenv("VIRGA_VERSION_CODE")?.toIntOrNull() ?: 301
+        versionName = System.getenv("VIRGA_VERSION_NAME") ?: "0.3.1"
         testInstrumentationRunner = "app.lusk.virga.HiltTestRunner"
         vectorDrawables { useSupportLibrary = true }
 

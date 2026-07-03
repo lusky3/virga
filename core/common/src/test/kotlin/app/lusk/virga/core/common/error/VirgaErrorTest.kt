@@ -109,4 +109,77 @@ class VirgaErrorTest {
         // A stall is non-retryable, so the copy must not tell the user to retry.
         assertThat(msg).doesNotContain("Try again")
     }
+
+    // --- toUserMessage() copy for every VirgaError variant ---
+
+    @Test fun `Network toUserMessage is the offline copy`() {
+        assertThat(VirgaError.Network("timeout").toUserMessage())
+            .isEqualTo("No internet connection. Check your network and retry.")
+    }
+
+    @Test fun `Auth toUserMessage names the remote`() {
+        assertThat(VirgaError.Auth(remote = "gdrive", message = "expired").toUserMessage())
+            .isEqualTo("Sign-in expired for \"gdrive\". Re-add the remote to reconnect.")
+    }
+
+    @Test fun `Storage toUserMessage surfaces the carried message`() {
+        assertThat(VirgaError.Storage("disk full").toUserMessage())
+            .isEqualTo("Storage error: disk full")
+    }
+
+    @Test fun `Storage toUserMessage falls back when message blank`() {
+        assertThat(VirgaError.Storage("").toUserMessage())
+            .isEqualTo("Storage error: check available space and permissions")
+    }
+
+    @Test fun `Rclone toUserMessage surfaces the real rclone error`() {
+        assertThat(VirgaError.Rclone(message = "directory not found").toUserMessage())
+            .isEqualTo("directory not found")
+    }
+
+    @Test fun `Rclone toUserMessage fallback includes the exit code`() {
+        assertThat(VirgaError.Rclone(exitCode = 7, message = "").toUserMessage())
+            .isEqualTo("Sync engine error (code 7). Try again.")
+    }
+
+    @Test fun `Rclone toUserMessage fallback omits the code when absent`() {
+        assertThat(VirgaError.Rclone(message = "").toUserMessage())
+            .isEqualTo("Sync engine error. Try again.")
+    }
+
+    @Test fun `Conflict toUserMessage points at the Conflicts screen`() {
+        assertThat(VirgaError.Conflict("both sides modified").toUserMessage())
+            .isEqualTo("Conflict detected. Open the Conflicts screen to resolve.")
+    }
+
+    @Test fun `Unknown toUserMessage surfaces the carried message`() {
+        assertThat(VirgaError.Unknown("boom").toUserMessage()).isEqualTo("boom")
+    }
+
+    @Test fun `Unknown toUserMessage falls back when message blank`() {
+        assertThat(VirgaError.Unknown("").toUserMessage())
+            .isEqualTo("Something went wrong. Tap to retry.")
+    }
+
+    // --- Throwable.toUserMessage() ---
+
+    @Test fun `Throwable toUserMessage maps a VirgaError to its friendly copy`() {
+        val t: Throwable = VirgaError.Network("x")
+        assertThat(t.toUserMessage())
+            .isEqualTo("No internet connection. Check your network and retry.")
+    }
+
+    @Test fun `Throwable toUserMessage surfaces a plain exception message`() {
+        assertThat(RuntimeException("kaboom").toUserMessage()).isEqualTo("kaboom")
+    }
+
+    @Test fun `Throwable toUserMessage falls back for a blank message`() {
+        assertThat(RuntimeException("").toUserMessage())
+            .isEqualTo("Something went wrong. Tap to retry.")
+    }
+
+    @Test fun `Throwable toUserMessage falls back for a null message`() {
+        assertThat(RuntimeException().toUserMessage())
+            .isEqualTo("Something went wrong. Tap to retry.")
+    }
 }

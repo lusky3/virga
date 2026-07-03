@@ -1,0 +1,6 @@
+0.3.1
+
+• Backups now survive a flaky or failing local source (e.g. an SD card going read-only): the stalled file is named, files that already transferred are kept, and an unresponsive source fails fast instead of hanging the whole backup
+• A half-written file is never uploaded if a read times out
+• First-launch crash-reporting consent (off by default; the F-Droid build includes no telemetry)
+• Stability and security fixes from the 0.3.0 audit follow-ups

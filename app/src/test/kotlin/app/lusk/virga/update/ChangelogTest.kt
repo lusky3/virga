@@ -24,17 +24,17 @@ class ChangelogTest {
     // --- releaseNotes ---
 
     @Test
-    fun `releaseNotes returns three entries`() {
+    fun `releaseNotes returns four entries`() {
         val notes = releaseNotes(resources)
 
-        assertThat(notes).hasSize(3)
+        assertThat(notes).hasSize(4)
     }
 
     @Test
-    fun `releaseNotes first entry is version 0_3_0 (newest first)`() {
+    fun `releaseNotes first entry is version 0_3_1 (newest first)`() {
         val notes = releaseNotes(resources)
 
-        assertThat(notes.first().versionName).isEqualTo("0.3.0")
+        assertThat(notes.first().versionName).isEqualTo("0.3.1")
     }
 
     @Test
@@ -45,7 +45,7 @@ class ChangelogTest {
     }
 
     @Test
-    fun `releaseNotes 0_3_0 entry has non-empty notes`() {
+    fun `releaseNotes 0_3_1 entry has non-empty notes`() {
         val notes = releaseNotes(resources)
 
         assertThat(notes.first().notes).isNotEmpty()
