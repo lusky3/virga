@@ -31,7 +31,7 @@ class WatchdogControllerTest {
         every { preferences } returns prefsFlow
     }
 
-    private fun controller() = WatchdogController(platform, preferences)
+    private fun controller(available: Boolean = true) = WatchdogController(platform, preferences, available)
 
     @Test
     fun setEnabled_true_startsServiceThenSchedulesHeartbeat() {
@@ -62,6 +62,29 @@ class WatchdogControllerTest {
         prefsFlow.value = AppPreferences(watchdogEnabled = false)
 
         controller().onHeartbeat()
+
+        assertThat(platform.calls).containsExactly("cancel", "stop").inOrder()
+        assertThat(platform.calls).containsNoneOf("start", "schedule", "reschedule")
+    }
+
+    // --- unavailable on this flavor (e.g. play) ---
+
+    @Test
+    fun setEnabled_true_whenUnavailable_neverStartsTheService() {
+        // Defense in depth on top of the manifest-level removal for flavors that
+        // don't ship the feature (see WatchdogAvailable).
+        controller(available = false).setEnabled(true)
+
+        assertThat(platform.calls).containsExactly("cancel", "stop").inOrder()
+    }
+
+    @Test
+    fun onHeartbeat_whenUnavailable_tearsDownEvenIfPrefStillSaysEnabled() = runBlocking {
+        // A stale watchdogEnabled=true pref (e.g. carried over by a build where the
+        // feature used to be present) must not resurrect the watchdog.
+        prefsFlow.value = AppPreferences(watchdogEnabled = true)
+
+        controller(available = false).onHeartbeat()
 
         assertThat(platform.calls).containsExactly("cancel", "stop").inOrder()
         assertThat(platform.calls).containsNoneOf("start", "schedule", "reschedule")

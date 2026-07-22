@@ -21,4 +21,25 @@
     <uses-permission
         android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
         tools:node="remove" />
+
+    <!--
+      Strip the watchdog's specialUse foreground-service permission and its
+      components: a persistent FGS whose sole purpose is outlasting OS/OEM
+      battery management is a known Play-policy rejection risk for a general
+      sync app. The feature is also gated off in code (WatchdogController
+      checks BuildConfig.WATCHDOG_AVAILABLE via the WatchdogAvailable Hilt
+      qualifier) — this removal keeps the merged manifest itself free of the
+      declaration a Play reviewer would flag.
+    -->
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"
+        tools:node="remove" />
+    <application>
+        <service
+            android:name="app.lusk.virga.sync.WatchdogService"
+            tools:node="remove" />
+        <receiver
+            android:name="app.lusk.virga.sync.WatchdogReceiver"
+            tools:node="remove" />
+    </application>
 </manifest>

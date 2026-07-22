@@ -17,8 +17,8 @@
     <!-- Background work -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-    <!-- Optional persistent watchdog (off by default). FLAVOR NOTE: relocate to
-         app/src/foss/ alongside WatchdogService if Play rejects `specialUse`. -->
+    <!-- Optional persistent watchdog (off by default). FLAVOR NOTE: stripped for
+         `play` (specialUse is a Play-policy risk) in app/src/play/AndroidManifest.xml. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -300,6 +300,37 @@
                 <data android:scheme="${googleOAuthScheme}" />
             </intent-filter>
         </activity>
+
+        <!--
+            Optional persistent watchdog (off by default). FGS type `specialUse`:
+            a periodic keep-alive babysitter fits no other type. The <property>
+            subtype is required on API 34+.
+
+            Declared HERE rather than in the :sync-worker library that owns the
+            class (same reasoning as OAuthRedirectActivity above): `play` needs
+            to strip this component via tools:node="remove" in
+            app/src/play/AndroidManifest.xml, and a same-module removal is what
+            reliably matches in AGP's manifest merger — a cross-module removal
+            (declaring it in :sync-worker, removing from :app's flavor manifest)
+            silently no-ops instead. `specialUse` is a known Play-policy
+            rejection risk for a general sync app; WatchdogController also gates
+            the feature off in code (see WatchdogAvailable / BuildConfig.WATCHDOG_AVAILABLE).
+        -->
+        <service
+            android:name="app.lusk.virga.sync.WatchdogService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps user-configured scheduled file syncs reliable on devices that aggressively kill background apps; no other foreground-service type fits a periodic keep-alive." />
+        </service>
+
+        <!-- Heartbeat alarm target for the watchdog; explicit PendingIntent only. -->
+        <receiver
+            android:name="app.lusk.virga.sync.WatchdogReceiver"
+            android:enabled="true"
+            android:exported="false" />
 
     </application>
 </manifest>

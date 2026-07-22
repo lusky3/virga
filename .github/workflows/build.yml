@@ -132,11 +132,13 @@ jobs:
         # variant's merged manifest is caught.
         run: ./gradlew lintGithubDebug lintPlayDebug
 
-      - name: Guard — Play manifest has no all-files access
-        # MANAGE_EXTERNAL_STORAGE is declared in src/main and stripped by src/play
-        # (tools:node="remove"). That strip is load-bearing for Play policy, so assert
-        # the merged Play manifest really lacks it — a regression would silently
-        # re-expose a permission Play restricts for general-purpose sync apps.
+      - name: Guard — Play manifest has no all-files access or watchdog specialUse FGS
+        # MANAGE_EXTERNAL_STORAGE and the watchdog's specialUse foreground service are
+        # both declared in src/main and stripped by src/play (tools:node="remove").
+        # Both strips are load-bearing for Play policy, so assert the merged Play
+        # manifest really lacks them — a regression would silently re-expose a
+        # permission/component Play restricts or scrutinizes for general-purpose
+        # sync apps.
         run: |
           set -euo pipefail
           ./gradlew :app:processPlayDebugMainManifest
@@ -151,7 +153,11 @@ jobs:
             echo "::error::Play manifest declares MANAGE_EXTERNAL_STORAGE — the src/play strip regressed." >&2
             exit 1
           fi
-          echo "OK: no MANAGE_EXTERNAL_STORAGE in $manifest"
+          if grep -qE "WatchdogService|WatchdogReceiver|FOREGROUND_SERVICE_SPECIAL_USE" "$manifest"; then
+            echo "::error::Play manifest declares the watchdog's specialUse FGS — the src/play strip regressed." >&2
+            exit 1
+          fi
+          echo "OK: no MANAGE_EXTERNAL_STORAGE or watchdog specialUse FGS in $manifest"
 
       - name: Screenshot tests (Roborazzi)
         # Verifies every module's Compose screenshot goldens against the committed
