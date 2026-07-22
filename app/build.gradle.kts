@@ -97,6 +97,7 @@ private fun ApplicationProductFlavor.distribution(
     updateCheck: Boolean,
     crashAvailable: Boolean,
     crashDefaultOn: Boolean,
+    watchdogAvailable: Boolean,
 ) {
     dimension = "distribution"
     boolField("ALLOW_BYO_OAUTH", true)
@@ -105,6 +106,7 @@ private fun ApplicationProductFlavor.distribution(
     boolField("ENABLE_UPDATE_CHECK", updateCheck)
     boolField("CRASH_REPORTING_AVAILABLE", crashAvailable)
     boolField("CRASH_REPORTING_DEFAULT_ON", crashDefaultOn)
+    boolField("WATCHDOG_AVAILABLE", watchdogAvailable)
 }
 
 // F-Droid's contract is fully FOSS with no baked service secrets: it ships the no-op
@@ -192,6 +194,7 @@ android {
                 updateCheck = enableUpdateCheck,
                 crashAvailable = true,
                 crashDefaultOn = true,
+                watchdogAvailable = true,
             )
         }
         // F-Droid (per-ABI APKs). Fully FOSS: NO Sentry SDK compiled in (src/fdroid
@@ -203,6 +206,7 @@ android {
                 updateCheck = false,
                 crashAvailable = false,
                 crashDefaultOn = false,
+                watchdogAvailable = true,
             )
             // Strip any defaultConfig-inherited OAuth client IDs / Sentry DSN so the
             // FOSS build never bakes developer secrets (BYO-OAuth, no crash reporting).
@@ -212,6 +216,10 @@ android {
         // general-purpose sync apps, so the play manifest strips it (SAF instead);
         // SDCARD_ACCESS_AVAILABLE=false drives the UI explanation. In-app-update, BYO
         // OAuth, and opt-IN crash reporting (Sentry compiled in; off until consent).
+        // WATCHDOG_AVAILABLE=false: a persistent specialUse foreground service whose
+        // sole purpose is outlasting OS/OEM battery management is a known Play-policy
+        // rejection risk for a general sync app — see WatchdogController and the
+        // manifest removal in app/src/play/AndroidManifest.xml.
         create("play") {
             // In-app-update, BYO OAuth, and opt-IN crash reporting (Sentry compiled
             // in; off until consent).
@@ -220,6 +228,7 @@ android {
                 updateCheck = false,
                 crashAvailable = true,
                 crashDefaultOn = false,
+                watchdogAvailable = false,
             )
         }
     }

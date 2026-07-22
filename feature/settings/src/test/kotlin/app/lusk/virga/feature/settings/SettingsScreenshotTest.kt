@@ -91,6 +91,7 @@ class SettingsScreenshotTest {
                     SettingsScreen(
                         crashReportingAvailable = true,
                         storageAccessRelevant = true,
+                        watchdogAvailable = true,
                         viewModel = viewModel(),
                     )
                 }
@@ -113,6 +114,7 @@ class SettingsScreenshotTest {
                     SettingsScreen(
                         crashReportingAvailable = true,
                         storageAccessRelevant = false,
+                        watchdogAvailable = true,
                         viewModel = viewModel(),
                     )
                 }

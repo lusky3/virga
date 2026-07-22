@@ -332,6 +332,8 @@ fun VirgaNavHost(
                 crashReportingAvailable = app.lusk.virga.BuildConfig.CRASH_REPORTING_AVAILABLE,
                 // All-files-access builds (github/fdroid) can offer a storage-access grant in Settings.
                 storageAccessRelevant = app.lusk.virga.BuildConfig.SDCARD_ACCESS_AVAILABLE,
+                // The specialUse-FGS watchdog is built out of play entirely (Play-policy risk).
+                watchdogAvailable = app.lusk.virga.BuildConfig.WATCHDOG_AVAILABLE,
                 // Apply the locale immediately when the user changes it; the VM also
                 // persists it to DataStore so startup can restore the choice.
                 onLanguageChange = LocaleManager::apply,

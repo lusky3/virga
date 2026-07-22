@@ -62,6 +62,7 @@ fun SettingsScreen(
     // Build-time flags from the app module (keeps feature:settings BuildConfig-free).
     crashReportingAvailable: Boolean = false,
     storageAccessRelevant: Boolean = false,
+    watchdogAvailable: Boolean = false,
     /**
      * Called immediately when the user picks a language, BEFORE the pref is persisted.
      * The app module wires this to LocaleManager.apply() so the locale change takes
@@ -205,24 +206,28 @@ fun SettingsScreen(
                 stringResource(R.string.settings_battery_hint),
                 style = MaterialTheme.typography.bodySmall,
             )
-            ToggleRow(
-                label = stringResource(R.string.settings_toggle_watchdog),
-                checked = prefs.watchdogEnabled,
-                onChange = viewModel::setWatchdog,
-            )
-            Text(
-                stringResource(R.string.settings_watchdog_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            EventTriggersSection(
-                state = EventTriggerState(
-                    folderChange = prefs.triggerOnFolderChange,
-                    wifiConnect = prefs.triggerOnWifiConnect,
-                    charge = prefs.triggerOnCharge,
-                ),
-                onToggle = viewModel::setTrigger,
-            )
+            if (watchdogAvailable) {
+                ToggleRow(
+                    label = stringResource(R.string.settings_toggle_watchdog),
+                    checked = prefs.watchdogEnabled,
+                    onChange = viewModel::setWatchdog,
+                )
+                Text(
+                    stringResource(R.string.settings_watchdog_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                // Event triggers piggyback on the watchdog's foreground service, so
+                // they're meaningless (and hidden) without it — see their own doc comment.
+                EventTriggersSection(
+                    state = EventTriggerState(
+                        folderChange = prefs.triggerOnFolderChange,
+                        wifiConnect = prefs.triggerOnWifiConnect,
+                        charge = prefs.triggerOnCharge,
+                    ),
+                    onToggle = viewModel::setTrigger,
+                )
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(VirgaSpacing.sm)) {
                 TextButton(onClick = {
                     runCatching {
