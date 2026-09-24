@@ -14,11 +14,12 @@ buildscript {
                 "io.netty" ->
                     // netty enforces a single aligned version across all its
                     // modules; pin them together to the latest 4.1.x patch.
-                    useVersion("4.1.135.Final")
-                "org.bouncycastle" -> useVersion("1.84")
+                    useVersion("4.1.138.Final")
+                "org.bouncycastle" -> useVersion("1.86")
             }
             when (requested.module.toString()) {
-                "com.squareup.wire:wire-runtime" -> useVersion("6.3.0")
+                "com.squareup.wire:wire-runtime" -> useVersion("6.4.7")
+                "com.squareup.wire:wire-runtime-jvm" -> useVersion("6.4.7")
                 "org.bitbucket.b_c:jose4j" -> useVersion("0.9.6")
                 "org.jdom:jdom2" -> useVersion("2.0.6.1")
                 "org.apache.commons:commons-lang3" -> useVersion("3.20.0")
