@@ -29,6 +29,28 @@ buildscript {
     }
 }
 
+// The block above only covers the root plugin classpath. AGP also resolves its own
+// tooling (UTP test runner via grpc-netty, profiling via wire, freemarker templates)
+// in per-project configurations; Dependabot's graph lists those at the older versions,
+// so apply the same pins to every configuration in every project.
+allprojects {
+    configurations.configureEach {
+        resolutionStrategy.eachDependency {
+            when (requested.group) {
+                "io.netty" -> useVersion("4.1.138.Final")
+                "org.bouncycastle" -> useVersion("1.86")
+            }
+            when (requested.module.toString()) {
+                "com.squareup.wire:wire-runtime" -> useVersion("6.4.7")
+                "com.squareup.wire:wire-runtime-jvm" -> useVersion("6.4.7")
+                "org.freemarker:freemarker" -> useVersion("2.3.35")
+                "org.apache.commons:commons-lang3" -> useVersion("3.20.0")
+                "org.apache.httpcomponents:httpclient" -> useVersion("4.5.14")
+            }
+        }
+    }
+}
+
 // Top-level build file. Plugins are declared here (apply false) and applied
 // in each module so the Gradle plugin classpath is resolved once.
 plugins {
