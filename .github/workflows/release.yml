@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # The real upload keystore + passwords live in the `production` environment's
     # secrets (the `dev` environment holds the debug keystore under the same names).
     # Without this, RELEASE_KEYSTORE_* resolve empty and the build ships unsigned.
