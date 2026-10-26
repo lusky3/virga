@@ -16,7 +16,7 @@ permissions: {}
 jobs:
   check-secrets:
     name: Check Secrets
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       has-discord: ${{ steps.discord-check.outputs.defined }}
     steps:
@@ -52,6 +52,6 @@ jobs:
   notify-skip-notice:
     needs: [check-secrets]
     if: needs.check-secrets.outputs.has-discord != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - run: echo "::notice::Discord notification skipped — DISCORD_WEBHOOK_URL secret is not configured."

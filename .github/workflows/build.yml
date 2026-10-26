@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # The weekly `schedule` exists only to drive the rclone-update-check job; the
     # full build (NDK + rclone cross-compile + every flavor) shouldn't run on cron.
     # It still runs on every push and PR.
@@ -225,7 +225,7 @@ jobs:
     # GitGuardian secret scanning over the commit range. Independent of the build
     # so it runs in parallel. Needs full history. The token is a repo-level secret
     # (this job has no environment); skipped when absent, e.g. on fork PRs.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -244,7 +244,7 @@ jobs:
     # Weekly check for a newer rclone release; opens nothing automatically here,
     # just surfaces the latest tag in the job summary for a maintainer to bump.
     if: github.event_name == 'schedule'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Latest rclone release
         run: |
